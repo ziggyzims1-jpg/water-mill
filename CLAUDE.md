@@ -37,8 +37,10 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 | `watermill/report.py` | The morning report (pure) |
 | `watermill/ledger.py` | Append-only cross-project history, one line per run |
 | `watermill/tasklog.py` | The same, one line per **task**, plus the root-cause taxonomy |
+| `watermill/shipper.py` | Ships both to Loki. A reader, never part of a run |
 | `projects/` | Vendored contracts for projects that carry none yet |
 | `docs/calibration/` | One findings record per project. The method is `docs/CALIBRATION.md` |
+| `docs/OBSERVABILITY.md` | Shipping to Loki, and the LogQL worth pinning |
 | `docs/` | Contract spec, safety model, onboarding, calibration. **`STATUS.md` is where things actually are; `PLAN.md` is what is being built and why** |
 | `runs/` | Per-run logs. Gitignored, **never pruned automatically** |
 
@@ -99,6 +101,19 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
   into `notes` in the contract, which reaches the agent's prompt as advice and
   is never checked afterwards. Writing a mechanisable rule as a note downgrades
   an enforced guarantee to a suggestion.
+
+- **Silence is a failure mode, so something has to watch for absence.** A night
+  that never ran looks exactly like a quiet night: both produce nothing. That is
+  why `docs/OBSERVABILITY.md` makes `count_over_time(...[24h])` the first panel
+  and the thing to alert on. This is the second sighting of the rule — the first
+  project's backup drill needed a separate job to notice the drill had stopped —
+  so by the rule below it now lives here.
+
+- **Anything that talks to a third party stays off the run loop.** `ship` is its
+  own command with its own exit code, so a Loki outage cannot hang a night or
+  leave a task claimed while a socket times out. Its high-water mark advances
+  only after a push returned; there is no retry queue, because the history is
+  still on disk and `--resend` exists.
 
 - **A lesson is promoted into Water Mill when it has appeared twice, in two
   repositories.** One project's frictions are indistinguishable from that
