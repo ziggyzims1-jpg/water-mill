@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from watermill import contract as contract_mod
 from watermill.contract import Contract, Fence, Queue
 from watermill.errors import ContractError
 
@@ -205,3 +206,75 @@ def test_fence_protects_dotfile_directories():
 
 def test_empty_fence_permits_everything():
     assert Fence.parse(None).violations(["db.py", "brain/x.md"]) == []
+
+
+# -- notes -----------------------------------------------------------------
+
+
+def _with_notes(notes):
+    return {
+        "version": 1,
+        "name": "demo",
+        "commands": {"gate": "make verify"},
+        "git": {"base_branch": "main"},
+        "notes": notes,
+    }
+
+
+def test_a_contract_with_no_notes_has_an_empty_one():
+    contract = Contract.parse(_with_notes(None))
+    assert not contract.notes
+    assert len(contract.notes) == 0
+
+
+def test_notes_round_trip_in_order():
+    contract = Contract.parse(_with_notes(["first thing", "second thing"]))
+    assert contract.notes.items == ("first thing", "second thing")
+
+
+def test_a_single_string_is_one_note():
+    """What a YAML block scalar produces, and it cannot have meant anything else."""
+    assert Contract.parse(_with_notes("just the one")).notes.items == ("just the one",)
+
+
+def test_a_note_is_collapsed_to_one_line():
+    """A folded YAML scalar arrives with newlines; the prompt renders bullets."""
+    contract = Contract.parse(_with_notes(["wrapped\nover\ntwo lines"]))
+    assert contract.notes.items == ("wrapped over two lines",)
+
+
+def test_blank_notes_are_dropped_rather_than_rendered_as_empty_bullets():
+    assert Contract.parse(_with_notes(["real", "", "   "])).notes.items == ("real",)
+
+
+def test_a_note_that_is_not_a_string_is_refused():
+    with pytest.raises(ContractError):
+        Contract.parse(_with_notes([{"lesson": "no"}]))
+
+
+def test_notes_that_are_not_a_list_are_refused():
+    with pytest.raises(ContractError):
+        Contract.parse(_with_notes({"one": "two"}))
+
+
+def test_too_many_notes_are_refused_with_what_to_do_instead():
+    """The cap is the point: a prompt the agent skims teaches it nothing while
+    costing every task, so the answer is to promote them, not to lengthen it."""
+    with pytest.raises(ContractError) as exc:
+        Contract.parse(_with_notes([f"note {n}" for n in range(contract_mod.MAX_NOTES + 1)]))
+    assert "fence.paths" in str(exc.value)
+
+
+def test_a_note_longer_than_the_limit_is_refused():
+    with pytest.raises(ContractError):
+        Contract.parse(_with_notes(["x" * (contract_mod.MAX_NOTE_CHARS + 1)]))
+
+
+def test_a_misspelled_notes_key_is_refused_like_any_other():
+    with pytest.raises(ContractError):
+        Contract.parse({
+            "version": 1, "name": "demo",
+            "commands": {"gate": "make verify"},
+            "git": {"base_branch": "main"},
+            "note": ["singular is a typo"],
+        })

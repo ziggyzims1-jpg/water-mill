@@ -18,7 +18,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import ledger, report
+from . import ledger, report, tasklog
 from .caps import Caps
 from .contract import CONTRACT_FILENAME
 from .engine import Engine
@@ -227,7 +227,9 @@ def cmd_run(args) -> int:
 
     text = report.compose(state)
     (log_dir / "REPORT.md").write_text(text, encoding="utf-8")
-    ledger.append(root, ledger.Entry.from_summary(state.to_dict(), log_dir))
+    summary = state.to_dict()
+    ledger.append(root, ledger.Entry.from_summary(summary, log_dir))
+    tasklog.append_run(root, summary, log_dir)
 
     print()
     print(text)
@@ -345,6 +347,101 @@ def cmd_ledger(args) -> int:
     return 0
 
 
+def cmd_tasks(args) -> int:
+    """Every task the factory has attempted, and why each one went wrong."""
+    root = factory_root(args.root)
+    records = tasklog.read(
+        root, project=args.project, limit=args.limit, unannotated=args.unannotated
+    )
+    if not records:
+        print("no tasks recorded" + (" without a root cause" if args.unannotated else ""))
+        return 0
+
+    for record in records:
+        row = record.outcome
+        cause = record.root_cause or (
+            f"?{row.get('hint')}" if row.get("hint") else "-"
+        )
+        print(
+            f"{row.get('recorded_at', '?'):<26} {row.get('project', '?'):<20} "
+            f"{row.get('task_id', '?'):<14} {row.get('outcome', '?'):<10} "
+            f"{cause:<18} {row.get('reason', '')[:48]}"
+        )
+        if record.note:
+            print(f"{'':26} {'':20} {record.note[:100]}")
+
+    stats = tasklog.causes(records)
+    print()
+    print(f"{stats['tasks']} tasks, {stats['annotated']} with a root cause recorded")
+    for cause, count in stats["by_cause"].items():
+        print(f"    {cause:<18} {count}")
+    if stats["unannotated"]:
+        # Said plainly rather than left to arithmetic. A taxonomy with most of
+        # its mass unlabelled is a process nobody is following, and that is the
+        # finding.
+        print(f"    {'(no cause given)':<18} {stats['unannotated']}")
+        print()
+        print("A `?` prefix is the orchestrator's guess, not a judgement. Record one:")
+        print("    watermill annotate <project> <task-id> <root-cause>")
+    if stats["gate_holes"]:
+        print()
+        print(
+            f"{stats['gate_holes']} task(s) passed the gate and were still wrong. "
+            "That halts calibration -- the gate needs a new check before anything "
+            "else proceeds."
+        )
+    return 0
+
+
+def cmd_annotate(args) -> int:
+    """Record why a task went the way it did. Appends; never edits."""
+    root = factory_root(args.root)
+    if args.root_cause not in tasklog.ROOT_CAUSES:
+        print(f"unknown root cause: {args.root_cause}")
+        print()
+        for name, description in tasklog.ROOT_CAUSES.items():
+            print(f"  {name:<18} {description}")
+        return 2
+    tasklog.annotate(
+        root,
+        project=args.project,
+        task_id=args.task_id,
+        root_cause=args.root_cause,
+        note=args.note or "",
+    )
+    print(f"{args.project} {args.task_id}: {args.root_cause}")
+    if args.root_cause == "gate-hole":
+        print()
+        print(tasklog.ROOT_CAUSES["gate-hole"])
+    return 0
+
+
+def cmd_calibrate(args) -> int:
+    """Open a project's calibration record, creating it from the template."""
+    root = factory_root(args.root)
+    registry = Registry.load(root)
+    project = registry.get(args.project)
+
+    template = root / "docs" / "calibration" / "TEMPLATE.md"
+    target = root / "docs" / "calibration" / f"{project.name}.md"
+    if target.is_file():
+        print(target)
+        return 0
+    if not template.is_file():
+        print(f"no template at {template}")
+        return 1
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        template.read_text(encoding="utf-8").replace("PROJECT_NAME", project.name),
+        encoding="utf-8",
+    )
+    print(f"created {target}")
+    print()
+    print("Eight tasks, one at a time, watched live:")
+    print(f"    ./bin/watermill run {project.name} --max-spend 5 --max-tasks 1 --supervised")
+    return 0
+
+
 # -- parser ----------------------------------------------------------------
 
 
@@ -412,6 +509,24 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("project", nargs="?")
     p.add_argument("--limit", type=int, default=20)
     p.set_defaults(func=cmd_ledger)
+
+    p = sub.add_parser("tasks", help="per-task history and root causes")
+    p.add_argument("project", nargs="?")
+    p.add_argument("--limit", type=int, default=40)
+    p.add_argument("--unannotated", action="store_true",
+                   help="only tasks with no root cause recorded yet")
+    p.set_defaults(func=cmd_tasks)
+
+    p = sub.add_parser("annotate", help="record why a task went the way it did")
+    p.add_argument("project")
+    p.add_argument("task_id")
+    p.add_argument("root_cause", help="one of: " + ", ".join(sorted(tasklog.ROOT_CAUSES)))
+    p.add_argument("--note", help="a sentence for the next person")
+    p.set_defaults(func=cmd_annotate)
+
+    p = sub.add_parser("calibrate", help="open a project's calibration record")
+    p.add_argument("project")
+    p.set_defaults(func=cmd_calibrate)
 
     p = sub.add_parser("release", help="hand a stuck task back to the queue")
     p.add_argument("project")

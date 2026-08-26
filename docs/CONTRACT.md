@@ -39,6 +39,12 @@ never silently override a real one.
 Must match the registry entry. The name attributes a run, a log directory and a
 ledger entry, so a mismatch is refused rather than reconciled.
 
+### `description` — optional
+
+One or two sentences, printed in reports. It is for the person reading at
+7am who drives four projects and needs to remember which is which — it is
+**not** sent to the agent. What the agent should know goes in `notes`.
+
 ### `commands.gate` — required
 
 The merge gate. The one command whose result decides whether a task's work is
@@ -107,6 +113,45 @@ patterns are refused.
 What belongs here: the gate and anything that could weaken it, the schema and
 migrations, whatever encodes the project's hardest-won decisions, the backup
 scripts, and `watermill.yaml` itself.
+
+### `notes` — optional
+
+Advice carried into the agent's prompt. **The only field in this file that is
+not a mechanism**, and the boundary is the important part.
+
+Everything else here is checked: the gate re-runs, the fence is tested against
+the diff, a cap halts the loop. A note is a request. So:
+
+**A rule that can be mechanised does not belong here.** "Never edit `db.py`" is
+a `fence.paths` entry. Writing it as a note instead converts an enforced
+guarantee into a suggestion the agent may reasonably weigh against the task in
+front of it — and the prompt already tells it the task wins where the two
+disagree.
+
+**A note earns its place by having cost something.** These are written after a
+task went wrong, not guessed before one is attempted. What belongs here is what
+no mechanism can express: where a project keeps a thing, which of two plausible
+idioms it actually uses, the trap a reasonable agent falls into precisely
+because it is reasonable.
+
+```yaml
+notes:
+  - Integration fixtures live in tests/fixtures, not tests/data. The second
+    path exists and holds something else.
+  - The dev server holds port 5173; the gate reads a stale build if it is
+    still running.
+```
+
+Capped at 20 entries of 500 characters, and the cap is doing a job: a prompt
+the agent skims teaches it nothing while costing every task in the run. When the
+list is full, the answer is not a longer list — it is to promote a note into the
+gate or the fence, where it stops being advice.
+
+A single string is accepted as one note, which is what a YAML block scalar
+produces. Newlines inside a note are collapsed, because each one renders as a
+bullet.
+
+Where they come from: [CALIBRATION.md](CALIBRATION.md).
 
 ### `environment.forbid_env` · `environment.min_free_gb`
 

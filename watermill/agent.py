@@ -66,7 +66,7 @@ or a bug you found. Both are worth more than a green run.
 Do only what this task names. Do not refactor code you happened to read, do not
 fix unrelated problems you noticed, and do not widen the change because it
 looked easy. Anything else you find is worth filing, not fixing.
-
+{notes_block}
 ## When you are done
 
 If the task is complete and the gate passes, commit your work. The commit
@@ -107,6 +107,29 @@ class Outcome:
         return self.reading.cost_cents
 
 
+
+def _notes_block(contract: Contract) -> str:
+    """The project's accumulated notes, or nothing at all.
+
+    Rendered empty when there are none rather than as "no notes recorded". A
+    heading with nothing under it invites the agent to wonder what it is
+    missing, and every line of a prompt is paid for on every task.
+    """
+    if not contract.notes:
+        return ""
+    lines = "\n".join(f"  - {note}" for note in contract.notes.items)
+    return (
+        "\n## What this project has already cost someone\n"
+        "\n"
+        "Each line below was written after a task went wrong in this repository.\n"
+        "They are advice, not rules -- nothing here is checked afterwards, and\n"
+        "where one of them conflicts with the task in front of you, the task wins\n"
+        "and the conflict is worth escalating.\n"
+        "\n"
+        f"{lines}\n"
+    )
+
+
 def build_prompt(task: Task, contract: Contract, spec: str = "") -> str:
     """The exact text handed to the agent for one task.
 
@@ -136,6 +159,7 @@ def build_prompt(task: Task, contract: Contract, spec: str = "") -> str:
         task_block=task_block,
         gate=contract.commands.gate,
         fence_block=fence_block,
+        notes_block=_notes_block(contract),
         task_id=task.id,
     )
 

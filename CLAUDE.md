@@ -35,8 +35,10 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 | `watermill/queue.py` | Queue adapter |
 | `watermill/gitwork.py` | Git, and a guarded discard |
 | `watermill/report.py` | The morning report (pure) |
-| `watermill/ledger.py` | Append-only cross-project history |
+| `watermill/ledger.py` | Append-only cross-project history, one line per run |
+| `watermill/tasklog.py` | The same, one line per **task**, plus the root-cause taxonomy |
 | `projects/` | Vendored contracts for projects that carry none yet |
+| `docs/calibration/` | One findings record per project. The method is `docs/CALIBRATION.md` |
 | `docs/` | Contract spec, safety model, onboarding, calibration. **`STATUS.md` is where things actually are; `PLAN.md` is what is being built and why** |
 | `runs/` | Per-run logs. Gitignored, **never pruned automatically** |
 
@@ -82,6 +84,27 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 - **The stub agents test control flow, not agent behaviour.** Do not let a green
   suite become an argument that the loop is ready for an unattended night. See
   [docs/CALIBRATION.md](docs/CALIBRATION.md).
+
+- **A machine records what happened; only a person records why.** `tasklog.py`
+  writes one line per task automatically and leaves `root_cause` empty until
+  somebody who watched supplies it. It may offer a `hint` — never for the three
+  buckets in `HUMAN_ONLY`, and `gate-hole` above all, because work that passes
+  every check and is still wrong is by definition invisible to the thing running
+  the checks. A guess stored in the field a judgement belongs in is worse than a
+  blank, because it counts.
+
+- **Knowledge has three destinations and they are not interchangeable.** A
+  lesson that can be mechanised goes into the gate (unignorable) or
+  `fence.paths` (checked against the diff). Only what neither can express goes
+  into `notes` in the contract, which reaches the agent's prompt as advice and
+  is never checked afterwards. Writing a mechanisable rule as a note downgrades
+  an enforced guarantee to a suggestion.
+
+- **A lesson is promoted into Water Mill when it has appeared twice, in two
+  repositories.** One project's frictions are indistinguishable from that
+  project's idiosyncrasies, and this orchestrator's whole claim is that it is
+  repo-agnostic. Until the second sighting a lesson lives in that project's
+  contract and its calibration record, which is where it is true.
 
 ## Where things are
 
