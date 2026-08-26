@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 LEDGER_FILENAME = "runs/index.jsonl"
@@ -62,7 +62,7 @@ class Entry:
 
     def to_dict(self) -> dict:
         return {
-            "recorded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "recorded_at": datetime.now(UTC).isoformat(timespec="seconds"),
             **{k: getattr(self, k) for k in self.__annotations__},
         }
 

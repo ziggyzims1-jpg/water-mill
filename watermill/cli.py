@@ -20,12 +20,12 @@ from pathlib import Path
 
 from . import ledger, report
 from .caps import Caps
-from .contract import CONTRACT_FILENAME, Contract
+from .contract import CONTRACT_FILENAME
 from .engine import Engine
 from .errors import PreflightRefusal, WatermillError
 from .preflight import preflight
 from .queue import WorkQueue
-from .registry import Registry, REGISTRY_FILENAME
+from .registry import REGISTRY_FILENAME, Registry
 
 SCAFFOLD = (Path(__file__).parent / "scaffold" / "watermill.yaml").resolve()
 

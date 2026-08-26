@@ -23,11 +23,12 @@ bad task until the failure cap halts it while workable tasks sit untouched.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import signal
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from . import gitwork
@@ -393,9 +394,10 @@ class Engine:
     # -- cleanup -----------------------------------------------------------
 
     def _reset_to(self, sha: str) -> None:
-        if sha and gitwork.head_sha(self.project.path) != sha:
-            if not gitwork.reset_to(self.project.path, sha):
-                self.state.anomalies.append(f"could not reset to {sha[:8]}")
+        if not sha or gitwork.head_sha(self.project.path) == sha:
+            return
+        if not gitwork.reset_to(self.project.path, sha):
+            self.state.anomalies.append(f"could not reset to {sha[:8]}")
 
     def _discard(self, why: str) -> None:
         """Throw away uncommitted work -- only ever after work actually began.
@@ -424,13 +426,16 @@ class Engine:
         if self.state.started_work:
             self._release_claim("run ended with this task still claimed")
             self.state.tree_clean_at_end = gitwork.status(self.project.path).clean
-            if self.state.work_branch and self.contract.git.target == "branch":
-                if self.state.commits:
-                    gitwork.push(
-                        self.project.path,
-                        self.contract.git.remote,
-                        self.state.work_branch,
-                    )
+            if (
+                self.state.work_branch
+                and self.contract.git.target == "branch"
+                and self.state.commits
+            ):
+                gitwork.push(
+                    self.project.path,
+                    self.contract.git.remote,
+                    self.state.work_branch,
+                )
         (self.log_dir / "summary.json").write_text(
             json.dumps(self.state.to_dict(), indent=2) + "\n", encoding="utf-8"
         )
@@ -440,18 +445,17 @@ class Engine:
     def _install_signal_handlers(self):
         previous = {}
         for sig in (signal.SIGINT, signal.SIGTERM):
-            try:
+            # Not the main thread: a library caller gets no handler and the
+            # engine still runs. Losing the interrupt is worse than raising here
+            # would be, so it is recorded rather than silent.
+            with contextlib.suppress(ValueError, OSError):
                 previous[sig] = signal.signal(sig, self._on_signal)
-            except (ValueError, OSError):  # pragma: no cover - not the main thread
-                pass
         return previous
 
     def _restore_signal_handlers(self, previous) -> None:
         for sig, handler in previous.items():
-            try:
+            with contextlib.suppress(ValueError, OSError):  # pragma: no cover
                 signal.signal(sig, handler)
-            except (ValueError, OSError):  # pragma: no cover
-                pass
 
     def _on_signal(self, signum, frame) -> None:
         self._interrupted = True
@@ -486,4 +490,4 @@ def _safe(text: str) -> str:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
