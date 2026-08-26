@@ -1,0 +1,7 @@
+# Run artifacts. Never pruned automatically, never committed.
+runs/
+*.pyc
+__pycache__/
+.venv/
+.pytest_cache/
+*.egg-info/

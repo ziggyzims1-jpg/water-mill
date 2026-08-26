@@ -1,0 +1,11 @@
+# Runtime
+PyYAML>=6.0,<7
+
+# Gate. pytest is a declared dependency rather than something assumed present:
+# a clean checkout that cannot run the suite has no gate at all.
+pytest>=8.0,<9
+
+# The linter is pinned to a minor. Ruff promotes preview rules to stable on a
+# minor bump, and an unpinned linter fails pull requests that changed nothing --
+# a gate people have learned to disbelieve is worse than no gate.
+ruff>=0.16.4,<0.17

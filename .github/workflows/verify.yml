@@ -1,0 +1,31 @@
+# CI runs `make verify` and nothing else, so a check that passes locally cannot
+# fail here for a reason spelled out in this file.
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Configure git
+        # The engine tests drive real repositories, which need an identity to
+        # commit with. Without this every engine test fails on `git commit`.
+        run: |
+          git config --global user.email "ci@example.invalid"
+          git config --global user.name "Water Mill CI"
+
+      - name: make verify
+        run: make verify

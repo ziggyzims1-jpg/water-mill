@@ -1,0 +1,15 @@
+# Which repositories this factory drives.
+#
+# A contract describes a project; this file describes the factory's
+# relationship to it. Paths are relative to this checkout, so the factory and
+# its targets can move as a unit.
+#
+# A project that carries its own `watermill.yaml` needs no `contract:` key --
+# and its own file always wins over a vendored one, because a repository that
+# has adopted a contract is the authority on its own gate.
+
+version: 1
+projects:
+  - name: zimmy-life-tracker
+    path: ../zimmy-life-tracker
+    contract: projects/zimmy-life-tracker.yaml
