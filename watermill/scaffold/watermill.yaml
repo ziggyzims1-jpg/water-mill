@@ -85,6 +85,29 @@ environment:
   forbid_env: {}
   min_free_gb: 2
 
+notes:
+  # Advice carried into the agent's prompt. Everything else in this file is a
+  # mechanism -- the gate re-runs, the fence is checked against a diff, a cap
+  # halts the loop. This is the one exception, and the boundary matters more
+  # than the contents:
+  #
+  #   A rule that can be mechanised does not belong here. "Never edit db.py" is
+  #   a fence path; writing it as a note instead converts an enforced guarantee
+  #   into a suggestion the agent may reasonably weigh against its task.
+  #
+  #   A note earns its place by having cost something. These are written after
+  #   a task went wrong, not guessed before one is attempted. A note nobody
+  #   learned the hard way is a style preference, and the prompt is not the
+  #   place for those.
+  #
+  # Capped at 20 entries of 500 characters. When the list is full the answer is
+  # not a longer list -- it is to promote a note into the gate or the fence.
+  #
+  # - Integration fixtures live in tests/fixtures, not tests/data. The second
+  #   path exists and holds something else.
+  # - The dev server holds port 5173; the gate reads a stale build if it is
+  #   still running.
+
 caps:
   # Per-project overrides. Omit any of them to take the platform default:
   # 15 tasks, 6 hours, 3 consecutive failures, 30 minute task timeout,

@@ -33,7 +33,7 @@ arrived early with Water Mill; several Phase-0 items were skipped entirely.
 | Phase | Plan | Actual |
 |---|---|---|
 | **0. Foundations** | Multi-tenant data model; append-only entries; backup + restore drill; property tests on invariants; gate runner; budget governor; model-provider seam; per-tenant credential routing | **Partial.** Gate runner, restore drill, invariants and corpus: **done**. Budget governor: **partial** — Water Mill's `--max-spend` is reactive, checked between tasks, and overshoots by up to one task. Multi-tenant data model, model-provider seam, per-tenant credential routing: **not started** |
-| **1. Memory** | Beads; `brain/`; loop runner; bead-template linter; verification-tier taxonomy; structured-logging allowlist + scrubber; Rung-0 instrument draft | **Mostly done.** Beads, `brain/`, loop runner (Water Mill), bead template and 47 Tier-1 tasks: **done**. Gate met (40+ Tier-1 beads). Bead-template *linter*, logging allowlist and scrubber: **not started**. Rung-0 instrument exists as PLAN.md Appendix C |
+| **1. Memory** | Beads; `brain/`; loop runner; bead-template linter; verification-tier taxonomy; structured-logging allowlist + scrubber; Rung-0 instrument draft | **Mostly done.** Beads, `brain/`, loop runner (Water Mill), bead template and 47 Tier-1 tasks: **done**. Gate met (40+ Tier-1 beads). **Verification-tier taxonomy: done** — the eight root-cause buckets in `watermill/tasklog.py`, counted across projects, annotated by hand. Bead-template *linter*, logging allowlist and scrubber: **not started**. Rung-0 instrument exists as PLAN.md Appendix C |
 | **2. First loop** | Tier-1 loop overnight; merge-on-green; Falsifier; Boundary Falsifier; handoff skill; escalation format; ranked docket; test beds A/B/C | **Not started.** Zero nights run. Zero of eight supervised calibration tasks. Zero of three test beds. Falsifier and Boundary Falsifier do not exist. Handoff practice exists (`HANDOFF.md`); the escalation format and ranked docket do not |
 | **3. Governance** | Fence engine + registry; audit export; content-addressed audit index; MSA draft; counsel; 10 prospect conversations | **Fence engine: done early** (`watermill/contract.py`, enforced against `git diff`, not requested in a prompt). Audit export, audit index, MSA, counsel, prospects: **not started** |
 | **4. Launch + boundary proof** | Tracker live with real users; control/data split; Watchtower, Medic, Herald, Quartermaster; three free Rung-0 audits; SOC 2 window opens | **Not started.** Zero of seven standing maintenance roles exist |
@@ -45,13 +45,14 @@ arrived early with Water Mill; several Phase-0 items were skipped entirely.
 | | Evidence |
 |---|---|
 | Zimmy's merge gate | `make verify` — guard, build, ruff, ESLint, both suites, ~1m31s. CI runs exactly that command |
-| Water Mill's own gate | `make verify` — guard, ruff, **132 tests, ~17s**, from a clean `make install` |
+| Water Mill's own gate | `make verify` — guard, ruff, **173 tests, ~20s**, from a clean `make install` |
 | Restore, drilled | `scripts/backup_drill.py`, heartbeat checked daily by a separate job |
 | Invariants and corpus | `tests/test_invariants.py` over 17 synthetic personas, deterministic from one seed |
 | Work graph | 47 Tier-1 tasks in 4 epics, every one naming its files, its verification and what it must not touch |
 | The fence | 24 declared paths, **all present on Zimmy's merged `main`**, checked against staged, unstaged, untracked *and* committed diffs |
 | Every cap | Task attempts, wall clock, consecutive failures, per-task timeout, spend, unmetered — each triggered deliberately in a test |
 | Every discard path | Uncommitted work, commit without the task id, fenced path touched, gate broken, agent did nothing, agent crashed |
+| The knowledge surfaces | `notes` in the contract reaches the prompt; `tasklog.py` records one line per task; `watermill tasks` counts root causes across projects. **All three are empty** — see below |
 
 ## What is not
 
@@ -62,6 +63,14 @@ outside.
   **stub**. That is a test of the orchestrator's control flow, not of how an
   agent behaves inside it. Neither repository is approved for unattended use and
   both say so.
+- **The knowledge surfaces exist and hold nothing.** A contract can carry
+  `notes` into the prompt, the task log can count root causes, and
+  `docs/calibration/` has a record per project — but every one of them is empty,
+  because a note is written after a task goes wrong and no task has run. They
+  were built now so the first supervised session has somewhere to put what it
+  finds; filling them in from either project's CLAUDE.md would put guesses in
+  every prompt, and a guess is indistinguishable from a lesson once it is in the
+  list.
 - **`bd` is not installed in the development container**, so preflight refuses
   at the tooling check here. `./bin/watermill doctor` currently reports exactly
   one refusal, and that is it. It must exist on whatever machine runs a night.
@@ -98,6 +107,8 @@ Every number that should be climbing and is currently zero.
 | Foreign test beds stood up (of 3) | **0** |
 | Standing maintenance roles built (of 7) | **0** |
 | Cells sold | **0** |
+| Tasks with a recorded root cause | **0** |
+| Contract notes carried into a prompt | **0** |
 | Tier-1 tasks queued and ready | **47** |
 | Fenced paths enforced | **24** |
 
@@ -112,6 +123,16 @@ Install `bd`, clear the one refusal, and run **one** task supervised:
 Then read `runs/zimmy-life-tracker/<run-id>/REPORT.md` **and** the prompt that
 was actually sent (`prompts/<task>.txt`). The prompt is the most common root
 cause of a bad task, which is why it is written to disk.
+
+Then record what you concluded, while it is still fresh:
+
+```bash
+./bin/watermill annotate zimmy-life-tracker <task-id> <root-cause> --note "..."
+```
+
+That is the first row of `docs/calibration/zimmy-life-tracker.md` and the first
+line in the task log with a judgement on it. Both are empty right now, and the
+counters above stay at zero until one task has been watched and named.
 
 Nothing in the plan past Phase 2 can be honestly worked on before that number
 stops being zero.

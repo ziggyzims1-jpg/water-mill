@@ -128,6 +128,45 @@ Supervised, one task, watching:
 Then [calibration](CALIBRATION.md): eight tasks, watched, recording *why* each
 one went wrong rather than whether the code was right.
 
+```bash
+./bin/watermill calibrate my-project    # creates docs/calibration/my-project.md
+```
+
+## 7. What comes back out
+
+Onboarding a project is not only a cost. A repository the factory has never
+driven is the only thing that can tell you whether the four prerequisites above
+are right in general or merely right for the project they were written from —
+so the second project onboarded is worth more as evidence than the first was.
+
+What it produces goes to one of four places, in descending order of how much it
+is worth:
+
+1. **The gate** — a check that fails on the mistake. The only one that cannot be
+   ignored, and the only acceptable answer to work that passed the gate and was
+   still wrong.
+2. **`fence.paths`** — checked against the diff afterwards, so it holds whatever
+   the agent believed it was doing.
+3. **`notes` in the contract** — advisory, carried in the prompt, capped at 20.
+   For what neither of the above can express.
+4. **`docs/calibration/<project>.md`** and the task log — everything else.
+
+**A rule that can be mechanised must not be written as a note.** That is the
+distinction the whole scheme rests on: a note is a request, and a fence is
+evidence.
+
+### When a lesson belongs to Water Mill instead
+
+**When it has appeared twice, in two repositories.** One project's frictions are
+indistinguishable from that project's idiosyncrasies, and this orchestrator's
+entire claim is that it is repo-agnostic — a lesson promoted from a single
+sighting is how a general tool acquires one project's habits. Until the second
+sighting it lives in that project's contract and its calibration record, which
+is where it is true.
+
+`./bin/watermill tasks` counts root causes across every project, which is what
+makes the second sighting visible rather than remembered.
+
 Only after that, an unattended night at 5 tasks and 3 hours — and the ramp in
 [SAFETY.md](SAFETY.md#the-ramp) from there.
 

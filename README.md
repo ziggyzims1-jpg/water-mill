@@ -41,7 +41,7 @@ point.
 
 ```bash
 make install                                  # .venv + dependencies
-make verify                                   # the gate: guard, ruff, 132 tests
+make verify                                   # the gate: guard, ruff, 173 tests
 
 ./bin/watermill projects                      # what this factory drives
 ./bin/watermill validate                      # do the contracts parse
@@ -77,6 +77,9 @@ Afterwards:
 ./bin/watermill report zimmy-life-tracker     # the latest morning report
 ./bin/watermill status                        # readiness and history per project
 ./bin/watermill ledger                        # every run, across every project
+./bin/watermill tasks                         # every task, counted by root cause
+./bin/watermill tasks --unannotated           # what still needs a judgement
+./bin/watermill annotate <proj> <id> <cause>  # record why one went wrong
 ```
 
 ## Layout
@@ -94,7 +97,8 @@ Afterwards:
 | `watermill/queue.py` | Six shell commands and a JSON shape |
 | `watermill/gitwork.py` | Git, and a discard that refuses to run on the wrong path |
 | `watermill/report.py` | The morning report. Pure |
-| `watermill/ledger.py` | Append-only history across projects |
+| `watermill/ledger.py` | Append-only history across projects, one line per run |
+| `watermill/tasklog.py` | One line per task, and why each one went wrong |
 | `projects/` | Vendored contracts, for projects that carry none yet |
 | `runs/` | Per-run logs. Gitignored, and **never pruned automatically** |
 | `docs/` | The contract spec, the safety model, onboarding, calibration |
@@ -104,7 +108,7 @@ Afterwards:
 - **[docs/CONTRACT.md](docs/CONTRACT.md)** — every field, and why it defaults the way it does
 - **[docs/SAFETY.md](docs/SAFETY.md)** — what is actually protecting you, and what is not
 - **[docs/ONBOARDING.md](docs/ONBOARDING.md)** — bringing a new project into the factory
-- **[docs/CALIBRATION.md](docs/CALIBRATION.md)** — the supervised session that has to happen before an unattended night
+- **[docs/CALIBRATION.md](docs/CALIBRATION.md)** — the supervised session that has to happen before an unattended night, and where a lesson goes afterwards
 
 ## Registered projects
 
