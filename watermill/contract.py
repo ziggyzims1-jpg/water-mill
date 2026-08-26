@@ -378,6 +378,83 @@ class Caps:
         return cls(**values)
 
 
+#: A ceiling on the notes block. A prompt that grows without bound is one the
+#: agent skims, and a lesson nobody reads is worse than no lesson because it
+#: creates the belief that the knowledge is being applied. When the list is
+#: full, the answer is not a bigger list: it is to promote the note into
+#: something mechanical -- a fenced path, or a check the gate runs.
+MAX_NOTES = 20
+MAX_NOTE_CHARS = 500
+
+
+@dataclass(frozen=True)
+class Notes:
+    """Hard-won knowledge about this project, in the agent's own prompt.
+
+    Everything else in a contract is a *mechanism*: the gate re-runs, the fence
+    is checked against a diff, a cap halts the loop. Notes are the exception --
+    they are advice, and advice is a request rather than evidence. That makes
+    the boundary the important part of this type rather than its contents:
+
+    **A rule that can be mechanised does not belong here.** "Never edit db.py"
+    is a fence path, and stating it as a note instead converts an enforced
+    guarantee into a suggestion the agent may reasonably weigh against the task
+    in front of it. What belongs here is what no mechanism can express -- where
+    a project keeps a thing, which of two plausible idioms it actually uses,
+    the trap that a reasonable agent falls into precisely because it is
+    reasonable.
+
+    **A note earns its place by having cost something.** These are written
+    after a task went wrong, not before one is attempted; a note guessed in
+    advance is a style preference, and the prompt is not the place for those.
+    """
+
+    items: tuple[str, ...] = ()
+
+    def __bool__(self) -> bool:
+        return bool(self.items)
+
+    def __len__(self) -> int:
+        return len(self.items)
+
+    @classmethod
+    def parse(cls, value: Any) -> Notes:
+        if value is None:
+            return cls()
+        # A single string is accepted as one note: it is what a YAML block
+        # scalar produces and there is no other thing it could have meant.
+        raw = [value] if isinstance(value, str) else value
+        if not isinstance(raw, list):
+            raise ContractError(
+                f"notes: expected a list of strings, got {type(value).__name__}"
+            )
+        items: list[str] = []
+        for index, entry in enumerate(raw):
+            if not isinstance(entry, str):
+                raise ContractError(
+                    f"notes[{index}]: expected a string, got {type(entry).__name__}"
+                )
+            text = " ".join(entry.split())
+            if not text:
+                continue
+            if len(text) > MAX_NOTE_CHARS:
+                raise ContractError(
+                    f"notes[{index}] is {len(text)} characters, over the "
+                    f"{MAX_NOTE_CHARS} limit. A note that long is documentation; "
+                    "put it in the repository and leave one sentence here saying "
+                    "where."
+                )
+            items.append(text)
+        if len(items) > MAX_NOTES:
+            raise ContractError(
+                f"notes: {len(items)} entries, over the limit of {MAX_NOTES}. "
+                "The list is capped because a prompt the agent skims teaches it "
+                "nothing while costing every task. Promote the mechanical ones "
+                "into fence.paths or into the gate, and drop the rest."
+            )
+        return cls(items=tuple(items))
+
+
 @dataclass(frozen=True)
 class Contract:
     """A validated project contract."""
@@ -389,12 +466,13 @@ class Contract:
     fence: Fence = field(default_factory=Fence)
     environment: Environment = field(default_factory=Environment)
     caps: Caps = field(default_factory=Caps)
+    notes: Notes = field(default_factory=Notes)
     description: str = ""
     source: Path | None = None
 
     _TOP = {
         "version", "name", "description", "commands", "git", "queue",
-        "fence", "environment", "caps",
+        "fence", "environment", "caps", "notes",
     }
 
     @classmethod
@@ -429,6 +507,7 @@ class Contract:
             fence=Fence.parse(got.get("fence")),
             environment=Environment.parse(got.get("environment")),
             caps=Caps.parse(got.get("caps")),
+            notes=Notes.parse(got.get("notes")),
             source=source,
         )
 
