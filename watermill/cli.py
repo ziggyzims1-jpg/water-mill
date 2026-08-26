@@ -14,11 +14,12 @@ so the parser refuses the combination outright rather than warning about it.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import ledger, report, tasklog
+from . import ledger, report, shipper, tasklog
 from .caps import Caps
 from .contract import CONTRACT_FILENAME
 from .engine import Engine
@@ -442,6 +443,33 @@ def cmd_calibrate(args) -> int:
     return 0
 
 
+def cmd_ship(args) -> int:
+    """Send the ledger and the task log to Loki."""
+    root = factory_root(args.root)
+    try:
+        summary = shipper.ship(
+            root, url=args.url or "", user=args.user or "", token=args.token or "",
+            job=args.job, dry_run=args.dry_run, resend=args.resend,
+        )
+    except shipper.ShipError as exc:
+        # Exit 1, not 3: shipping was attempted and did not land. A refusal is
+        # for a precondition, and nothing here modified anything.
+        print(f"ship failed: {exc}")
+        return 1
+
+    if not summary["shipped"]:
+        print("nothing new to ship")
+        return 0
+    if summary["dry_run"]:
+        print(json.dumps(summary["payload"], indent=2))
+        print()
+        print(f"dry run -- {summary['shipped']} line(s) in "
+              f"{summary['streams']} stream(s), nothing sent and nothing recorded")
+        return 0
+    print(f"shipped {summary['shipped']} line(s) in {summary['streams']} stream(s)")
+    return 0
+
+
 # -- parser ----------------------------------------------------------------
 
 
@@ -527,6 +555,17 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("calibrate", help="open a project's calibration record")
     p.add_argument("project")
     p.set_defaults(func=cmd_calibrate)
+
+    p = sub.add_parser("ship", help="send the ledger and task log to Loki")
+    p.add_argument("--url", help="Loki base URL (default: $LOKI_URL)")
+    p.add_argument("--user", help="basic-auth user (default: $LOKI_USER)")
+    p.add_argument("--token", help="basic-auth token (default: $LOKI_TOKEN)")
+    p.add_argument("--job", default="watermill", help="the job label")
+    p.add_argument("--dry-run", action="store_true",
+                   help="print the payload; send nothing, record nothing")
+    p.add_argument("--resend", action="store_true",
+                   help="ignore the high-water mark and re-send everything")
+    p.set_defaults(func=cmd_ship)
 
     p = sub.add_parser("release", help="hand a stuck task back to the queue")
     p.add_argument("project")

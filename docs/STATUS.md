@@ -45,13 +45,14 @@ arrived early with Water Mill; several Phase-0 items were skipped entirely.
 | | Evidence |
 |---|---|
 | Zimmy's merge gate | `make verify` — guard, build, ruff, ESLint, both suites, ~1m31s. CI runs exactly that command |
-| Water Mill's own gate | `make verify` — guard, ruff, **173 tests, ~20s**, from a clean `make install` |
+| Water Mill's own gate | `make verify` — guard, ruff, **196 tests, ~23s**, from a clean `make install` |
 | Restore, drilled | `scripts/backup_drill.py`, heartbeat checked daily by a separate job |
 | Invariants and corpus | `tests/test_invariants.py` over 17 synthetic personas, deterministic from one seed |
 | Work graph | 47 Tier-1 tasks in 4 epics, every one naming its files, its verification and what it must not touch |
 | The fence | 24 declared paths, **all present on Zimmy's merged `main`**, checked against staged, unstaged, untracked *and* committed diffs |
 | Every cap | Task attempts, wall clock, consecutive failures, per-task timeout, spend, unmetered — each triggered deliberately in a test |
 | Every discard path | Uncommitted work, commit without the task id, fenced path touched, gate broken, agent did nothing, agent crashed |
+| Shipping to Loki | `watermill ship` reads the ledger and task log and pushes what is new. Off the run loop, high-water mark advances only after a push returned. **Never pointed at a real Loki** |
 | The knowledge surfaces | `notes` in the contract reaches the prompt; `tasklog.py` records one line per task; `watermill tasks` counts root causes across projects. **All three are empty** — see below |
 
 ## What is not
@@ -63,6 +64,10 @@ outside.
   **stub**. That is a test of the orchestrator's control flow, not of how an
   agent behaves inside it. Neither repository is approved for unattended use and
   both say so.
+- **Nothing has been shipped to a real Loki.** The transport is tested against
+  a recorder, which proves the payload Loki would receive and nothing about
+  whether Loki accepts it. The first real ship is a five-minute check that has
+  not happened.
 - **The knowledge surfaces exist and hold nothing.** A contract can carry
   `notes` into the prompt, the task log can count root causes, and
   `docs/calibration/` has a record per project — but every one of them is empty,
