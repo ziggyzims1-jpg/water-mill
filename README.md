@@ -1,4 +1,4 @@
-# Water Mill
+<img src="assets/logo-lockup.svg" alt="Water Mill" width="300">
 
 A multi-project orchestrator for supervised and unattended agent work.
 
@@ -41,7 +41,7 @@ point.
 
 ```bash
 make install                                  # .venv + dependencies
-make verify                                   # the gate: guard, ruff, 173 tests
+make verify                                   # the gate: guard, ruff, 196 tests
 
 ./bin/watermill projects                      # what this factory drives
 ./bin/watermill validate                      # do the contracts parse
@@ -80,6 +80,7 @@ Afterwards:
 ./bin/watermill tasks                         # every task, counted by root cause
 ./bin/watermill tasks --unannotated           # what still needs a judgement
 ./bin/watermill annotate <proj> <id> <cause>  # record why one went wrong
+./bin/watermill ship                          # push both to Loki for Grafana
 ```
 
 ## Layout
@@ -99,6 +100,7 @@ Afterwards:
 | `watermill/report.py` | The morning report. Pure |
 | `watermill/ledger.py` | Append-only history across projects, one line per run |
 | `watermill/tasklog.py` | One line per task, and why each one went wrong |
+| `watermill/shipper.py` | Ships both to Loki for Grafana |
 | `projects/` | Vendored contracts, for projects that carry none yet |
 | `runs/` | Per-run logs. Gitignored, and **never pruned automatically** |
 | `docs/` | The contract spec, the safety model, onboarding, calibration |
@@ -108,6 +110,7 @@ Afterwards:
 - **[docs/CONTRACT.md](docs/CONTRACT.md)** — every field, and why it defaults the way it does
 - **[docs/SAFETY.md](docs/SAFETY.md)** — what is actually protecting you, and what is not
 - **[docs/ONBOARDING.md](docs/ONBOARDING.md)** — bringing a new project into the factory
+- **[docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)** — shipping to Loki, and the LogQL worth pinning
 - **[docs/CALIBRATION.md](docs/CALIBRATION.md)** — the supervised session that has to happen before an unattended night, and where a lesson goes afterwards
 
 ## Registered projects

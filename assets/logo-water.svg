@@ -1,0 +1,28 @@
+<!-- Water Mill. Strokes use currentColor, so the mark takes the colour of
+     its context and needs no light/dark variant. -->
+<!-- Display version: the wheel turning in the race. The mask is luminance-based,
+     so it hides the submerged half without painting a background colour. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none"
+     stroke="currentColor" stroke-width="6" stroke-linecap="round"
+     role="img" aria-label="Water Mill">
+  <mask id="wm-above">
+    <rect x="0" y="0" width="96" height="70" fill="#fff"/>
+  </mask>
+  <g mask="url(#wm-above)">
+    <circle cx="48" cy="42" r="23"/>
+      <line x1="48.0" y1="42.0" x2="48.0" y2="19.0"/>
+      <line x1="48.0" y1="42.0" x2="67.92" y2="30.5"/>
+      <line x1="48.0" y1="42.0" x2="67.92" y2="53.5"/>
+      <line x1="48.0" y1="42.0" x2="48.0" y2="65.0"/>
+      <line x1="48.0" y1="42.0" x2="28.08" y2="53.5"/>
+      <line x1="48.0" y1="42.0" x2="28.08" y2="30.5"/>
+      <line x1="39.5" y1="12.0" x2="56.5" y2="12.0"/>
+      <line x1="69.73" y1="19.64" x2="78.23" y2="34.36"/>
+      <line x1="78.23" y1="49.64" x2="69.73" y2="64.36"/>
+      <line x1="56.5" y1="72.0" x2="39.5" y2="72.0"/>
+      <line x1="26.27" y1="64.36" x2="17.77" y2="49.64"/>
+      <line x1="17.77" y1="34.36" x2="26.27" y2="19.64"/>
+  </g>
+  <path d="M4 72 H92"/>
+  <path d="M18 85 H78" stroke-width="5" opacity="0.45"/>
+</svg>
