@@ -37,7 +37,7 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 | `watermill/report.py` | The morning report (pure) |
 | `watermill/ledger.py` | Append-only cross-project history |
 | `projects/` | Vendored contracts for projects that carry none yet |
-| `docs/` | Contract spec, safety model, onboarding, calibration |
+| `docs/` | Contract spec, safety model, onboarding, calibration. **`STATUS.md` is where things actually are; `PLAN.md` is what is being built and why** |
 | `runs/` | Per-run logs. Gitignored, **never pruned automatically** |
 
 ## Conventions
@@ -82,6 +82,15 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 - **The stub agents test control flow, not agent behaviour.** Do not let a green
   suite become an argument that the loop is ready for an unattended night. See
   [docs/CALIBRATION.md](docs/CALIBRATION.md).
+
+## Where things are
+
+[`docs/STATUS.md`](docs/STATUS.md) is the position; [`docs/PLAN.md`](docs/PLAN.md)
+is the plan. **A change that moves the position updates STATUS.md in the same
+commit**, and if it contradicts the plan it updates the plan too. Left to
+memory, the plan drifts into fiction and gets quietly stopped being read.
+
+The number that governs everything else right now is **nights run: 0**.
 
 ## Adding a project
 

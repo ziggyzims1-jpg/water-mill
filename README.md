@@ -12,6 +12,9 @@ happened, in a report and in an append-only ledger.
 It knows nothing about any particular project. Everything project-specific
 arrives through a contract.
 
+**Where this actually stands: [docs/STATUS.md](docs/STATUS.md).** What it is
+for and where the money comes from: [docs/PLAN.md](docs/PLAN.md).
+
 > **NOT YET APPROVED FOR UNATTENDED USE.** Every cap has a test and the gate is
 > green, but the caps have only ever been proven with **stub agents**. That
 > tests the orchestrator's control flow, not how a real agent behaves inside
@@ -38,7 +41,7 @@ point.
 
 ```bash
 make install                                  # .venv + dependencies
-make verify                                   # the gate: guard, ruff, 123 tests
+make verify                                   # the gate: guard, ruff, 132 tests
 
 ./bin/watermill projects                      # what this factory drives
 ./bin/watermill validate                      # do the contracts parse
