@@ -288,7 +288,12 @@ class Fence:
 
         hits = []
         for path in changed_paths:
-            norm = str(path).strip().lstrip("./")
+            # removeprefix, never lstrip: `lstrip("./")` strips *every* leading
+            # dot and slash, so `.github/workflows/verify.yml` becomes
+            # `github/...` and a fence over `.github/` silently matches nothing.
+            # Every protected dotfile path -- .github, .beads, .claude -- would
+            # have been unguarded while the contract said otherwise.
+            norm = str(path).strip().removeprefix("./")
             if not norm:
                 continue
             for pattern in self.paths:

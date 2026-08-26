@@ -118,6 +118,14 @@ def run(
         except subprocess.TimeoutExpired:  # pragma: no cover - the SIGKILL path
             proc.kill()
             proc.wait()
+    except BaseException:
+        # Ctrl-C, SIGTERM, anything. The child and its whole tree go first, then
+        # the exception continues to the caller's cleanup. Without this the
+        # operator's interrupt returns a prompt while an agent keeps working in
+        # the background -- which is how the shell version took five minutes to
+        # stop and left a test runner holding the tree it was about to clean.
+        _terminate_group(proc)
+        raise
     finally:
         if log_handle is not None:
             log_handle.close()

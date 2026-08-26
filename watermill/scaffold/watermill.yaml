@@ -1,0 +1,98 @@
+# Water Mill project contract.
+#
+# This file is the entire coupling surface between the factory and this
+# repository. Water Mill knows nothing else about the project.
+#
+# Unknown keys are refused rather than ignored: a misspelled key is
+# indistinguishable from a missing one once a run has started.
+
+version: 1
+name: PROJECT_NAME
+
+description: >
+  One or two sentences. This is printed in reports, so write it for the person
+  reading at 7am who drives four projects and needs to remember which is which.
+
+commands:
+  # REQUIRED. The merge gate -- the one command whose result decides whether a
+  # task's work is kept. Water Mill runs it twice per task: once as a baseline
+  # on unmodified code, once after the agent finishes. It must be the same
+  # command CI runs, or a green local run and a red CI run mean nothing
+  # together.
+  gate: make verify
+
+  # How a fresh checkout becomes runnable. Not run automatically; reported by
+  # `watermill doctor` when the gate fails for want of dependencies.
+  install: make install
+
+  # OPTIONAL, and the most important optional field here. A command that exits
+  # zero when a restore has been *verified* recently -- not when a backup file
+  # exists. A run that can damage data without a proven restore is the one
+  # combination this whole system exists to prevent, and a project with no
+  # backup_check is allowed to run only because refusing outright would stop
+  # anyone adopting the factory at all. Preflight says so every time.
+  # backup_check: .venv/bin/python scripts/backup_drill.py --check-heartbeat
+  # backup_run: make backup && make drill
+
+git:
+  base_branch: main
+
+  # `branch` opens watermill/<run-id> and pushes it for review.
+  # `direct` commits onto base_branch.
+  #
+  # Start on `branch`. Direct is the right answer for a mature project with a
+  # strong gate, a verified restore and a cheap revert -- but a project the
+  # factory has never driven has not yet demonstrated any of the three.
+  target: branch
+  remote: origin
+
+queue:
+  # beads | command | none. `none` disables the queue, which is what a project
+  # uses while a human still hands it one task at a time.
+  kind: beads
+  ready: bd ready --json
+  stale: bd list --status in_progress --json
+  show: bd show {id}
+  claim: bd update {id} --claim
+  release: bd update {id} --status open
+  close: bd close {id}
+  comment: bd comment {id} {text}
+  # Rows that are containers rather than work. Handing an epic to an agent
+  # produces a task that silently does nothing.
+  exclude_types:
+    - epic
+
+fence:
+  # Paths a task may never modify. Named in the agent's prompt AND checked
+  # against the diff afterwards -- an instruction is a request, a diff is
+  # evidence. A task that touches one of these has its work discarded whatever
+  # else it did.
+  #
+  # What belongs here: the gate itself and anything that could weaken it, the
+  # migration and schema files, whatever encodes the project's hardest-won
+  # decisions, and this file.
+  paths:
+    - watermill.yaml
+    - Makefile
+    - .github/workflows/
+    # - db.py
+    # - brain/
+
+environment:
+  # Refuse to run when a variable holds a value meaning production. The common
+  # ones (FLASK_ENV, NODE_ENV, APP_ENV, ENVIRONMENT, RAILS_ENV) are checked
+  # already; add anything this project uses.
+  forbid_env: {}
+  min_free_gb: 2
+
+caps:
+  # Per-project overrides. Omit any of them to take the platform default:
+  # 15 tasks, 6 hours, 3 consecutive failures, 30 minute task timeout,
+  # 3 unmetered tasks.
+  #
+  # The spend ceiling is deliberately NOT here. It is an operator decision made
+  # per run (`--max-spend`), because a ceiling checked into a repository is one
+  # nobody re-reads before the night it matters.
+  max_tasks: 15
+  max_hours: 6
+  task_timeout_minutes: 30
