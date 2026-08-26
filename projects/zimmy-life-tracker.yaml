@@ -1,0 +1,125 @@
+# Zimmy Life Tracker -- the factory's first target.
+#
+# Vendored here rather than living in the project, because the project has not
+# adopted a contract yet. Precedence is: a `watermill.yaml` inside the
+# repository always wins over this file. Move it there once it has proven
+# right, and delete this.
+#
+# Everything below is drawn from the project's own CLAUDE.md, VERIFY.md,
+# BACKUP.md and LOOP.md rather than guessed.
+
+version: 1
+name: zimmy-life-tracker
+
+description: >
+  Flask + React life tracker on a Raspberry Pi. Single SQLite database, an
+  append-only migration list, and a merge gate that runs both linters and both
+  test suites in about ninety seconds. The repository on the Pi is the
+  production checkout, which is why the environment guards below are not
+  theatre.
+
+commands:
+  # The project's own merge gate, and exactly what its CI workflow runs -- so a
+  # check that passes here cannot fail in CI for a reason spelled out in a YAML
+  # file. Guard, frontend build, ruff, ESLint at --max-warnings=0, Vitest,
+  # pytest. Roughly 1m31s.
+  gate: make verify
+
+  install: make install
+
+  # A heartbeat written only by a drill that actually restored an export into a
+  # scratch database and verified it. Not "a backup file exists" -- the drill
+  # failed on its first real run and the failure was its own, which is the
+  # whole argument for checking the restore rather than the artifact.
+  backup_check: .venv/bin/python scripts/backup_drill.py --check-heartbeat
+  # Display only: printed in the refusal so the operator knows what to run.
+  backup_run: make backup drill
+
+git:
+  base_branch: main
+  # Branch, not direct, until supervised calibration has run. The project's own
+  # LOOP.md argues for direct and is right about a mature setup -- but the
+  # argument rests on a revert staying routine, and nobody has reverted one of
+  # these yet. Flip this after calibration, deliberately.
+  target: branch
+  remote: origin
+
+queue:
+  kind: beads
+  ready: bd ready --json
+  stale: bd list --status in_progress --json
+  show: bd show {id}
+  claim: bd update {id} --claim
+  release: bd update {id} --status open
+  close: bd close {id}
+  comment: bd comment {id} {text}
+  exclude_types:
+    - epic
+
+fence:
+  # Every path here is protected for a reason the project already learned the
+  # hard way. This is not a generic list.
+  paths:
+    # The gate and everything that decides what it means. An agent that can
+    # edit these can make itself pass.
+    - Makefile
+    - VERIFY.md
+    - ruff.toml
+    - .github/workflows/
+    - frontend/vite.config.js
+    - frontend/eslint.config.js
+
+    # The schema. An index declared in SCHEMA over a column MIGRATIONS adds
+    # passes every test locally and crash-loops the Pi on the next restart.
+    # MIGRATIONS is append-only and editing an existing entry is unrecoverable.
+    - db.py
+
+    # The consolidations. Four disagreeing definitions of "today" became one
+    # module and two streak implementations became another; re-introducing a
+    # local definition is the exact regression they were built to end.
+    - services/clock.py
+    - services/streak_service.py
+
+    # Backup and restore. A guarded restore with no override flag is only
+    # guarded while nobody adds one.
+    - scripts/backup_export.py
+    - scripts/backup_restore.py
+    - scripts/backup_drill.py
+    - BACKUP.md
+
+    # The invariants and the corpus they run over -- the tests that catch what
+    # a gate cannot. A task that "fixes" a failing invariant has almost
+    # certainly found a real bug.
+    - tests/test_invariants.py
+    - tests/corpus.py
+    - scripts/gen_corpus.py
+    - CORPUS.md
+
+    # Doctrine and the work graph. Settled decisions are not a task's to
+    # re-litigate, and a queue that can edit itself is not a queue.
+    - brain/
+    - .beads/
+    - AGENTS.md
+    - CLAUDE.md
+
+    # Credential redaction. ALL_TABLES, SENSITIVE_KEYS and SENSITIVE_COLUMNS
+    # decide what a backup carries in the clear.
+    - routes/backup.py
+
+    # Auth and the second factor.
+    - services/mfa_service.py
+    - config.py
+
+environment:
+  forbid_env:
+    FLASK_ENV: production
+    APP_ENV: production
+  min_free_gb: 2
+
+caps:
+  # Night one of the ramp: 5 tasks, 3 hours. Raised only after a night with
+  # zero reverts and an accurate report. Never raised to compensate for a low
+  # task count -- if work is running out, generate more tasks.
+  max_tasks: 5
+  max_hours: 3
+  task_timeout_minutes: 30
