@@ -43,6 +43,13 @@ guard:  ## Refuse to run the suite anywhere near a real run's artifacts
 	@# it is not about to do that inside this checkout, where `runs/` holds the
 	@# only record of every night the factory has worked.
 	@test -d tests || { echo "guard: no tests/ directory"; exit 1; }
+	@test -x $(VENV_PY) || { \
+		echo "guard: $(VENV_PY) does not exist."; \
+		echo "guard: the gate runs the interpreter \`make install\` populates,"; \
+		echo "guard: so that a green run here and a green run in CI are the"; \
+		echo "guard: same run. Run: make install"; \
+		exit 1; \
+	}
 	@if [ -n "$${WATERMILL_ROOT:-}" ]; then \
 		echo "guard: WATERMILL_ROOT is set to '$$WATERMILL_ROOT'."; \
 		echo "guard: the suite must not be pointed at a real factory root."; \
@@ -52,19 +59,19 @@ guard:  ## Refuse to run the suite anywhere near a real run's artifacts
 
 .PHONY: lint
 lint:  ## ruff over the package and the suite
-	$(PYTHON) -m ruff check .
+	$(VENV_PY) -m ruff check .
 
 .PHONY: format
 format:  ## Apply the fixes ruff can make itself
-	$(PYTHON) -m ruff check --fix .
+	$(VENV_PY) -m ruff check --fix .
 
 .PHONY: test
 test:  ## The full suite
-	$(PYTHON) -m pytest tests/ -q
+	$(VENV_PY) -m pytest tests/ -q
 
 .PHONY: test-fast
 test-fast:  ## Everything except the tests that drive real subprocesses
-	$(PYTHON) -m pytest tests/ -q --ignore=tests/test_engine.py
+	$(VENV_PY) -m pytest tests/ -q --ignore=tests/test_engine.py
 
 .PHONY: typecheck
 typecheck:  ## Explains that there is no type checker, and fails
@@ -77,7 +84,7 @@ typecheck:  ## Explains that there is no type checker, and fails
 
 .PHONY: doctor
 doctor:  ## Preflight every registered project, without running its gate
-	$(PYTHON) bin/watermill doctor
+	$(VENV_PY) bin/watermill doctor
 
 .PHONY: clean
 clean:  ## Remove build artifacts and .venv (never runs/)

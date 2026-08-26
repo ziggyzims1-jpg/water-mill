@@ -1,9 +1,31 @@
 # Handoff — Water Mill as the AI Software Factory
 
-**Written:** 2026-08-26 · **Branch:** `claude/chat-session-6rmwhn` (pushed) ·
-**Gate:** `make verify` green — ruff + 132 tests, ~17s
+**Written:** 2026-08-26 · **Branch:** `claude/chat-session-6rmwhn` — **merged
+to `main` as #1** · **Gate:** `make verify` green — ruff + 132 tests, ~17s
 
-Read this first in a new session, then `CLAUDE.md`, then `docs/SAFETY.md`.
+Read `docs/STATUS.md` first — it is the live position and this file is a
+snapshot. Then `CLAUDE.md`, then `docs/SAFETY.md`.
+
+> **Amended 2026-08-26 (second session).** Three corrections, all of them
+> divergences between what a document claimed and what was true:
+>
+> 1. **The gate could not run from a clean checkout.** `make install` populated
+>    `.venv`, and `lint`, `test`, `test-fast` and `doctor` all ran `python3` —
+>    the *system* interpreter. CI hid it by pip-installing into the system
+>    Python instead of running `make install`, so CI was green while
+>    `make install && make verify` failed on a clean clone with
+>    `No module named ruff`. Every gate target now runs `$(VENV_PY)`, `guard`
+>    refuses and names the fix when the venv is absent, and CI runs
+>    `make install`. The 132-test green run above was real; the wiring around it
+>    was not. **The lesson is the repo's own:** a gate that is only ever run in
+>    one environment is a gate that has only been tested in one environment.
+> 2. **`README.md` said 123 tests.** There are 132.
+> 3. **The two-loops decision (open decision #1) is half-closed.** Zimmy's
+>    `LOOP.md`, `CLAUDE.md` and `scripts/loop.sh` now all say Water Mill
+>    supersedes the bash loop. Deleting `loop.sh` is still yours.
+>
+> Also added: `docs/PLAN.md` (the business plan, now under version control and
+> reconciled against reality as v2.1) and `docs/STATUS.md` (the position).
 
 ---
 

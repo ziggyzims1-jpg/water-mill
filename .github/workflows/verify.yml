@@ -18,7 +18,11 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt
+        # `make install`, not a bare pip install: the gate runs the interpreter
+        # this target populates, so CI and a developer's checkout are the same
+        # run. Installing into the system interpreter here is how CI stayed
+        # green while `make install && make verify` failed on a clean clone.
+        run: make install
 
       - name: Configure git
         # The engine tests drive real repositories, which need an identity to
