@@ -1,4 +1,4 @@
-# Water Mill
+<img src="assets/logo-lockup.svg" alt="Water Mill" width="300">
 
 A multi-project orchestrator for supervised and unattended agent work.
 
