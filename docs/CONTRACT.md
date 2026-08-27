@@ -101,6 +101,48 @@ any point.
 `kind: none` disables the queue — what a project uses while a human still hands
 it one task at a time.
 
+### `review.*` — optional
+
+Three commands, in a fixed order, used by `watermill land` and **never during a
+run**:
+
+    create  ->  verify  ->  merge
+
+```yaml
+review:
+  create: gh pr create --base {base} --head {branch} --title {title} --body {body}
+  verify: gh pr checks {branch} --watch --fail-fast
+  merge: gh pr merge {branch} --squash --delete-branch
+```
+
+Templates take `{branch}`, `{base}`, `{title}` and `{body}`, and substitution
+happens after splitting on the same rule the queue follows — a title with a
+space in it is one argument, not shell syntax. The forge is the project's
+business: `gh`, `glab`, a curl, a script. Water Mill knows there are three steps
+and nothing about who performs them.
+
+**`verify` is required as soon as `merge` is set, and the schema refuses the
+pair without it.** A contract that could merge without verifying would make the
+merge gate advisory — a check that runs after the decision it exists to inform.
+Refusing it here means such a contract fails `watermill validate` in the
+morning rather than at 3am on the one night it matters.
+
+If `verify` fails, `land` stops and **never calls `merge`**, whatever the forge
+reports about the branch being mergeable.
+
+Declaring `create` and `verify` but no `merge` is the deliberately supported
+middle: the factory opens the pull request and proves it green, and a person
+presses the button. `watermill land --no-merge` does the same thing for a
+contract that does declare it, which is what the early nights of the ramp want.
+
+Omitting the block entirely is fine and is the default. `land` refuses, and a
+run's branch waits on the remote exactly as it does today.
+
+Nothing here runs on the run loop. Every command talks to a third party that can
+be slow, rate-limited or down, and a night that blocked on a CI queue would hold
+a claimed task open across the outage — the same reason `ship` is its own
+command.
+
 ### `fence.paths`
 
 Paths a task may never modify. Named in the agent's prompt **and** checked

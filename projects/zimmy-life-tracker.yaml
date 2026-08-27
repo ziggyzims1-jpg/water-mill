@@ -44,6 +44,27 @@ git:
   target: branch
   remote: origin
 
+review:
+  # The three steps `watermill land` performs, in order. The forge is the
+  # project's business and not the orchestrator's, so these are commands rather
+  # than a GitHub integration -- `glab`, a curl or a script would serve equally.
+  #
+  # **None of these runs during a run.** Every one talks to a third party that
+  # can be slow, rate-limited or down, and a night that blocked on a CI queue
+  # would hold a claimed task open across the outage. Same rule as `ship`.
+  create: gh pr create --base {base} --head {branch} --title {title} --body {body}
+
+  # --watch blocks until every check has reported; --fail-fast returns non-zero
+  # the moment one fails rather than waiting out the rest of a doomed build.
+  # This is the step that decides, and `land` never calls merge without it.
+  verify: gh pr checks {branch} --watch --fail-fast
+
+  # Squash, because a run's branch is one task's work however many commits the
+  # agent needed to get there, and the task id is in the commit message that
+  # survives. Declared, but `watermill land --no-merge` stops before it while
+  # the ramp is young -- see docs/SAFETY.md.
+  merge: gh pr merge {branch} --squash --delete-branch
+
 queue:
   kind: beads
   ready: bd ready --json

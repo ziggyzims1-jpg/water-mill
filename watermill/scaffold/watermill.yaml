@@ -46,6 +46,20 @@ git:
   target: branch
   remote: origin
 
+# What `watermill land` does with the branch a run leaves behind. Optional and
+# commented out: without it `land` refuses, and the branch waits for a person.
+#
+# None of these runs during a run. They talk to a forge, and a forge that is
+# slow or down must not be able to hang a night or hold a claimed task open.
+#
+# `verify` is required as soon as `merge` is set, and the contract refuses the
+# combination without it. Merging without verifying makes the merge gate
+# advisory -- a check that runs after the decision it exists to inform.
+# review:
+#   create: gh pr create --base {base} --head {branch} --title {title} --body {body}
+#   verify: gh pr checks {branch} --watch --fail-fast
+#   merge: gh pr merge {branch} --squash --delete-branch
+
 queue:
   # beads | command | none. `none` disables the queue, which is what a project
   # uses while a human still hands it one task at a time.

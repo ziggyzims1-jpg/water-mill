@@ -1,6 +1,6 @@
 # Status
 
-**As of 2026-08-26.** The single place that says where the factory actually is.
+**As of 2026-08-27.** The single place that says where the factory actually is.
 
 `docs/PLAN.md` says what is being built and why. This file says what exists.
 When they disagree, this file is right and the plan is stale — **fix the plan in
@@ -12,14 +12,16 @@ becomes a document nobody trusts.
 ## In one paragraph
 
 The **substrate for verification** is built and green: a merge gate, a synthetic
-corpus, invariants, a restore that has been drilled, a work graph with 47
-specified tasks, and — as of this week — **Water Mill**, a repo-agnostic
-orchestrator that claims a task, hands it to an agent, and independently checks
-what reached the repository. The **loop has never run against a real agent, not
-once, not supervised.** Everything downstream of that fact — pricing, the
-maintenance line, cell one, every metric in the plan's §14 — is therefore
-unmeasured rather than merely unfinished. The next unit of progress is not a
-feature. It is night one.
+corpus, invariants, a restore that has been drilled, a work graph, and **Water
+Mill**, a repo-agnostic orchestrator that claims a task, hands it to an agent,
+and independently checks what reached the repository. **The loop has now run
+against a real agent, supervised, twice, and kept work both times** — the first
+two rows of evidence this project has ever had that are not about a stub. Two
+of eight calibration tasks are done and **neither has been annotated**, so the
+finding the exercise exists to produce does not exist yet. Everything
+downstream — pricing, the maintenance line, cell one, every metric in the
+plan's §14 — remains unmeasured. The next unit of progress is not a feature. It
+is the judgement on the two tasks that have already run.
 
 ---
 
@@ -34,7 +36,7 @@ arrived early with Water Mill; several Phase-0 items were skipped entirely.
 |---|---|---|
 | **0. Foundations** | Multi-tenant data model; append-only entries; backup + restore drill; property tests on invariants; gate runner; budget governor; model-provider seam; per-tenant credential routing | **Partial.** Gate runner, restore drill, invariants and corpus: **done**. Budget governor: **partial** — Water Mill's `--max-spend` is reactive, checked between tasks, and overshoots by up to one task. Multi-tenant data model, model-provider seam, per-tenant credential routing: **not started** |
 | **1. Memory** | Beads; `brain/`; loop runner; bead-template linter; verification-tier taxonomy; structured-logging allowlist + scrubber; Rung-0 instrument draft | **Mostly done.** Beads, `brain/`, loop runner (Water Mill), bead template and 47 Tier-1 tasks: **done**. Gate met (40+ Tier-1 beads). **Verification-tier taxonomy: done** — the eight root-cause buckets in `watermill/tasklog.py`, counted across projects, annotated by hand. Bead-template *linter*, logging allowlist and scrubber: **not started**. Rung-0 instrument exists as PLAN.md Appendix C |
-| **2. First loop** | Tier-1 loop overnight; merge-on-green; Falsifier; Boundary Falsifier; handoff skill; escalation format; ranked docket; test beds A/B/C | **Not started.** Zero nights run. Zero of eight supervised calibration tasks. Zero of three test beds. Falsifier and Boundary Falsifier do not exist. Handoff practice exists (`HANDOFF.md`); the escalation format and ranked docket do not |
+| **2. First loop** | Tier-1 loop overnight; merge-on-green; Falsifier; Boundary Falsifier; handoff skill; escalation format; ranked docket; test beds A/B/C | **Started.** Two supervised tasks run against a real agent, both kept, neither annotated. **Merge-on-green: built** — `watermill land` opens the pull request, waits for CI and merges, and refuses to merge on a failed verify (`watermill/land.py`, `review.*` in the contract). Zero unattended nights. Zero of three test beds. Falsifier and Boundary Falsifier do not exist. Handoff practice exists (`HANDOFF.md`); the escalation format and ranked docket do not |
 | **3. Governance** | Fence engine + registry; audit export; content-addressed audit index; MSA draft; counsel; 10 prospect conversations | **Fence engine: done early** (`watermill/contract.py`, enforced against `git diff`, not requested in a prompt). Audit export, audit index, MSA, counsel, prospects: **not started** |
 | **4. Launch + boundary proof** | Tracker live with real users; control/data split; Watchtower, Medic, Herald, Quartermaster; three free Rung-0 audits; SOC 2 window opens | **Not started.** Zero of seven standing maintenance roles exist |
 | **5. Cell one** | First paid build | **Not started. No date set** — see PLAN.md §13.2, which requires one and does not contain one |
@@ -64,6 +66,15 @@ outside.
   **stub**. That is a test of the orchestrator's control flow, not of how an
   agent behaves inside it. Neither repository is approved for unattended use and
   both say so.
+- **`watermill land` has never talked to a real forge.** Its tests drive a stub
+  that records what it was asked to do, which proves the order of the three
+  steps and that a failed `verify` never reaches `merge` — and nothing about
+  whether `gh` accepts these arguments against a real pull request. The first
+  real land is the same five-minute check the first real ship is, and it has
+  not happened either.
+- **Two kept tasks are already on unmerged branches.** `watermill/20260826-231244`
+  and `watermill/20260827-060430` are pushed and green and were landed by hand
+  or not at all. They are the obvious first thing to point `land` at.
 - **Nothing has been shipped to a real Loki.** The transport is tested against
   a recorder, which proves the payload Loki would receive and nothing about
   whether Loki accepts it. The first real ship is a five-minute check that has
@@ -76,9 +87,9 @@ outside.
   finds; filling them in from either project's CLAUDE.md would put guesses in
   every prompt, and a guess is indistinguishable from a lesson once it is in the
   list.
-- **`bd` is not installed in the development container**, so preflight refuses
-  at the tooling check here. `./bin/watermill doctor` currently reports exactly
-  one refusal, and that is it. It must exist on whatever machine runs a night.
+- **`bd` is installed and preflight is green.** `./bin/watermill doctor` reports
+  zero refusals for `zimmy-life-tracker`. This was the one thing blocking a
+  first run and it is no longer blocking anything.
 - **Zero of the plan's seven metrics (§14) are instrumented.** Water Mill's
   ledger records cost and verdict per run, which is the seed of the cost oracle
   and nothing more. Human-minutes per cell, escalations per day and contribution
@@ -105,24 +116,26 @@ Every number that should be climbing and is currently zero.
 
 | | Now |
 |---|---|
-| Nights run, supervised | **0** |
+| Nights run, supervised | **2** |
 | Nights run, unattended | **0** |
-| Supervised calibration tasks (of 8) | **0** |
+| Supervised calibration tasks (of 8) | **2** |
 | Consecutive clean nights (Phase 2 gate needs 5) | **0** |
 | Foreign test beds stood up (of 3) | **0** |
 | Standing maintenance roles built (of 7) | **0** |
 | Cells sold | **0** |
-| Tasks with a recorded root cause | **0** |
+| Tasks with a recorded root cause | **0** -- the gap that matters |
 | Contract notes carried into a prompt | **0** |
-| Tier-1 tasks queued and ready | **47** |
+| Tier-1 tasks queued and ready | **48** |
 | Fenced paths enforced | **24** |
 
 ## The next unit of progress
 
-Install `bd`, clear the one refusal, and run **one** task supervised:
+Two tasks have run and been kept. Neither has a judgement on it, and the
+judgement is the deliverable — the code was always going to be checked by the
+gate without anybody's help.
 
 ```bash
-./bin/watermill run zimmy-life-tracker --max-spend 5 --max-tasks 1 --supervised
+./bin/watermill tasks --unannotated
 ```
 
 Then read `runs/zimmy-life-tracker/<run-id>/REPORT.md` **and** the prompt that
