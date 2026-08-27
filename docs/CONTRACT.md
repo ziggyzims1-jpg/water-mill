@@ -130,6 +130,19 @@ morning rather than at 3am on the one night it matters.
 If `verify` fails, `land` stops and **never calls `merge`**, whatever the forge
 reports about the branch being mergeable.
 
+`create` is the opposite: its failure does not stop the landing, because the
+commonest cause is a pull request the branch already has, and that is exactly
+what a second `land` of a run meets after the first attempt failed at verify.
+Create is not evidence; verify is. A `create` that failed for a real reason is
+followed by a `verify` that fails too, so **`watermill land` is safe to re-run**.
+
+A `verify` that fails within about ninety seconds of the `create` is retried
+rather than believed. A forge does not register its checks synchronously with
+the pull request, and the first real land this factory performed asked `gh pr
+checks` in the same second as `gh pr create`, got "no checks reported", and
+stopped on a check that went green two minutes later. The window is bounded, so
+a build that genuinely fails instantly is still reported as failed.
+
 Declaring `create` and `verify` but no `merge` is the deliberately supported
 middle: the factory opens the pull request and proves it green, and a person
 presses the button. `watermill land --no-merge` does the same thing for a

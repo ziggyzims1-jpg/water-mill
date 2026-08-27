@@ -66,15 +66,17 @@ outside.
   **stub**. That is a test of the orchestrator's control flow, not of how an
   agent behaves inside it. Neither repository is approved for unattended use and
   both say so.
-- **`watermill land` has never talked to a real forge.** Its tests drive a stub
-  that records what it was asked to do, which proves the order of the three
-  steps and that a failed `verify` never reaches `merge` — and nothing about
-  whether `gh` accepts these arguments against a real pull request. The first
-  real land is the same five-minute check the first real ship is, and it has
-  not happened either.
-- **Two kept tasks are already on unmerged branches.** `watermill/20260826-231244`
-  and `watermill/20260827-060430` are pushed and green and were landed by hand
-  or not at all. They are the obvious first thing to point `land` at.
+- **`watermill land` has now run against a real forge, once, and found a bug on
+  its first attempt.** It opened zimmy-life-tracker#98 correctly and then failed
+  its own verify: `gh pr checks` was asked in the same second as `gh pr create`,
+  answered "no checks reported", and exited non-zero — on a check that went
+  green two minutes later. A tool that was not ready read as a red build. The
+  landing was completed by hand and the window is fixed, but the wider lesson
+  stands: **every one of these commands is a stub-tested guess until it has met
+  a real forge once.** Nothing else in the review block has.
+- **One kept task is still on an unmerged branch.** `watermill/20260826-231244`
+  (`zimmy-life-tracker-jam.1`) is pushed and green and has never been landed.
+  `watermill/20260827-060430` merged as zimmy-life-tracker#98.
 - **Nothing has been shipped to a real Loki.** The transport is tested against
   a recorder, which proves the payload Loki would receive and nothing about
   whether Loki accepts it. The first real ship is a five-minute check that has

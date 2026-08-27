@@ -19,6 +19,16 @@ argument the engine makes about the gate: the check has to run before the
 decision it informs, or it is decoration. `review.merge` without `review.verify`
 is refused at contract-parse time so the combination cannot be expressed.
 
+`create` **is** advisory, for the mirror-image reason: create is not evidence,
+verify is. A create that fails because the branch already has a pull request --
+what a second `land` of the same run meets -- must not strand that run, and a
+create that failed for a real reason is followed by a verify that fails too.
+
+A verify that fails inside a short settle window is retried rather than
+believed, because a forge does not register its checks synchronously with the
+pull request. That window is the fix for the first real land this factory ever
+performed; see `_verify_when_the_forge_is_ready`.
+
 What this module deliberately does not do:
 
 - **Decide the work is good.** The gate did that, twice, during the run. This
@@ -36,6 +46,7 @@ What this module deliberately does not do:
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -50,15 +61,33 @@ CREATE_TIMEOUT = 120.0
 MERGE_TIMEOUT = 300.0
 VERIFY_TIMEOUT = 3600.0
 
+#: How long to keep asking for checks that are not there yet, and how often.
+#: A forge does not register its checks synchronously with the pull request, so
+#: the first verify after a create routinely arrives before there is anything to
+#: watch. Small and total: a build that really does fail instantly costs this
+#: once and is then reported as the failure it is.
+SETTLE_SECONDS = 90.0
+POLL_SECONDS = 10.0
+
 
 @dataclass
 class Step:
-    """One command, and what it did. Recorded whether or not it succeeded."""
+    """One command, and what it did. Recorded whether or not it succeeded.
+
+    `advisory` marks a step whose failure does not fail the landing. Only
+    `create` is one, and the reason is the same argument this program makes
+    everywhere else: **create is not evidence, verify is.** A `create` that
+    fails because the pull request is already open -- which is exactly what a
+    second `land` of the same run meets -- must not strand that run forever,
+    and a `create` that failed for a real reason will be followed by a `verify`
+    that fails too.
+    """
 
     name: str
     argv: list[str] = field(default_factory=list)
     ok: bool = False
     skipped: bool = False
+    advisory: bool = False
     detail: str = ""
 
     def to_dict(self) -> dict:
@@ -67,6 +96,7 @@ class Step:
             "argv": self.argv,
             "ok": self.ok,
             "skipped": self.skipped,
+            "advisory": self.advisory,
             "detail": self.detail[:2000],
         }
 
@@ -93,7 +123,8 @@ class LandResult:
     @property
     def failed(self) -> bool:
         return not self.refused and any(
-            not step.ok and not step.skipped for step in self.steps
+            not step.ok and not step.skipped and not step.advisory
+            for step in self.steps
         )
 
     def to_dict(self) -> dict:
@@ -138,6 +169,8 @@ def land(
     *,
     merge: bool = True,
     on_event=None,
+    settle_seconds: float = SETTLE_SECONDS,
+    poll_seconds: float = POLL_SECONDS,
 ) -> LandResult:
     """Open, verify and merge the pull request for one finished run.
 
@@ -166,11 +199,20 @@ def land(
     }
 
     create = _step(project, contract, "create", params, CREATE_TIMEOUT, emit)
+    create.advisory = True
     result.steps.append(create)
     if not create.ok:
-        return result
+        # Not fatal, and not ignored either. The commonest cause is a pull
+        # request this branch already has -- a second `land` of a run whose
+        # first attempt failed at verify -- and refusing there would mean a run
+        # could never be landed by the tool once anything went wrong. `verify`
+        # is the step that proves a pull request exists and is green, so let it
+        # answer. A create that failed for a real reason fails there too.
+        emit("   create: failed -- continuing, verify decides whether a PR is there")
 
-    verify = _step(project, contract, "verify", params, VERIFY_TIMEOUT, emit)
+    verify = _verify_when_the_forge_is_ready(
+        project, contract, params, emit, settle_seconds, poll_seconds
+    )
     result.steps.append(verify)
     if not verify.ok:
         # Nothing after this point runs. The forge may well consider the branch
@@ -242,6 +284,42 @@ def _refuse(project: Project, contract: Contract, summary: dict) -> str:
             "when it ends; that this one did not is the thing worth looking at"
         )
     return ""
+
+
+def _verify_when_the_forge_is_ready(
+    project, contract, params, emit, settle_seconds: float, poll_seconds: float
+) -> Step:
+    """Run `verify`, tolerating the window before the forge registers checks.
+
+    This factory's first real land opened a pull request and asked about its
+    checks in the same second. `gh pr checks` answered "no checks reported on
+    the 'watermill/20260827-060430' branch" and exited non-zero -- and the
+    check that had not yet appeared went green two minutes later. **A tool that
+    was not ready was reported as a red build**, which is the one confusion
+    this program spends most of its refusals avoiding, and it is the same
+    mistake as `make typecheck` exiting zero to mean "no type checker".
+
+    So a verify that fails *inside* the settle window is retried rather than
+    believed, and outside it is believed. The window is bounded and total, so a
+    build that genuinely fails instantly -- a workflow whose YAML does not parse
+    -- costs it once and is then reported as the failure it is. A real build
+    under `--watch` takes minutes and never reaches this path.
+
+    Retrying a *failing* check is deliberate and would be wrong anywhere else.
+    It is right here only because the window is short enough that no real
+    verdict fits inside it.
+    """
+    deadline = time.monotonic() + settle_seconds
+    attempts = 0
+    while True:
+        attempts += 1
+        step = _step(project, contract, "verify", params, VERIFY_TIMEOUT, emit)
+        if step.ok or time.monotonic() >= deadline:
+            if attempts > 1:
+                step.detail = f"{step.detail} (after {attempts} attempts)"
+            return step
+        emit(f"   verify: nothing reported yet, asking again in {poll_seconds:g}s")
+        time.sleep(poll_seconds)
 
 
 def _step(project, contract, key, params, timeout, emit) -> Step:
