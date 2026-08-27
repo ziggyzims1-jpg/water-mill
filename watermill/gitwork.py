@@ -120,6 +120,22 @@ def checkout(cwd: Path, ref: str) -> bool:
     return _git(cwd, "checkout", ref).ok
 
 
+def branch_exists(cwd: Path, name: str) -> bool:
+    return _git(cwd, "rev-parse", "--verify", f"refs/heads/{name}").ok
+
+
+def branch_exists_on_remote(cwd: Path, remote: str, name: str) -> bool:
+    """Whether the remote actually has the branch.
+
+    Asks the remote rather than reading `refs/remotes/`, which answers a
+    staler question: a local remote-tracking ref survives the branch being
+    deleted on the forge, so a check that trusts it would open a pull request
+    for a head that is not there.
+    """
+    result = _git(cwd, "ls-remote", "--heads", remote, name, timeout=60.0)
+    return result.ok and bool(result.tail.strip())
+
+
 def commit_all(cwd: Path, message: str) -> bool:
     if not _git(cwd, "add", "-A").ok:
         return False

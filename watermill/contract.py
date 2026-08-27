@@ -42,6 +42,11 @@ CONTRACT_FILENAME = "watermill.yaml"
 #: and the command would fail in a way that reads like the queue being empty.
 QUEUE_PLACEHOLDERS = {"id", "text"}
 
+#: Placeholders a review command template may use. Disjoint from the queue's on
+#: purpose: these name a branch and a base, and a template that confuses the two
+#: sets is a template that would have opened a pull request against a task id.
+REVIEW_PLACEHOLDERS = {"branch", "base", "title", "body"}
+
 
 def _require_mapping(value: Any, where: str) -> dict:
     if value is None:
@@ -212,18 +217,12 @@ class Queue:
         containing a space, a quote or a semicolon becomes one argument rather
         than shell syntax. There is no shell involved at any point.
         """
-        template = getattr(self, key, None)
-        if not template:
-            raise ContractError(f"queue.{key} is not configured for this project")
-        argv: list[str] = []
-        for token in shlex.split(template):
-            for name, value in params.items():
-                token = token.replace("{" + name + "}", value)
-            argv.append(token)
-        return argv
+        return _render(getattr(self, key, None) or "", f"queue.{key}", **params)
 
 
-def _validate_template(template: str, where: str) -> None:
+def _validate_template(
+    template: str, where: str, placeholders: set[str] = QUEUE_PLACEHOLDERS
+) -> None:
     try:
         tokens = shlex.split(template)
     except ValueError as exc:
@@ -233,11 +232,85 @@ def _validate_template(template: str, where: str) -> None:
     import re
 
     for name in re.findall(r"\{(\w+)\}", template):
-        if name not in QUEUE_PLACEHOLDERS:
+        if name not in placeholders:
             raise ContractError(
                 f"{where}: unknown placeholder {{{name}}}. "
-                f"Known: {', '.join('{' + p + '}' for p in sorted(QUEUE_PLACEHOLDERS))}"
+                f"Known: {', '.join('{' + p + '}' for p in sorted(placeholders))}"
             )
+
+
+def _render(template: str, where: str, **params: str) -> list[str]:
+    """Render one command template into an argv list.
+
+    Substitution happens *after* splitting, so a branch name, a title or a body
+    containing a space, a quote or a semicolon becomes one argument rather than
+    shell syntax. There is no shell involved at any point.
+    """
+    if not template:
+        raise ContractError(f"{where} is not configured for this project")
+    argv: list[str] = []
+    for token in shlex.split(template):
+        for name, value in params.items():
+            token = token.replace("{" + name + "}", value)
+        argv.append(token)
+    return argv
+
+
+@dataclass(frozen=True)
+class Review:
+    """Opening a pull request, waiting for it to go green, and merging it.
+
+    Three commands, declared by the project because the forge is the project's
+    business and not this orchestrator's: `gh`, `glab`, a curl, a script. Water
+    Mill knows there are three steps and nothing about who performs them.
+
+    **`verify` is required whenever `merge` is declared, and that is the whole
+    safety argument for this block.** A contract that could merge without
+    verifying would turn the merge gate into a formality that runs after the
+    decision it was supposed to inform. `create` without `merge` is the useful
+    and deliberately supported middle: the factory opens the pull request and
+    proves it green, and a person presses the button.
+
+    Nothing here runs during a run. Every command in this block talks to a
+    third party, and a forge that is slow, rate-limited or down must not be
+    able to hang a night or strand a claimed task -- the same reason `ship` is
+    its own command. `watermill land` is where these are used.
+    """
+
+    create: str | None = None
+    verify: str | None = None
+    merge: str | None = None
+
+    _FIELDS = {"create", "verify", "merge"}
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.create)
+
+    @classmethod
+    def parse(cls, raw: Any) -> Review:
+        got = _require_mapping(raw, "review")
+        _reject_unknown(got, cls._FIELDS, "review")
+        templates = {key: _opt_str(got.get(key)) for key in ("create", "verify", "merge")}
+        for key, template in templates.items():
+            if template is not None:
+                _validate_template(template, f"review.{key}", REVIEW_PLACEHOLDERS)
+
+        if any(templates.values()) and not templates["create"]:
+            raise ContractError(
+                "review.create is required when any other review command is set. "
+                "There is nothing to verify or merge until something opened it."
+            )
+        if templates["merge"] and not templates["verify"]:
+            raise ContractError(
+                "review.verify is required when review.merge is set. Merging "
+                "without it would make the merge gate advisory -- a check that "
+                "runs after the decision it exists to inform."
+            )
+        return cls(**templates)
+
+    def render(self, key: str, **params: str) -> list[str]:
+        return _render(getattr(self, key, None) or "", f"review.{key}", **params)
 
 
 @dataclass(frozen=True)
@@ -463,6 +536,7 @@ class Contract:
     commands: Commands
     git: Git
     queue: Queue = field(default_factory=Queue)
+    review: Review = field(default_factory=Review)
     fence: Fence = field(default_factory=Fence)
     environment: Environment = field(default_factory=Environment)
     caps: Caps = field(default_factory=Caps)
@@ -472,7 +546,7 @@ class Contract:
 
     _TOP = {
         "version", "name", "description", "commands", "git", "queue",
-        "fence", "environment", "caps", "notes",
+        "review", "fence", "environment", "caps", "notes",
     }
 
     @classmethod
@@ -504,6 +578,7 @@ class Contract:
             commands=Commands.parse(got.get("commands")),
             git=Git.parse(got.get("git")),
             queue=Queue.parse(got.get("queue")),
+            review=Review.parse(got.get("review")),
             fence=Fence.parse(got.get("fence")),
             environment=Environment.parse(got.get("environment")),
             caps=Caps.parse(got.get("caps")),

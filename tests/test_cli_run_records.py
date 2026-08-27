@@ -166,6 +166,33 @@ def test_annotating_a_recorded_task_makes_it_countable(
     assert "weak-scope" in out
 
 
+def test_tasks_shows_which_run_did_the_work_and_what_it_committed(
+    factory, fake_project, set_tasks, stub_agent_command, stub_env, capsys
+):
+    """The two identifiers that let a morning go and look.
+
+    Both have been written to the task log since the first task and neither was
+    ever printed, so `watermill tasks` could report a completed task while
+    showing neither the run that produced it nor the commit that reached the
+    repository -- leaving the reader to grep the JSONL for facts the command
+    already had in hand.
+    """
+    set_tasks({"id": "t-9", "title": "nine"})
+    stub_env("succeed", STUB_TASK_ID="t-9")
+    assert _run(factory, stub_agent_command) == 0
+    capsys.readouterr()
+
+    record = tasklog.read(factory)[0]
+    run_id = record.outcome["run_id"]
+    commit = record.outcome["commit"]
+    assert run_id and commit, "the log itself lost the provenance"
+
+    assert main(["--root", str(factory), "tasks"]) == 0
+    out = capsys.readouterr().out
+    assert run_id in out
+    assert commit.split()[0] in out
+
+
 def test_an_unknown_root_cause_lists_the_real_ones_rather_than_storing_it(
     factory, capsys
 ):
