@@ -94,18 +94,38 @@ def run(
 
     captured = ""
     timed_out = False
-    proc = subprocess.Popen(
-        argv,
-        cwd=str(cwd),
-        stdout=stdout,
-        stderr=subprocess.STDOUT,
-        stdin=subprocess.PIPE if stdin_text is not None else subprocess.DEVNULL,
-        env=full_env,
-        text=True,
-        # A new session so the whole tree can be signalled at once. Without it,
-        # a timeout kills the agent and leaves its test runner holding the CPU.
-        start_new_session=True,
-    )
+    try:
+        proc = subprocess.Popen(
+            argv,
+            cwd=str(cwd),
+            stdout=stdout,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.PIPE if stdin_text is not None else subprocess.DEVNULL,
+            env=full_env,
+            text=True,
+            # A new session so the whole tree can be signalled at once. Without
+            # it, a timeout kills the agent and leaves its test runner holding
+            # the CPU.
+            start_new_session=True,
+        )
+    except OSError as exc:
+        # A command that does not exist is a *failed check*, not a crash. Every
+        # caller here already handles a non-zero return -- preflight turns it
+        # into a refusal naming the check, the gate discards the task -- and a
+        # traceback instead skips all of that: `doctor` dies before it can
+        # report the other checks, which is the one thing it exists to do.
+        # 127 is the shell's own code for "command not found".
+        if log_handle is not None:
+            log_handle.write(str(exc))
+            log_handle.close()
+        return Result(
+            argv=tuple(argv),
+            returncode=127,
+            duration_seconds=time.monotonic() - started,
+            timed_out=False,
+            log_path=log_path,
+            tail=f"could not run {argv[0]!r}: {exc.strerror or exc}",
+        )
     try:
         captured_out, _ = proc.communicate(input=stdin_text, timeout=timeout)
         captured = captured_out or ""
