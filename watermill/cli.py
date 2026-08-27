@@ -19,7 +19,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import ledger, report, shipper, tasklog
+from . import land, ledger, report, shipper, tasklog
 from .caps import Caps
 from .contract import CONTRACT_FILENAME
 from .engine import Engine
@@ -92,6 +92,12 @@ def cmd_validate(args) -> int:
         print(f"    branch:  {contract.git.base_branch} (target: {contract.git.target})")
         print(f"    queue:   {contract.queue.kind}")
         print(f"    fence:   {len(contract.fence.paths)} path(s)")
+        steps = [
+            name for name in ("create", "verify", "merge")
+            if getattr(contract.review, name)
+        ]
+        shape = " -> ".join(steps) if steps else "none -- watermill land will refuse"
+        print(f"    review:  {shape}")
         if not contract.commands.backup_check:
             print("    note:    no backup_check -- this project cannot prove it is recoverable")
         if not contract.fence.paths:
@@ -315,11 +321,53 @@ def cmd_release(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_land(args) -> int:
+    """Open, verify and merge the pull request a finished run left behind.
+
+    Its own command with its own exit code, and never part of `run`. Every step
+    it takes talks to a forge, and a forge that is down must not be able to hang
+    a night or hold a claimed task open across the outage.
+    """
+    root = factory_root(args.root)
+    registry = Registry.load(root)
+    project = registry.get(args.project)
+    contract = project.load_contract()
+
+    base = root / "runs" / project.name
+    if args.run_id:
+        target = base / args.run_id
+    else:
+        candidates = sorted(p for p in base.glob("*/summary.json"))
+        if not candidates:
+            print(f"{project.name} has never finished a run, so there is nothing to land")
+            return 3
+        target = candidates[-1].parent
+
+    summary = land.read_summary(target / "summary.json")
+    result = land.land(
+        project, contract, summary, merge=not args.no_merge, on_event=print
+    )
+    print(result.render())
+    (target / "land.json").write_text(
+        json.dumps(result.to_dict(), indent=2) + "\n", encoding="utf-8"
+    )
+    if result.refused:
+        return 3
+    return 1 if result.failed else 0
+
+
 def cmd_report(args) -> int:
     root = factory_root(args.root)
+    # Ask the registry before the filesystem. Reading `runs/<name>/` straight
+    # off the argument answers a different question -- "has anything ever run
+    # under this name" -- and so reports a typo as a fact about the factory's
+    # history. `watermill report tasks` said "no runs recorded for tasks",
+    # which is true of every word that is not a project, and reads like a
+    # missing record rather than a name this factory has never heard of.
+    Registry.load(root).get(args.project)
     base = root / "runs" / args.project
     if not base.is_dir():
-        print(f"no runs recorded for {args.project}")
+        print(f"{args.project} is registered but has never run")
         return 1
     if args.run_id:
         target = base / args.run_id
@@ -359,6 +407,10 @@ def cmd_ledger(args) -> int:
 def cmd_tasks(args) -> int:
     """Every task the factory has attempted, and why each one went wrong."""
     root = factory_root(args.root)
+    # Same reason as `report`: an unregistered name filters the log down to
+    # nothing and prints that as though the history were empty.
+    if args.project:
+        Registry.load(root).get(args.project)
     records = tasklog.read(
         root, project=args.project, limit=args.limit, unannotated=args.unannotated
     )
@@ -373,11 +425,26 @@ def cmd_tasks(args) -> int:
         )
         print(
             f"{row.get('recorded_at', '?'):<26} {row.get('project', '?'):<20} "
-            f"{row.get('task_id', '?'):<14} {row.get('outcome', '?'):<10} "
-            f"{cause:<18} {row.get('reason', '')[:48]}"
+            f"{row.get('task_id', '?'):<26} {row.get('outcome', '?'):<10} "
+            f"{cause:<18} {row.get('reason', '')[:40]}"
         )
+        # The run and the commit, on their own line. Both have been written to
+        # the task log since the first task and neither was ever printed, so
+        # this command could say a task completed while showing neither which
+        # run did it nor what reached the repository -- the two things a
+        # morning needs in order to go and look.
+        provenance = "  ".join(
+            part
+            for part in (
+                f"run {row['run_id']}" if row.get("run_id") else "",
+                str(row.get("commit", "")).strip(),
+            )
+            if part
+        )
+        if provenance:
+            print(f"{'':26} {provenance[:120]}")
         if record.note:
-            print(f"{'':26} {'':20} {record.note[:100]}")
+            print(f"{'':26} {record.note[:100]}")
 
     stats = tasklog.causes(records)
     print()
@@ -535,6 +602,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("status", help="readiness and recent history per project")
     p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("land", help="open, verify and merge a run's pull request")
+    p.add_argument("project")
+    p.add_argument("run_id", nargs="?", help="default: the most recent finished run")
+    p.add_argument(
+        "--no-merge",
+        action="store_true",
+        help="stop after a green verify and leave the merge to a person",
+    )
+    p.set_defaults(func=cmd_land)
 
     p = sub.add_parser("report", help="print a run's report")
     p.add_argument("project")

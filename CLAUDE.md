@@ -37,6 +37,7 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 | `watermill/report.py` | The morning report (pure) |
 | `watermill/ledger.py` | Append-only cross-project history, one line per run |
 | `watermill/tasklog.py` | The same, one line per **task**, plus the root-cause taxonomy |
+| `watermill/land.py` | The pull request: create, verify, merge. Never part of a run |
 | `watermill/shipper.py` | Ships both to Loki. A reader, never part of a run |
 | `projects/` | Vendored contracts for projects that carry none yet |
 | `docs/calibration/` | One findings record per project. The method is `docs/CALIBRATION.md` |
@@ -113,7 +114,25 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
   own command with its own exit code, so a Loki outage cannot hang a night or
   leave a task claimed while a socket times out. Its high-water mark advances
   only after a push returned; there is no retry queue, because the history is
-  still on disk and `--resend` exists.
+  still on disk and `--resend` exists. `land` is the second sighting: opening a
+  pull request and waiting on CI is somebody else's build queue, and a night
+  that blocked on it would hold a claimed task open across the outage.
+
+- **A check that gates a decision runs before it, or it is decoration.** The
+  gate runs before the work is kept; `review.verify` runs before the merge, and
+  `land` never calls `merge` after a failed `verify` whatever the forge says
+  about mergeability. `review.merge` without `review.verify` is refused at
+  parse time rather than at 3am, so the dangerous combination is
+  unrepresentable rather than merely discouraged.
+
+- **A closed task says what closed it.** Every discard left a comment
+  explaining itself and every success left nothing, so the queue held a
+  complete record of the work this factory threw away and none of the work it
+  kept -- the commit lived only in the ledger, in a repository the project
+  cannot see. `WorkQueue.can_comment` exists because `comment()` returns False
+  both for a project that declared no comment command and for a declared one
+  that failed, and treating those the same means choosing between a false
+  alarm everywhere and silence where it matters.
 
 - **A lesson is promoted into Water Mill when it has appeared twice, in two
   repositories.** One project's frictions are indistinguishable from that
@@ -135,3 +154,59 @@ The number that governs everything else right now is **nights run: 0**.
 `docs/ONBOARDING.md`. Four prerequisites in order: a gate that catches real
 breakage, a verified restore, a fence, and a queue deep enough that the agent
 never has to invent work.
+
+
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
+## Beads Issue Tracker
+
+This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+
+### Quick Reference
+
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --claim  # Claim work
+bd close <id>         # Complete work
+```
+
+### Rules
+
+- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
+- Run `bd prime` for detailed command reference and session close protocol
+- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+
+**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+
+## Agent Context Profiles
+
+The managed Beads block is task-tracking guidance, not permission to override repository, user, or orchestrator instructions.
+
+- **Conservative (default)**: Use `bd` for task tracking. Do not run git commits, git pushes, or Dolt remote sync unless explicitly asked. At handoff, report changed files, validation, and suggested next commands.
+- **Minimal**: Keep tool instruction files as pointers to `bd prime`; use the same conservative git policy unless active instructions say otherwise.
+- **Team-maintainer**: Only when the repository explicitly opts in, agents may close beads, run quality gates, commit, and push as part of session close. A current "do not commit" or "do not push" instruction still wins.
+
+## Session Completion
+
+This protocol applies when ending a Beads implementation workflow. It is subordinate to explicit user, repository, and orchestrator instructions.
+
+1. **File issues for remaining work** - Create beads for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **Handle git/sync by active profile**:
+   ```bash
+   # Conservative/minimal/default: report status and proposed commands; wait for approval.
+   git status
+
+   # Team-maintainer opt-in only, unless current instructions forbid it:
+   git pull --rebase
+   git push
+   git status
+   ```
+5. **Hand off** - Summarize changes, validation, issue status, and any blocked sync/commit/push step
+
+**Critical rules:**
+- Explicit user or orchestrator instructions override this Beads block.
+- Do not commit or push without clear authority from the active profile or the current user request.
+- If a required sync or push is blocked, stop and report the exact command and error.
+<!-- END BEADS INTEGRATION -->

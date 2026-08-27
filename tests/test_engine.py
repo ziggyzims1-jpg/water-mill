@@ -42,6 +42,14 @@ def _queue_status(repo: Path, task_id: str) -> str:
     return next(r["status"] for r in rows if r["id"] == task_id)
 
 
+def _queue_comments(repo: Path, task_id: str) -> list[str]:
+    import json
+
+    rows = json.loads((repo / "queue.json").read_text())
+    row = next(r for r in rows if r["id"] == task_id)
+    return list(row.get("comments", []))
+
+
 @pytest.fixture
 def engine_for(project_for, contract_for, stub_agent_command, tmp_path):
     def _make(contract=None, caps=None, **kwargs):
@@ -75,6 +83,51 @@ def test_a_clean_task_is_committed_and_closed(
     assert any("t-1" in line for line in _log(fake_project))
     assert _queue_status(fake_project, "t-1") == "closed"
     assert _tree_clean(fake_project)
+
+
+def test_kept_work_records_the_run_against_the_task(
+    fake_project, set_tasks, stub_env, engine_for
+):
+    """A closed task has to say what closed it.
+
+    Every discard left a comment explaining itself and every success left
+    nothing, so the queue held a complete record of the work this factory threw
+    away and no record of the work it kept. The commit existed only in the
+    ledger, which is in another repository the project cannot see.
+    """
+    set_tasks({"id": "t-1", "title": "add a feature"})
+    stub_env("succeed", STUB_TASK_ID="t-1")
+
+    state = engine_for().run()
+
+    comments = _queue_comments(fake_project, "t-1")
+    assert comments, "a kept task left no record of the run that kept it"
+    note = comments[-1]
+    assert state.run_id in note
+    # The commit itself, not just a claim that there was one -- the point of
+    # the record is that somebody can go and look at what landed.
+    assert any(line.split()[0] in note for line in _log(fake_project)[:1])
+    assert state.anomalies == []
+
+
+def test_a_project_with_no_comment_command_is_not_an_anomaly(
+    fake_project, set_tasks, stub_env, engine_for, contract_for
+):
+    """Silence a contract never promised is not a failure to keep a promise.
+
+    `WorkQueue.comment` returns False both when the project declared no comment
+    command and when a declared one failed. Treating the first as an anomaly
+    would put a spurious line in the report of every project that tracks work
+    in something without comments.
+    """
+    contract = contract_for(queue={"comment": None})
+    set_tasks({"id": "t-1", "title": "add a feature"})
+    stub_env("succeed", STUB_TASK_ID="t-1")
+
+    state = engine_for(contract=contract).run()
+
+    assert state.tally.completed == 1
+    assert state.anomalies == []
 
 
 def test_the_run_stops_when_the_queue_empties(
