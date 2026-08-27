@@ -41,7 +41,7 @@ point.
 
 ```bash
 make install                                  # .venv + dependencies
-make verify                                   # the gate: guard, ruff, 219 tests
+make verify                                   # the gate: guard, ruff, 222 tests
 
 ./bin/watermill projects                      # what this factory drives
 ./bin/watermill validate                      # do the contracts parse
