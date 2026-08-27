@@ -54,7 +54,7 @@ arrived early with Water Mill; several Phase-0 items were skipped entirely.
 | The fence | 24 declared paths, **all present on Zimmy's merged `main`**, checked against staged, unstaged, untracked *and* committed diffs |
 | Every cap | Task attempts, wall clock, consecutive failures, per-task timeout, spend, unmetered — each triggered deliberately in a test |
 | Every discard path | Uncommitted work, commit without the task id, fenced path touched, gate broken, agent did nothing, agent crashed |
-| Shipping to Loki | `watermill ship` reads the ledger and task log and pushes what is new. Off the run loop, high-water mark advances only after a push returned. **Never pointed at a real Loki** |
+| Shipping to Loki | `watermill ship` reads the ledger and task log and pushes what is new. Off the run loop, high-water mark advances only after a push returned. **Pointed at a real Loki, which accepted the push** — the transport is no longer a guess |
 | The knowledge surfaces | `notes` in the contract reaches the prompt; `tasklog.py` records one line per task; `watermill tasks` counts root causes across projects. **All three are empty** — see below |
 
 ## What is not
@@ -74,13 +74,20 @@ outside.
   landing was completed by hand and the window is fixed, but the wider lesson
   stands: **every one of these commands is a stub-tested guess until it has met
   a real forge once.** Nothing else in the review block has.
-- **One kept task is still on an unmerged branch.** `watermill/20260826-231244`
-  (`zimmy-life-tracker-jam.1`) is pushed and green and has never been landed.
-  `watermill/20260827-060430` merged as zimmy-life-tracker#98.
-- **Nothing has been shipped to a real Loki.** The transport is tested against
-  a recorder, which proves the payload Loki would receive and nothing about
-  whether Loki accepts it. The first real ship is a five-minute check that has
-  not happened.
+- **Both kept tasks have now landed.** `watermill/20260827-060430` merged as
+  zimmy-life-tracker#98, and `watermill/20260826-231244`
+  (`zimmy-life-tracker-jam.1`) reached `main` in zimmy-life-tracker#97. Neither
+  is annotated, which is the part that still counts as missing.
+- **Loki is connected; the alert on absence is the half still missing.** The
+  transport was tested against a recorder, which proved the payload Loki would
+  receive and nothing about whether Loki accepts it. It has now met a real one
+  and the push was accepted, so `ship` is off the guess list — the second
+  command here to meet its real dependency, after `land` met a real forge. What
+  that does *not* yet buy is the reason the shipping exists: a night that
+  silently did not run looks exactly like a quiet night, and only an alert
+  firing on `count_over_time(...[24h]) == 0` can tell them apart
+  (`docs/OBSERVABILITY.md`). A dashboard somebody has to remember to open is
+  not that. Until that alert exists, absence is still unwatched.
 - **The knowledge surfaces exist and hold nothing.** A contract can carry
   `notes` into the prompt, the task log can count root causes, and
   `docs/calibration/` has a record per project — but every one of them is empty,
