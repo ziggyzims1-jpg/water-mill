@@ -155,6 +155,16 @@ and it asserts on an untracked file still being present afterwards.
 killed, the claim is released, uncommitted work is discarded and a partial
 report is written.
 
+Answering **`n` at a supervised run's prompt is not that** and must not be
+routed through it. Ctrl-C means something is wrong, so it throws the in-flight
+work away; `n` means that is enough for tonight, and every task already
+committed stays committed. It ends the run through the ordinary path, so the
+report, the ledger line and the task log are all written -- which they were
+not while the prompt raised `KeyboardInterrupt`: the ordinary way to finish a
+supervised run left the work in the repository and the run absent from
+`watermill status` and from everything `watermill ship` sends onward.
+`test_stopping_at_the_supervised_prompt_still_records_the_run` is the test.
+
 `kill -KILL` cannot be trapped, so none of that runs. What it leaves is a dirty
 tree, possibly a `watermill/<run-id>` branch checked out, and one task still
 claimed. **All three block the next run at preflight** rather than being

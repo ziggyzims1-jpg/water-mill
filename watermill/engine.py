@@ -262,8 +262,19 @@ class Engine:
                 )
                 self._fail(task, f"orchestrator error: {exc}", None, 0.0, base_sha)
 
-            if self.pause_between is not None:
-                self.pause_between(self.state)
+            if self.pause_between is not None and self.pause_between(self.state) is False:
+                # A stop asked for at the pause is not an interrupt. Ctrl-C
+                # means "something is wrong, throw the work away" and takes the
+                # `Interrupted` path below, which discards and releases; "n" at
+                # the prompt means "that is enough for tonight" and every task
+                # already kept stays kept. Routing the second through the first
+                # discarded a task that had passed the gate and was committed.
+                # Compared against False rather than truthiness, so a pause that
+                # returns nothing -- every one before this did -- still means
+                # carry on.
+                self.state.halt_reason = "stopped by the operator between tasks"
+                self._emit("stopping -- operator")
+                return
 
     def _next_task(self, tried: set[str]) -> Task | None:
         try:
