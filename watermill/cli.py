@@ -237,8 +237,15 @@ def cmd_run(args) -> int:
     return exit_code
 
 
-def _supervised_pause(state) -> None:
+def _supervised_pause(state) -> bool:
     """Stop between tasks so a human can read what just happened.
+
+    Returns whether to carry on. It used to raise `KeyboardInterrupt` on "n",
+    which escaped `cmd_run` before the report, the ledger line and the task log
+    were written -- so ending a supervised run the ordinary way left the work
+    committed and the run itself unrecorded, invisible to `watermill status`
+    and to everything `watermill ship` sends onward. The run's own history is
+    the product here; it cannot be the thing that a normal exit drops.
 
     This is what calibration runs on. The thing being watched for is not
     whether the code is right -- the gate answers that -- it is *why* a task
@@ -255,9 +262,10 @@ def _supervised_pause(state) -> None:
     try:
         answer = input("Continue? [Y/n] ").strip().lower()
     except EOFError:
+        # No terminal to ask. Stop rather than run on unwatched: --supervised
+        # is an assertion that somebody is reading, and nobody is.
         answer = "n"
-    if answer in ("n", "no", "q", "quit"):
-        raise KeyboardInterrupt
+    return answer not in ("n", "no", "q", "quit")
 
 
 def cmd_status(args) -> int:

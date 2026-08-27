@@ -85,6 +85,49 @@ def test_a_kept_task_reaches_both_histories(
     assert records[0].root_cause == ""
 
 
+@pytest.mark.parametrize(
+    "answer",
+    [
+        pytest.param(lambda *_: "n", id="answered-n"),
+        # No terminal at all -- a supervised run started from a pipe or a cron
+        # entry. It stops for the same reason, and must record for the same one.
+        pytest.param(lambda *_: (_ for _ in ()).throw(EOFError), id="no-terminal"),
+    ],
+)
+def test_stopping_at_the_supervised_prompt_still_records_the_run(
+    factory, fake_project, set_tasks, stub_agent_command, stub_env, capsys,
+    monkeypatch, answer,
+):
+    """Answering "n" is how a supervised run ends. It is not an interrupt.
+
+    It used to raise `KeyboardInterrupt`, which escaped `cmd_run` above the
+    three lines that write the report, the ledger entry and the task log -- so
+    the ordinary way to finish a supervised run left the task committed, the
+    bead closed, and the run itself absent from `watermill status` and from
+    everything `watermill ship` sends to Loki. A history that only accumulates
+    when a run ends some other way is the failure this file exists to catch.
+    """
+    # `t-1` because the stub agent names that id in its commit message, and a
+    # commit that does not name its task is discarded -- which would prove the
+    # recording of a *discarded* task rather than of a kept one.
+    set_tasks({"id": "t-1", "title": "one"})
+    stub_env("succeed")
+    monkeypatch.setattr("builtins.input", answer)
+
+    assert _run(factory, stub_agent_command, "--supervised") == 0
+    capsys.readouterr()
+
+    rows = ledger.read(factory)
+    assert len(rows) == 1
+    assert rows[0]["refused"] is False
+    assert rows[0]["completed"] == 1
+
+    records = tasklog.read(factory)
+    assert [r.outcome["task_id"] for r in records] == ["t-1"]
+    # Kept, not discarded: stopping is not throwing the evening away.
+    assert records[0].outcome["outcome"] == "completed"
+
+
 def test_a_discarded_task_records_why_it_was_discarded(
     factory, fake_project, set_tasks, stub_agent_command, stub_env, capsys
 ):
