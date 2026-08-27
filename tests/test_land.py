@@ -33,6 +33,13 @@ log = pathlib.Path(os.environ["FORGE_LOG"])
 calls = json.loads(log.read_text()) if log.exists() else []
 calls.append([step, *sys.argv[2:]])
 log.write_text(json.dumps(calls))
+# "no checks reported yet": fail the first N calls of this step, then pass.
+first = int(os.environ.get(f"FORGE_{step.upper()}_FAILS_FIRST", "0"))
+seen = sum(1 for c in calls if c[0] == step)
+if first and seen <= first:
+    print(f"no checks reported on the branch")
+    sys.exit(1)
+
 print(f"{step}: stub forge")
 sys.exit(1 if step in os.environ.get("FORGE_FAIL", "").split(",") else 0)
 '''
@@ -96,6 +103,18 @@ def pushed_branch(fake_project, tmp_path):
     return branch
 
 
+def _land(project, contract, summary, **kwargs):
+    """`land`, with the settle window collapsed.
+
+    Every test that expects a failure would otherwise sit through the real
+    window before believing it. The window's own behaviour is tested directly
+    by `test_verify_is_retried_while_the_forge_has_not_registered_checks`.
+    """
+    kwargs.setdefault("settle_seconds", 0.0)
+    kwargs.setdefault("poll_seconds", 0.0)
+    return land.land(project, contract, summary, **kwargs)
+
+
 def _summary(branch: str = "watermill/run-1", **overrides) -> dict:
     summary = {
         "run_id": "run-1",
@@ -128,7 +147,7 @@ def test_a_failed_verify_never_reaches_the_merge(
     """
     monkeypatch.setenv("FORGE_FAIL", "verify")
 
-    result = land.land(project_for, review_contract(), _summary())
+    result = _land(project_for, review_contract(), _summary())
 
     assert result.failed
     assert not result.merged
@@ -137,15 +156,79 @@ def test_a_failed_verify_never_reaches_the_merge(
     assert "merge" not in steps
 
 
-def test_a_failed_create_never_reaches_the_verify(
+def test_a_failed_create_still_asks_verify_whether_a_pull_request_is_there(
     project_for, review_contract, forge, pushed_branch, monkeypatch
 ):
+    """`create` is advisory, because create is not evidence and verify is.
+
+    The commonest reason a create fails is a pull request the branch already
+    has -- which is exactly what a second `land` of a run meets after the first
+    attempt failed at verify. Refusing there would mean a run could never be
+    landed by the tool once anything had gone wrong once.
+    """
     monkeypatch.setenv("FORGE_FAIL", "create")
 
-    result = land.land(project_for, review_contract(), _summary())
+    result = _land(project_for, review_contract(), _summary())
+
+    # Verify was asked, said yes, and the landing completed.
+    assert [call[0] for call in forge()] == ["create", "verify", "merge"]
+    assert not result.failed
+    assert result.merged
+
+
+def test_a_create_that_failed_for_a_real_reason_still_fails_the_landing(
+    project_for, review_contract, forge, pushed_branch, monkeypatch
+):
+    """Advisory is not ignored. Nothing green comes out of a broken forge."""
+    monkeypatch.setenv("FORGE_FAIL", "create,verify")
+
+    result = _land(project_for, review_contract(), _summary())
 
     assert result.failed
-    assert [call[0] for call in forge()] == ["create"]
+    assert not result.merged
+    assert "merge" not in [call[0] for call in forge()]
+
+
+def test_verify_is_retried_while_the_forge_has_not_registered_checks(
+    project_for, review_contract, forge, pushed_branch, monkeypatch
+):
+    """The bug this factory's first real land found.
+
+    It opened a pull request and asked about its checks in the same second.
+    `gh pr checks` answered "no checks reported on the
+    'watermill/20260827-060430' branch" and exited non-zero -- and the check
+    that had not yet appeared went green two minutes later. A tool that was not
+    ready was reported as a red build, and the landing stopped on it.
+    """
+    monkeypatch.setenv("FORGE_VERIFY_FAILS_FIRST", "2")
+
+    result = _land(
+        project_for, review_contract(), _summary(),
+        settle_seconds=30.0, poll_seconds=0.0,
+    )
+
+    verifies = [call for call in forge() if call[0] == "verify"]
+    assert len(verifies) == 3, "gave up before the forge had registered anything"
+    assert not result.failed
+    assert result.merged
+
+
+def test_a_verify_still_failing_past_the_settle_window_is_believed(
+    project_for, review_contract, forge, pushed_branch, monkeypatch
+):
+    """The window is bounded. A build that is really red is reported as red.
+
+    Retrying a failing check is deliberate here and would be wrong anywhere
+    else; it is right only because the window is too short for a real verdict
+    to fit inside it.
+    """
+    monkeypatch.setenv("FORGE_VERIFY_FAILS_FIRST", "99")
+
+    result = _land(project_for, review_contract(), _summary())
+
+    assert result.failed
+    assert not result.merged
+    assert "merge" not in [call[0] for call in forge()]
 
 
 # -- the happy path ---------------------------------------------------------
@@ -154,7 +237,7 @@ def test_a_failed_create_never_reaches_the_verify(
 def test_a_green_run_is_created_verified_and_merged(
     project_for, review_contract, forge, pushed_branch, fake_project
 ):
-    result = land.land(project_for, review_contract(), _summary())
+    result = _land(project_for, review_contract(), _summary())
 
     assert not result.failed
     assert result.merged
@@ -186,7 +269,7 @@ def test_the_branch_and_base_reach_the_forge_as_arguments(
 def test_no_merge_stops_after_a_green_verify(
     project_for, review_contract, forge, pushed_branch
 ):
-    result = land.land(project_for, review_contract(), _summary(), merge=False)
+    result = _land(project_for, review_contract(), _summary(), merge=False)
 
     assert not result.failed
     assert not result.merged
@@ -203,7 +286,7 @@ def test_a_contract_with_no_merge_command_verifies_and_stops(
     """
     contract = review_contract(review={"merge": None})
 
-    result = land.land(project_for, contract, _summary())
+    result = _land(project_for, contract, _summary())
 
     assert not result.failed
     assert not result.merged
@@ -216,7 +299,7 @@ def test_a_contract_with_no_merge_command_verifies_and_stops(
 def test_a_project_with_no_review_block_refuses_rather_than_guessing(
     project_for, contract_for, forge, pushed_branch
 ):
-    result = land.land(project_for, contract_for(git={"target": "branch"}), _summary())
+    result = _land(project_for, contract_for(git={"target": "branch"}), _summary())
 
     assert result.refused
     assert "review.create" in result.refused
@@ -228,7 +311,7 @@ def test_direct_commits_have_nothing_to_land(
 ):
     contract = review_contract(git={"target": "direct", "base_branch": "main"})
 
-    result = land.land(project_for, contract, _summary())
+    result = _land(project_for, contract, _summary())
 
     assert result.refused
     assert "nothing to land" in result.refused
@@ -238,7 +321,7 @@ def test_direct_commits_have_nothing_to_land(
 def test_a_run_that_kept_nothing_is_not_landed(
     project_for, review_contract, forge, pushed_branch
 ):
-    result = land.land(project_for, review_contract(), _summary(commits=[]))
+    result = _land(project_for, review_contract(), _summary(commits=[]))
 
     assert result.refused
     assert "kept nothing" in result.refused
@@ -246,7 +329,7 @@ def test_a_run_that_kept_nothing_is_not_landed(
 
 
 def test_a_refused_run_is_not_landed(project_for, review_contract, forge, pushed_branch):
-    result = land.land(project_for, review_contract(), _summary(refused=True))
+    result = _land(project_for, review_contract(), _summary(refused=True))
 
     assert result.refused
     assert "refused at preflight" in result.refused
@@ -259,7 +342,7 @@ def test_a_branch_that_never_reached_the_remote_refuses(
     """The push failing is the finding; opening a pull request would bury it."""
     _git(fake_project, "push", "origin", "--delete", pushed_branch)
 
-    result = land.land(project_for, review_contract(), _summary())
+    result = _land(project_for, review_contract(), _summary())
 
     assert result.refused
     assert "not on origin" in result.refused
@@ -271,7 +354,7 @@ def test_a_dirty_tree_refuses_before_anything_is_opened(
 ):
     (fake_project / "README.md").write_text("edited by somebody\n")
 
-    result = land.land(project_for, review_contract(), _summary())
+    result = _land(project_for, review_contract(), _summary())
 
     assert result.refused
     assert "dirty" in result.refused
