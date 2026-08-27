@@ -41,7 +41,7 @@ point.
 
 ```bash
 make install                                  # .venv + dependencies
-make verify                                   # the gate: guard, ruff, 196 tests
+make verify                                   # the gate: guard, ruff, 219 tests
 
 ./bin/watermill projects                      # what this factory drives
 ./bin/watermill validate                      # do the contracts parse
@@ -75,6 +75,8 @@ Afterwards:
 
 ```bash
 ./bin/watermill report zimmy-life-tracker     # the latest morning report
+./bin/watermill land zimmy-life-tracker       # open the PR, prove it green, merge it
+./bin/watermill land <proj> --no-merge        # ...and stop before the merge
 ./bin/watermill status                        # readiness and history per project
 ./bin/watermill ledger                        # every run, across every project
 ./bin/watermill tasks                         # every task, counted by root cause
@@ -100,6 +102,7 @@ Afterwards:
 | `watermill/report.py` | The morning report. Pure |
 | `watermill/ledger.py` | Append-only history across projects, one line per run |
 | `watermill/tasklog.py` | One line per task, and why each one went wrong |
+| `watermill/land.py` | The pull request: create, verify, merge. Off the run loop |
 | `watermill/shipper.py` | Ships both to Loki for Grafana |
 | `projects/` | Vendored contracts, for projects that carry none yet |
 | `runs/` | Per-run logs. Gitignored, and **never pruned automatically** |

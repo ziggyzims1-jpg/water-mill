@@ -140,6 +140,19 @@ class WorkQueue:
             return True
         return self._run("close", id=task_id).ok
 
+    @property
+    def can_comment(self) -> bool:
+        """Whether a comment would reach the tracker at all.
+
+        `comment` returns False both when a project declares no `comment`
+        command and when the command was declared and failed, and a caller that
+        cannot tell those apart has to choose between a false alarm on every
+        project that never promised a comment and silence on a promise this
+        factory broke. Ask this first; treat a False from `comment` as a
+        failure only when this is True.
+        """
+        return bool(self.enabled and self.contract.comment)
+
     def comment(self, task_id: str, text: str) -> bool:
         if not self.enabled or not self.contract.comment:
             return False

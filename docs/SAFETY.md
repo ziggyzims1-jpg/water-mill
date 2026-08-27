@@ -129,6 +129,15 @@ things it is easy to assume.
   has to stay genuinely routine**. If reverting ever feels expensive enough to
   talk yourself out of, that is the signal to switch back to `branch`, not the
   signal to skim harder.
+
+  `watermill land` and the `review.*` block do not change this. What they
+  automate is the *mechanics* of a pull request — open it, wait for CI, merge
+  it — and CI runs the same gate the run already ran twice. That is worth
+  having: it proves the forge agrees with the local result, and it removes the
+  step most likely to be skipped at the end of a long night. It is **not** a
+  human reading the diff, and a green `land` is not evidence that anybody has.
+  While the ramp is young, `--no-merge` is the honest setting: it opens the
+  pull request, proves it green, and leaves the button to a person.
 - **Stub-agent tests.** 123 of them, and they prove the orchestrator's control
   flow. They say nothing about how a real agent behaves inside it.
 - **This document.** Doctrine that exists but does not load is decoration.

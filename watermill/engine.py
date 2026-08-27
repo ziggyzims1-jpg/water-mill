@@ -346,6 +346,17 @@ class Engine:
 
         commit = gitwork.commits_since(self.project.path, base_sha)
         self.state.commits.extend(commit)
+        # A task that failed says why, in a comment, and a task that succeeded
+        # said nothing at all -- so the queue recorded every discard and no
+        # kept work, which is exactly backwards. The commit that did the work
+        # lived only in this factory's ledger, where the project cannot see it.
+        # Written before the close, because a close is the last write some
+        # queues accept on a task.
+        recorded = self.queue.comment(task.id, _kept_note(self.state.run_id, commit))
+        if self.queue.can_comment and not recorded:
+            self.state.anomalies.append(
+                f"kept {task.id} but could not record the run against it"
+            )
         if not self.queue.close(task.id):
             self.state.anomalies.append(f"work kept but could not close {task.id}")
         self._claimed = None
@@ -484,6 +495,21 @@ class Engine:
                 handle.write(f"{_now()} {message}\n")
         except OSError:  # pragma: no cover
             pass
+
+
+def _kept_note(run_id: str, commits: list[str]) -> str:
+    """What a kept task leaves behind in the tracker.
+
+    The run id and the commits, and nothing that reads as praise. This is the
+    only place the factory's own identifiers cross into the project's tracker,
+    so it names the run rather than describing it: `watermill report` and the
+    task log can be found from a run id, and cannot be found from an adjective.
+    """
+    if not commits:
+        return f"Kept by Water Mill run {run_id}, which recorded no commit."
+    body = "\n".join(f"  {line}" for line in commits)
+    plural = "commit" if len(commits) == 1 else "commits"
+    return f"Kept by Water Mill run {run_id}. {len(commits)} {plural}:\n{body}"
 
 
 def _escalation_note(text: str) -> str:
