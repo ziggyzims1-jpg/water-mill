@@ -30,6 +30,7 @@ from . import (
     review,
     shipper,
     tasklog,
+    usage,
 )
 from .caps import Caps
 from .contract import CONTRACT_FILENAME
@@ -533,6 +534,10 @@ def cmd_calibrate(args) -> int:
 def cmd_recall(args) -> int:
     """Ask the context graph a question. The same read the agent's tool makes."""
     root = factory_root(args.root)
+
+    if args.usage:
+        return _print_usage(root, since=args.since or "")
+
     graph = recall.build(root)
 
     if args.detail:
@@ -543,6 +548,8 @@ def cmd_recall(args) -> int:
         graph,
         args.query or "",
         cell="" if args.everywhere else (args.cell or ""),
+        since=args.since or "",
+        cause=args.cause or "",
         limit=args.limit,
         include_proposed=args.include_proposed,
     )
@@ -553,6 +560,38 @@ def cmd_recall(args) -> int:
     if answer.hits:
         print()
         print("Open one:  watermill recall --detail <id>")
+    return 0
+
+
+def _print_usage(root, since: str = "") -> int:
+    """Whether the tool is being used, and what it could not answer.
+
+    The unanswered list is the useful half. Everything else here is a
+    percentage; that is a list of findings somebody should write, phrased by
+    the agents that wanted them.
+    """
+    stats = usage.stats(usage.read(root, since=since))
+    if not stats["calls"]:
+        print(
+            "The context graph has never been called."
+            + (f" (since {since})" if since else "")
+        )
+        print("Runs give an agent the tool with:  watermill run <project> ... --recall")
+        return 0
+
+    rate = stats["hit_rate"]
+    print(
+        f"{stats['searches']} search(es), {stats['opened']} opened, "
+        f"{stats['proposed']} proposed, across {stats['tasks']} task(s)"
+    )
+    if rate is not None:
+        print(f"{rate:.0%} of searches returned something.")
+    if stats["unanswered"]:
+        print()
+        print("Asked and not answered -- these are the findings worth writing:")
+        for question, count in list(stats["unanswered"].items())[:15]:
+            suffix = f"  (x{count})" if count > 1 else ""
+            print(f"    {question[:100]}{suffix}")
     return 0
 
 
@@ -837,6 +876,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--everywhere", action="store_true", help="every cell, not just one")
     p.add_argument("--limit", type=int, default=recall.DEFAULT_LIMIT)
     p.add_argument("--detail", metavar="ID", help="open one result in full")
+    p.add_argument("--since", metavar="YYYY-MM-DD", help="only what was observed since")
+    p.add_argument("--cause", help="only findings filed under one root cause")
+    p.add_argument("--usage", action="store_true",
+                   help="what agents asked the graph, and what it could not answer")
     p.add_argument("--include-proposed", action="store_true",
                    help="include agent proposals, which no agent can see")
     p.add_argument("--json", action="store_true")

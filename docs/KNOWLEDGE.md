@@ -53,6 +53,19 @@ Knowledge growing must make the answers **better, never bigger**. There is a
 test for each of those three, because a retrieval layer fails silently in
 exactly this direction.
 
+Two filters exist on the command line and deliberately **not** in the agent's
+tool schema:
+
+```bash
+watermill recall "fence" --since 2026-06-01 --cause gate-hole
+```
+
+Free text is the right surface for somebody with a problem in front of them; a
+date window and a root-cause bucket are what somebody *auditing* the graph
+wants. Every parameter added to the tool is paid for in the prompt on every
+task, so what goes in there is decided by measurement rather than by guess --
+see **What the tool was asked** below.
+
 ## Every finding carries a date
 
 Two of them, and they are different questions:
@@ -149,6 +162,84 @@ output. Same rule as the first project's backup-drill heartbeat and the Loki
 
 An empty factory is never overdue. An alert that fires on day one is one nobody
 reads by day two.
+
+## What the tool was asked
+
+```bash
+watermill recall --usage
+watermill recall --usage --since 2026-08-01
+```
+
+The graph is the first thing here that costs tokens on every task whether or
+not it earns them, and its failure modes are silent in both directions: an
+agent that never calls the tool looks exactly like an agent whose questions
+were all answered, and a tool that answers nothing looks exactly like a tool
+nobody needed. So every call is logged to `runs/recall.jsonl` -- machine-written
+telemetry, filed with the run history rather than with the findings.
+
+Three things come out of it, and the third is the reason it exists:
+
+1. **Was the tool called at all** -- the single unknown `--recall` exists to
+   resolve, and it cannot be answered without reading a transcript.
+2. **The hit rate** -- mostly-empty answers mean either a badly described tool
+   or a genuinely empty graph, and those need opposite responses.
+3. **The questions that came back empty** -- not a failure report. That is the
+   factory telling you which findings to write next, in the agents' own words.
+   It leads the sweep's tool section for that reason.
+
+The log is never read by `recall` and never reaches an agent: a tool that could
+see its own usage statistics would be a tool with an incentive.
+
+It is also how the query surface grows. A filter earns a place in the tool
+schema when the log shows agents asking for it in words -- not before, because
+the schema is the one part of this feature with a cost on every task.
+
+## Why there is no database
+
+An obvious shape for this is SQLite: a nodes table, an edges table, FTS5 over
+the finding text, and a read-only connection an agent can run arbitrary
+`SELECT` against. It was considered and measured rather than assumed, and the
+measurement is the argument:
+
+> **2,000 findings: 43ms to build the whole graph in memory, 37ms to search
+> it.** That is roughly a century of this factory's output, answered in under a
+> tenth of a second, with no schema, no migration, no index to rebuild and
+> nothing to invalidate.
+
+Full-text search is not the thing a database would add -- `recall` already does
+lexical search with IDF weighting and path-aware tokenization, which is what
+gets you the entry node before the edges get you the rest. What a database
+would add is a *second* representation of data whose truth lives in three JSONL
+files, and a cache that can be stale is a class of bug this design does not
+currently have.
+
+**The threshold is a measurement, not an opinion.** Revisit it when `recall
+--usage` shows a p95 above ~250ms, or when the graph outgrows memory. Both are
+observable; neither is true today.
+
+### The two SQLite hazards, and what replaces them
+
+The advice for a SQLite version of this would be right, and both problems are
+real. They are worth writing down because *this* design has to answer them too:
+
+**Multiple writers.** Two agents can be working two tasks at once. SQLite's
+answer is WAL mode and a busy timeout. This store's answer is that there is
+nothing to lock: a write is one `O_APPEND` write of one line, and a write under
+the pipe buffer is atomic, so concurrent appends interleave whole lines. No
+lock, no busy timeout, and no `database is locked` mid-task. `MAX_LINE_BYTES`
+(4096) is what keeps that true, so an over-long finding is refused rather than
+written -- and the bound is enforced in `_append`, covering every writer
+including the free-text `note` on a supersession.
+`test_concurrent_writers_do_not_lose_or_corrupt_a_line` drives ten real
+processes at it, because the guarantee is the kernel's rather than the GIL's
+and a thread pool would prove nothing.
+
+**Network mounts.** `O_APPEND` atomicity is a property of *local* filesystems,
+exactly as SQLite's locking is. `knowledge/` lives in the git checkout beside
+the code, which is local wherever the factory runs. **Do not put the checkout
+on NFS or SMB.** That is the one deployment that would need a real database, or
+a small local API in front of this one -- and it would be the reason to build
+it, rather than the retrieval cost.
 
 ## Where a lesson should actually go
 

@@ -87,6 +87,32 @@ REVIEW = "review"
 #: false for a year while an agent still reads it as current.
 REVIEW_AFTER_DAYS = 90
 
+#: The largest line this store will ever write, and the reason there is no
+#: database here.
+#:
+#: Two agents can be working two tasks at once, so there are two writers. The
+#: usual answer to that is a lock -- in SQLite, WAL mode and a busy timeout,
+#: which is real advice for a real problem. This store sidesteps it instead: a
+#: write is one `O_APPEND` write of one line, and on a local filesystem a write
+#: under the pipe buffer is atomic, so concurrent appends interleave whole lines
+#: rather than corrupting each other. There is no lock to time out, no
+#: `database is locked` mid-task, and a reader never blocks a writer.
+#:
+#: That guarantee has exactly one condition, and it is the same condition the
+#: SQLite advice has: **it is a property of local filesystems.** `O_APPEND` is
+#: not atomic over NFS or SMB. `knowledge/` lives in the git checkout beside the
+#: code, which is local wherever the factory runs; putting the checkout on a
+#: network mount breaks this, and is the one deployment that would need a real
+#: database in front of it.
+MAX_LINE_BYTES = 4096
+
+#: A finding is one sentence and a paragraph. These bounds are what keep a line
+#: inside the budget above, and they are also the reason a finding stays cheap
+#: to return: `text` is what `recall` prints, so an essay in that field is an
+#: essay in an agent's context on every hit.
+MAX_TEXT_CHARS = 500
+MAX_DETAIL_CHARS = 2000
+
 #: How long the *sweep itself* may go unrun before that is the finding. A
 #: monthly job that stopped running looks exactly like a month with nothing to
 #: review: both produce nothing. Thirty-five days is a month plus slack for the
@@ -238,6 +264,16 @@ def record(
         )
     if not text.strip():
         raise KnowledgeError("a finding with no text is not a finding")
+    if len(text.strip()) > MAX_TEXT_CHARS:
+        raise KnowledgeError(
+            f"a finding's text is one sentence, at most {MAX_TEXT_CHARS} characters "
+            f"(this was {len(text.strip())}). Put the long version in detail."
+        )
+    if len(detail.strip()) > MAX_DETAIL_CHARS:
+        raise KnowledgeError(
+            f"detail is at most {MAX_DETAIL_CHARS} characters "
+            f"(this was {len(detail.strip())})."
+        )
     on = observed_at.strip() or today().isoformat()
     if _parse_date(on) is None:
         raise KnowledgeError(f"observed_at must be YYYY-MM-DD, got {on!r}")
@@ -406,10 +442,24 @@ def days_since_review(root: Path, as_of: date | None = None) -> int | None:
 
 
 def _append(root: Path, line: dict) -> None:
+    """One line, one `O_APPEND` write, bounded so the write stays atomic.
+
+    The check is here rather than in each caller so that every writer is
+    covered by it -- including `supersede` and `record_review`, whose free-text
+    notes are the ones nobody thinks to bound. Refused rather than truncated:
+    silently dropping the end of somebody's finding is worse than making them
+    shorten it, and the message says the limit.
+    """
+    payload = json.dumps(line, sort_keys=True) + "\n"
+    if len(payload.encode("utf-8")) > MAX_LINE_BYTES:
+        raise KnowledgeError(
+            f"that line is longer than {MAX_LINE_BYTES} bytes, which is the "
+            "bound that keeps concurrent appends atomic. Shorten it."
+        )
     path = Path(root) / KNOWLEDGE_FILENAME
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(line, sort_keys=True) + "\n")
+        handle.write(payload)
 
 
 def _lines(root: Path) -> list[dict]:
@@ -455,8 +505,12 @@ def _new_id(observed_at: str) -> str:
     messages, in a contract's notes and in another finding's supersede edge,
     and in every one of those places the first useful question is how old it
     is.
+
+    Six hex rather than four: two agents proposing in the same second is the
+    ordinary case here, and an id collision would attach one finding's
+    supersede edge to another's -- a wrong answer rather than an error.
     """
-    return f"f-{observed_at.replace('-', '')}-{uuid.uuid4().hex[:4]}"
+    return f"f-{observed_at.replace('-', '')}-{uuid.uuid4().hex[:6]}"
 
 
 def _parse_date(value: str) -> date | None:

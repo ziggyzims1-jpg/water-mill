@@ -41,7 +41,7 @@ point.
 
 ```bash
 make install                                  # .venv + dependencies
-make verify                                   # the gate: guard, ruff, 359 tests
+make verify                                   # the gate: guard, ruff, 373 tests
 
 ./bin/watermill projects                      # what this factory drives
 ./bin/watermill validate                      # do the contracts parse
@@ -101,6 +101,7 @@ What the factory has learned ([docs/KNOWLEDGE.md](docs/KNOWLEDGE.md)):
 ./bin/watermill proposals                                 # agent findings awaiting a person
 ./bin/watermill review                                    # the monthly sweep
 ./bin/watermill review --check                            # exit 1 if the sweep stopped happening
+./bin/watermill recall --usage                            # was the tool called, and what could it not answer
 ```
 
 ## Layout
@@ -124,6 +125,7 @@ What the factory has learned ([docs/KNOWLEDGE.md](docs/KNOWLEDGE.md)):
 | `watermill/recall.py` | The context graph, and the one budgeted way to query it |
 | `watermill/mcp.py` | That graph as a tool the agent calls mid-task |
 | `watermill/review.py` | The monthly sweep over what the factory believes |
+| `watermill/usage.py` | What agents asked the graph, and what it could not answer |
 | `watermill/land.py` | The pull request: create, verify, merge. Off the run loop |
 | `watermill/shipper.py` | Ships both to Loki for Grafana |
 | `watermill/publish.py` | A status snapshot of every project, PUT to Zimmy. Off the run loop |

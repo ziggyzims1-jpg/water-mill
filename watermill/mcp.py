@@ -43,7 +43,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import knowledge, recall
+from . import knowledge, recall, usage
 
 #: The protocol version spoken when a client does not name one.
 DEFAULT_PROTOCOL = "2024-11-05"
@@ -155,6 +155,12 @@ class Server:
             return f"The knowledge store could not be read ({exc}). Carry on without it.", True
         return f"No such tool: {name}", True
 
+    def _log(self, tool: str, **fields) -> None:
+        usage.record(
+            self.root, tool=tool, cell=self.cell,
+            run_id=self.run_id, task_id=self.task_id, **fields,
+        )
+
     def _recall(self, arguments: dict) -> str:
         query = str(arguments.get("query", "")).strip()
         if not query:
@@ -172,12 +178,20 @@ class Server:
             cell=self.cell if scope != "everywhere" else "",
             limit=limit,
         )
+        # Recorded whatever the answer was, and an empty one above all: the
+        # questions this graph could not answer are the list of findings worth
+        # writing next, in the agent's own words.
+        self._log(
+            "recall", query=query, hits=len(answer.hits),
+            matched=answer.matched, total=answer.total,
+        )
         return answer.render()
 
     def _detail(self, arguments: dict) -> str:
         node_id = str(arguments.get("id", "")).strip()
         if not node_id:
             return "detail needs an id from a recall result."
+        self._log("detail", query=node_id)
         return recall.detail(recall.build(self.root), node_id)
 
     def _propose(self, arguments: dict) -> tuple[str, bool]:
@@ -204,6 +218,7 @@ class Server:
             )
         except knowledge.KnowledgeError as exc:
             return f"Refused: {exc}", True
+        self._log("propose", query=line["id"])
         return (
             f"Recorded as {line['id']}, held for human review. It is not visible "
             "to other agents until somebody promotes it.",

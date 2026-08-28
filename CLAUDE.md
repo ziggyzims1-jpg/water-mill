@@ -41,6 +41,7 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 | `watermill/recall.py` | The context graph over all three logs, and the one budgeted way to query it |
 | `watermill/mcp.py` | The graph as a tool the agent calls mid-task. The only seam that runs *during* a task |
 | `watermill/review.py` | The monthly sweep, and the check that notices the sweep stopped happening |
+| `watermill/usage.py` | What agents asked the graph and what it could not answer. Never readable by an agent |
 | `watermill/land.py` | The pull request: create, verify, merge. Never part of a run |
 | `watermill/shipper.py` | Ships both to Loki. A reader, never part of a run |
 | `watermill/publish.py` | Assembles a status snapshot of every project and PUTs it to Zimmy. A reader, never part of a run; unknown is omitted, never zeroed |
@@ -115,13 +116,30 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
   `remember --destination` plus the monthly sweep exist to keep a lesson from
   settling there when one of the first three could hold it.
 
+- **There is no database, and the reason is a measurement.** The context graph
+  is three append-only JSONL files rebuilt in memory on every call: 2,000
+  findings cost 43ms to build and 37ms to search, so an index would buy a
+  staleness bug and nothing else. Two consequences are load-bearing rather than
+  incidental. Concurrency is handled by *not having a lock* — one `O_APPEND`
+  write of one line under the pipe buffer is atomic, which is why
+  `MAX_LINE_BYTES` refuses an over-long line instead of truncating it, and why
+  the concurrency test drives ten real processes rather than threads. And that
+  atomicity, exactly like SQLite's locking, holds only on a **local**
+  filesystem: never put this checkout on NFS or SMB. Revisit the whole decision
+  when `recall --usage` measures a p95 past ~250ms — not before, and not on
+  anybody's estimate including this one.
+
 - **A context surface is queried, never loaded.** The findings never enter a
   prompt; six lines saying a `recall` tool exists do. Anything an agent reads on
   every task is paid for on every task, so a surface that returns everything it
   knows costs more as the factory learns more — which is backwards, and is how a
   knowledge base ends up switched off. `recall` returns a few one-line hits
   under a character budget and says how many it left; `detail` opens exactly
-  one. Knowledge growing must make the answers better, never bigger.
+  one. Knowledge growing must make the answers better, never bigger. The
+  corollary is that the *tool schema* grows by measurement too: `recall
+  --usage` records every query and, above all, every one that came back empty —
+  which is both the list of findings worth writing and the evidence for which
+  filter has earned a place in the schema every task pays for.
 
 - **A finding carries the date it was observed, and a belief that changes is
   superseded rather than edited.** `observed_at` is when the thing happened and

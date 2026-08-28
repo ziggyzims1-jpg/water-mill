@@ -140,7 +140,7 @@ def test_the_rendered_answer_stays_under_the_character_budget(tmp_path: Path):
 
 def test_one_hit_is_returned_even_when_it_exceeds_the_budget(tmp_path: Path):
     """An answer of nothing is worse than an answer of one line over budget."""
-    _finding(tmp_path, "A very long finding about the gate " * 20)
+    _finding(tmp_path, "A very long finding about the gate " * 10)
     answer = recall.search(recall.build(tmp_path), "gate", budget_chars=10)
     assert len(answer.hits) == 1
 

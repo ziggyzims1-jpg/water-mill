@@ -171,3 +171,32 @@ def test_the_heartbeat_tells_three_cases_apart(tmp_path: Path):
     knowledge.record_review(tmp_path, on="2026-06-01")
     line, code = review.check_line(review.sweep(tmp_path, as_of=TODAY))
     assert code == 1 and "overdue" in line
+
+
+def test_the_sweep_reports_what_the_tool_could_not_answer(tmp_path: Path):
+    """A percentage is a health check; the list of unanswered questions is
+    work. Both are in the sweep because only one of them is actionable."""
+    from watermill import usage
+
+    _finding(tmp_path, "A finding about the gate.")
+    usage.record(tmp_path, tool="recall", query="gate", hits=1, run_id="r1", task_id="t-1")
+    usage.record(tmp_path, tool="recall", query="upstream rate limits", hits=0,
+                 run_id="r1", task_id="t-1")
+    knowledge.record_review(tmp_path, on="2026-08-20")
+
+    state = review.sweep(tmp_path, as_of=TODAY)
+    assert state.usage["searches"] == 2
+    assert state.usage["hit_rate"] == 0.5
+
+    text = review.render(state)
+    assert "## The tool itself" in text
+    assert "50% of them answered" in text
+    assert "upstream rate limits" in text
+
+
+def test_a_tool_nobody_called_adds_no_section(tmp_path: Path):
+    """Silence here is reported by `recall --usage`, not by inventing a
+    section that says nothing every month."""
+    _finding(tmp_path, "A finding.")
+    knowledge.record_review(tmp_path, on="2026-08-20")
+    assert "## The tool itself" not in review.render(review.sweep(tmp_path, as_of=TODAY))

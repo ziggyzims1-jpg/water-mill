@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-from . import knowledge, recall, tasklog
+from . import knowledge, recall, tasklog, usage
 
 
 @dataclass
@@ -46,6 +46,8 @@ class Sweep:
     unannotated: list[dict] = field(default_factory=list)
     findings: int = 0
     cells: list[str] = field(default_factory=list)
+    usage: dict = field(default_factory=dict)
+    unanswered: list[tuple[str, int]] = field(default_factory=list)
 
     @property
     def never_reviewed(self) -> bool:
@@ -71,6 +73,7 @@ class Sweep:
             + len(self.unmechanised)
             + len(self.promotable)
             + len(self.unannotated)
+            + len(self.unanswered)
         )
 
 
@@ -78,11 +81,18 @@ def sweep(root: Path, as_of: date | None = None, unannotated_limit: int = 10) ->
     """Assemble the month's review. Reads three files, writes nothing."""
     graph = recall.build(root, as_of=as_of)
     findings = [n for n in graph.nodes if n.kind == recall.FINDING]
+    # The window is the last sweep, or a month, so each sweep reads the period
+    # it is actually responsible for rather than the whole history again.
+    elapsed = knowledge.days_since_review(root, as_of)
+    since = knowledge.horizon(
+        min(elapsed, 365) if elapsed else knowledge.SWEEP_AFTER_DAYS, as_of
+    )
     pending = [
         record.outcome
         for record in tasklog.read(root, unannotated=True)
         if record.outcome.get("outcome") != "completed"
     ]
+    calls = usage.stats(usage.read(root, since=since))
     return Sweep(
         today=(as_of or knowledge.today()).isoformat(),
         days_since_review=knowledge.days_since_review(root, as_of),
@@ -93,6 +103,8 @@ def sweep(root: Path, as_of: date | None = None, unannotated_limit: int = 10) ->
         unannotated=pending[-unannotated_limit:],
         findings=len(findings),
         cells=graph.cells,
+        usage=calls,
+        unanswered=list(calls["unanswered"].items())[:8],
     )
 
 
@@ -206,6 +218,30 @@ def render(state: Sweep) -> str:
             )
         add("")
         add("    watermill annotate <project> <task-id> <root-cause>")
+        add("")
+
+    if state.usage.get("searches") or state.unanswered:
+        rate = state.usage.get("hit_rate")
+        add("## The tool itself")
+        add("")
+        add(
+            f"{state.usage.get('searches', 0)} search(es) across "
+            f"{state.usage.get('tasks', 0)} task(s) since the last sweep"
+            + (f", {rate:.0%} of them answered." if rate is not None else ".")
+        )
+        if state.unanswered:
+            add("")
+            add(
+                "These came back empty. That is not a failure report -- it is "
+                "what the agents wanted to know and nobody had written down, in "
+                "their own words:"
+            )
+            add("")
+            for question, count in state.unanswered:
+                suffix = f"  (x{count})" if count > 1 else ""
+                add(f"- {_clip(question)}{suffix}")
+            add("")
+            add("    watermill remember <cell> lesson \"...\"")
         add("")
 
     add("When you are done, record that the sweep happened:")

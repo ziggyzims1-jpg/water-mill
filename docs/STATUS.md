@@ -50,7 +50,7 @@ arrived early with Water Mill; several Phase-0 items were skipped entirely.
 | | Evidence |
 |---|---|
 | Zimmy's merge gate | `make verify` — guard, build, ruff, ESLint, both suites, ~1m31s. CI runs exactly that command |
-| Water Mill's own gate | `make verify` — guard, ruff, **359 tests, ~32s**, from a clean `make install` |
+| Water Mill's own gate | `make verify` — guard, ruff, **373 tests, ~33s**, from a clean `make install` |
 | Restore, drilled | `scripts/backup_drill.py`, heartbeat checked daily by a separate job |
 | Invariants and corpus | `tests/test_invariants.py` over 17 synthetic personas, deterministic from one seed |
 | Work graph | 47 Tier-1 tasks in 4 epics, every one naming its files, its verification and what it must not touch |
@@ -60,7 +60,7 @@ arrived early with Water Mill; several Phase-0 items were skipped entirely.
 | Shipping to Loki | `watermill ship` reads the ledger and task log and pushes what is new. Off the run loop, high-water mark advances only after a push returned. **Pointed at a real Loki, which accepted the push** — the transport is no longer a guess |
 | Publishing to Zimmy | `watermill publish` assembles one status snapshot per project (queue, runs, tasks, pull requests, attention) and PUTs it to `/api/watermill`. **Met a real Zimmy once** (2026-08-28): a local zimmy-life-tracker 4.8.0 on a scratch database accepted a real snapshot via an admin API key (`published snapshot 1 ... (201)`) and its Water Mill tab rendered it -- 9 runs, 100% keep rate, five epics, the attention list. Not yet run against the Pi, and not yet on a schedule. Known gap: a pull request whose title lacks a bead id arrives with `task_id: null` (millstone titles carry the id only in the body), so the tab shows the branch instead |
 | The knowledge surfaces | `notes` in the contract reaches the prompt; `tasklog.py` records one line per task; `watermill tasks` counts root causes across projects. **All three are empty** — see below |
-| The context graph | `watermill/knowledge.py` + `recall.py` + `mcp.py` + `review.py`: dated findings, superseded rather than edited, queried under a hard result budget, offered to the agent mid-task as an MCP tool, and swept monthly. 83 tests, `docs/KNOWLEDGE.md`. **It holds nothing, and the tool has never been called by a real agent** — see below |
+| The context graph | `watermill/knowledge.py` + `recall.py` + `mcp.py` + `review.py`: dated findings, superseded rather than edited, queried under a hard result budget, offered to the agent mid-task as an MCP tool, and swept monthly. 97 tests, `docs/KNOWLEDGE.md`. **It holds nothing, and the tool has never been called by a real agent** — see below |
 
 ## What is not
 

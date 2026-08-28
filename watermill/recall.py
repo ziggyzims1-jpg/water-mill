@@ -319,6 +319,8 @@ def search(
     *,
     cell: str = "",
     kinds: tuple[str, ...] = (),
+    since: str = "",
+    cause: str = "",
     limit: int = DEFAULT_LIMIT,
     budget_chars: int = BUDGET_CHARS,
     include_proposed: bool = False,
@@ -332,6 +334,15 @@ def search(
     * a **proposal is never returned** unless a person's tool asked for it;
     * `limit` is capped at `MAX_LIMIT` whatever was passed;
     * the rendered result stops at `budget_chars`, and says how many it left.
+
+    `since` and `cause` are structured filters, and they are here rather than
+    in the agent's tool schema on purpose. Free text is the right query surface
+    for somebody with a problem in front of them; a date window and a
+    root-cause bucket are what somebody *auditing* the graph wants, and every
+    parameter added to the tool is paid for in the prompt on every task. What
+    agents actually reach for is a measurement (`usage.py`), not a guess --
+    a filter earns its place in the tool schema once the log shows the
+    questions being asked in words instead.
     """
     pool = [n for n in graph.nodes if _searchable(n, include_proposed)]
     total = len(pool)
@@ -339,6 +350,10 @@ def search(
         pool = [n for n in pool if n.cell == cell or not n.cell]
     if kinds:
         pool = [n for n in pool if n.kind in kinds]
+    if since:
+        pool = [n for n in pool if n.date >= since]
+    if cause:
+        pool = [n for n in pool if n.meta.get("root_cause") == cause]
 
     terms = _tokenize(query)
     idf = _idf(pool)

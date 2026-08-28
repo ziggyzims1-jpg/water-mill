@@ -180,3 +180,73 @@ def test_nothing_in_this_module_edits_a_stored_line(tmp_path: Path):
     lines = (tmp_path / knowledge.KNOWLEDGE_FILENAME).read_text().splitlines()
     assert len(lines) == 5
     assert lines[0].count('"text": "one"') == 1
+
+
+def test_a_line_too_long_to_append_atomically_is_refused(tmp_path: Path):
+    """The bound is not a style rule. A line under the pipe buffer is appended
+    atomically, which is what makes two agents writing at once safe without a
+    lock -- so a line that would exceed it is refused rather than written."""
+    with pytest.raises(knowledge.KnowledgeError):
+        _record(tmp_path, text="x" * (knowledge.MAX_TEXT_CHARS + 1))
+    with pytest.raises(knowledge.KnowledgeError):
+        _record(tmp_path, detail="x" * (knowledge.MAX_DETAIL_CHARS + 1))
+    assert knowledge.read(tmp_path) == []
+
+
+def test_the_bound_covers_every_writer_not_just_findings(tmp_path: Path):
+    """`supersede` and `record_review` take free text too, and they are the
+    ones nobody thinks to bound."""
+    a, b = _record(tmp_path, text="one"), _record(tmp_path, text="two")
+    with pytest.raises(knowledge.KnowledgeError):
+        knowledge.supersede(tmp_path, a["id"], b["id"], note="x" * 5000)
+
+
+def test_every_written_line_fits_the_atomic_append_budget(tmp_path: Path):
+    line = _record(
+        tmp_path,
+        text="x" * knowledge.MAX_TEXT_CHARS,
+        detail="y" * knowledge.MAX_DETAIL_CHARS,
+        refs={"paths": [f"a/very/long/path/number/{i}" for i in range(10)]},
+    )
+    written = (tmp_path / knowledge.KNOWLEDGE_FILENAME).read_bytes()
+    assert len(written) <= knowledge.MAX_LINE_BYTES
+    assert line["id"] in written.decode()
+
+
+def test_concurrent_writers_do_not_lose_or_corrupt_a_line(tmp_path: Path):
+    """The claim the whole no-database design rests on.
+
+    Real processes, not threads: the atomicity being relied on is `O_APPEND`'s,
+    which is a property of the kernel and the filesystem rather than of the
+    GIL, and a thread pool would prove nothing about it. Several agents
+    proposing at the same moment interleave whole lines -- no lock, no busy
+    timeout, and nothing to be locked out of.
+    """
+    import subprocess
+    import sys
+
+    script = '''
+import sys
+sys.path.insert(0, "REPO_ROOT")
+from pathlib import Path
+from watermill import knowledge
+
+index = int(sys.argv[1])
+for step in range(20):
+    knowledge.propose(
+        Path(sys.argv[2]), cell=f"cell-{index % 3}", kind="lesson",
+        text=f"Concurrent finding {index}/{step}.", detail="x" * 400,
+    )
+'''.replace("REPO_ROOT", str(Path(__file__).resolve().parent.parent))
+
+    processes = [
+        subprocess.Popen([sys.executable, "-c", script, str(index), str(tmp_path)])
+        for index in range(10)
+    ]
+    assert [p.wait() for p in processes] == [0] * 10
+
+    raw = (tmp_path / knowledge.KNOWLEDGE_FILENAME).read_text().splitlines()
+    records = knowledge.read(tmp_path)
+    assert len(raw) == 200, "every write landed"
+    assert len(records) == 200, "and every line still parses"
+    assert len({r.id for r in records}) == 200, "no id collided"
