@@ -83,6 +83,20 @@ ESCALATE
 on a line of its own, and follow it with what you need decided and why. An
 escalation is the right outcome, not a failure: it costs this run nothing and
 it is how a bad specification gets fixed instead of silently absorbed.
+
+## Before you sign off: the handoff
+
+Whatever the outcome -- committed, escalated, or stuck -- end your final
+message with a section headed
+
+HANDOFF
+
+that the morning reader and the next agent can act on: where things stand
+(what is committed, whether the gate passed), what you tried that did not
+work and why, the one thing to do next, and any question only a human can
+answer. Name files and functions, not areas; no diffs. It is kept with this
+task's log. Write it even when nothing surprising happened -- one line per
+heading is fine -- and write it especially when something did.
 """
 
 
