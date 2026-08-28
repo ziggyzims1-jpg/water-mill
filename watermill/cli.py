@@ -19,7 +19,18 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import land, ledger, publish, report, shipper, tasklog
+from . import (
+    knowledge,
+    land,
+    ledger,
+    mcp,
+    publish,
+    recall,
+    report,
+    review,
+    shipper,
+    tasklog,
+)
 from .caps import Caps
 from .contract import CONTRACT_FILENAME
 from .engine import Engine
@@ -218,6 +229,7 @@ def cmd_run(args) -> int:
         skip_gate=args.skip_gate,
         skip_backup=args.skip_backup,
         pause_between=pause,
+        recall=args.recall,
     )
 
     print(f"Water Mill -- {contract.name} -- run {run_id}")
@@ -518,6 +530,155 @@ def cmd_calibrate(args) -> int:
     return 0
 
 
+def cmd_recall(args) -> int:
+    """Ask the context graph a question. The same read the agent's tool makes."""
+    root = factory_root(args.root)
+    graph = recall.build(root)
+
+    if args.detail:
+        print(recall.detail(graph, args.detail))
+        return 0
+
+    answer = recall.search(
+        graph,
+        args.query or "",
+        cell="" if args.everywhere else (args.cell or ""),
+        limit=args.limit,
+        include_proposed=args.include_proposed,
+    )
+    if args.json:
+        print(json.dumps(answer.to_dict(), indent=2))
+        return 0
+    print(answer.render())
+    if answer.hits:
+        print()
+        print("Open one:  watermill recall --detail <id>")
+    return 0
+
+
+def cmd_remember(args) -> int:
+    """Record a finding. A person's judgement, dated, in the shared graph."""
+    root = factory_root(args.root)
+    if args.cell:
+        # An unregistered cell name files the finding where no query will look
+        # for it, which is indistinguishable from never having written it down.
+        Registry.load(root).get(args.cell)
+    try:
+        line = knowledge.record(
+            root,
+            cell=args.cell or "",
+            kind=args.kind,
+            text=args.text,
+            detail=args.detail or "",
+            observed_at=args.on or "",
+            root_cause=args.cause or "",
+            destination=args.destination or "",
+            tags=tuple(args.tag or ()),
+            refs={"tasks": args.task or [], "runs": args.run or [],
+                  "paths": args.path or [], "cells": args.also_in or []},
+        )
+    except knowledge.KnowledgeError as exc:
+        print(f"refused: {exc}")
+        return 2
+
+    print(f"{line['id']}  [{line['kind']}] {line['cell'] or 'factory'}  {line['observed_at']}")
+    if args.supersedes:
+        older = knowledge.get(root, args.supersedes)
+        if older is None:
+            print(f"warning: no finding {args.supersedes} -- nothing was superseded")
+        else:
+            knowledge.supersede(root, args.supersedes, line["id"], note=args.why or "")
+            print(f"supersedes {args.supersedes}, which is no longer returned by recall")
+    if not line["destination"]:
+        print()
+        print(
+            "Not mechanised. If a gate check or a fence path could carry this "
+            "instead, that is worth more than a finding -- record it with "
+            "--destination once it does."
+        )
+    return 0
+
+
+def cmd_confirm(args) -> int:
+    """Say a finding still holds. Resets its clock without editing it."""
+    root = factory_root(args.root)
+    record = knowledge.get(root, args.finding_id)
+    if record is None:
+        print(f"no finding {args.finding_id}")
+        return 1
+    if record.status == knowledge.SUPERSEDED:
+        print(f"{args.finding_id} was superseded by {record.superseded_by}. Confirm that instead.")
+        return 1
+    knowledge.confirm(root, args.finding_id, on=args.on or "", by=args.by or "")
+    print(f"{args.finding_id} confirmed. Next review due in {knowledge.REVIEW_AFTER_DAYS} days.")
+    return 0
+
+
+def cmd_proposals(args) -> int:
+    """Agent findings in quarantine, and the decision on them."""
+    root = factory_root(args.root)
+    if args.promote or args.reject:
+        target = args.promote or args.reject
+        record = knowledge.get(root, target)
+        if record is None:
+            print(f"no finding {target}")
+            return 1
+        if record.status != knowledge.PROPOSED:
+            print(f"{target} is {record.status}, not a pending proposal")
+            return 1
+        knowledge.decide(root, target, promote=bool(args.promote), why=args.why or "")
+        verb = "promoted -- agents can now recall it" if args.promote else "rejected"
+        print(f"{target} {verb}")
+        return 0
+
+    pending = recall.proposals(recall.build(root))
+    if not pending:
+        print("No proposals waiting. Nothing an agent wrote is being withheld.")
+        return 0
+    for node in pending:
+        print(f"{node.id}  [{node.label}] {node.cell or 'factory'}  {node.date}")
+        print(f"    {node.text[:150]}")
+    print()
+    print(f"{len(pending)} waiting. None is visible to any agent until promoted:")
+    print("    watermill proposals --promote <id>")
+    print("    watermill proposals --reject <id> --why \"...\"")
+    return 0
+
+
+def cmd_review(args) -> int:
+    """The monthly sweep over everything the factory believes."""
+    root = factory_root(args.root)
+    state = review.sweep(root)
+
+    if args.check:
+        # The heartbeat, for cron. A sweep that stopped happening looks exactly
+        # like a month with nothing to sweep, so this is the only thing here
+        # that can fail -- and it fails on the absence, not on the findings.
+        line, code = review.check_line(state)
+        print(line)
+        return code
+
+    if args.record:
+        knowledge.record_review(root, by=args.by or "", note=args.note or "")
+        print(f"sweep recorded. Next due within {knowledge.SWEEP_AFTER_DAYS} days.")
+        return 0
+
+    print(review.render(state))
+    return 0
+
+
+def cmd_mcp(args) -> int:
+    """Serve the context graph over stdio. Started by the engine, not by hand."""
+    server = mcp.Server(
+        root=factory_root(args.root),
+        cell=args.cell or "",
+        run_id=args.run or "",
+        task_id=args.task or "",
+        read_only=args.read_only,
+    )
+    return mcp.serve(server)
+
+
 def cmd_ship(args) -> int:
     """Send the ledger and the task log to Loki."""
     root = factory_root(args.root)
@@ -625,6 +786,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="skip the baseline gate (never on an unattended run)")
     p.add_argument("--skip-backup", action="store_true")
     p.add_argument("--agent", default=None)
+    p.add_argument("--recall", action="store_true",
+                   help="give the agent the context graph as a tool (see docs/KNOWLEDGE.md)")
     p.set_defaults(func=cmd_run)
 
     p = sub.add_parser("status", help="readiness and recent history per project")
@@ -667,6 +830,63 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("calibrate", help="open a project's calibration record")
     p.add_argument("project")
     p.set_defaults(func=cmd_calibrate)
+
+    p = sub.add_parser("recall", help="ask the context graph what the factory knows")
+    p.add_argument("query", nargs="?", default="")
+    p.add_argument("--cell", help="restrict to one project")
+    p.add_argument("--everywhere", action="store_true", help="every cell, not just one")
+    p.add_argument("--limit", type=int, default=recall.DEFAULT_LIMIT)
+    p.add_argument("--detail", metavar="ID", help="open one result in full")
+    p.add_argument("--include-proposed", action="store_true",
+                   help="include agent proposals, which no agent can see")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_recall)
+
+    p = sub.add_parser("remember", help="record a finding in the context graph")
+    p.add_argument("cell", help="the project it is about, or '' for the factory itself")
+    p.add_argument("kind", choices=sorted(knowledge.KINDS))
+    p.add_argument("text", help="one sentence")
+    p.add_argument("--detail", help="a paragraph, returned only by --detail")
+    p.add_argument("--on", metavar="YYYY-MM-DD",
+                   help="when it was observed, if not today")
+    p.add_argument("--cause", help="a root cause bucket, if it maps to one")
+    p.add_argument("--destination", choices=sorted(knowledge.DESTINATIONS),
+                   help="where this lesson was mechanised")
+    p.add_argument("--supersedes", metavar="ID", help="the finding this replaces")
+    p.add_argument("--why", help="with --supersedes, what changed")
+    p.add_argument("--task", action="append", help="repeatable")
+    p.add_argument("--run", action="append", help="repeatable")
+    p.add_argument("--path", action="append", help="repeatable")
+    p.add_argument("--also-in", action="append", metavar="CELL", help="repeatable")
+    p.add_argument("--tag", action="append", help="repeatable")
+    p.set_defaults(func=cmd_remember)
+
+    p = sub.add_parser("confirm", help="say a finding still holds")
+    p.add_argument("finding_id")
+    p.add_argument("--on", metavar="YYYY-MM-DD")
+    p.add_argument("--by")
+    p.set_defaults(func=cmd_confirm)
+
+    p = sub.add_parser("proposals", help="agent findings waiting on a person")
+    p.add_argument("--promote", metavar="ID")
+    p.add_argument("--reject", metavar="ID")
+    p.add_argument("--why")
+    p.set_defaults(func=cmd_proposals)
+
+    p = sub.add_parser("review", help="the monthly sweep over what the factory believes")
+    p.add_argument("--record", action="store_true", help="record that the sweep happened")
+    p.add_argument("--check", action="store_true",
+                   help="exit non-zero if the sweep itself is overdue")
+    p.add_argument("--by")
+    p.add_argument("--note")
+    p.set_defaults(func=cmd_review)
+
+    p = sub.add_parser("mcp", help="serve the context graph over stdio (started by a run)")
+    p.add_argument("--cell")
+    p.add_argument("--run")
+    p.add_argument("--task")
+    p.add_argument("--read-only", action="store_true")
+    p.set_defaults(func=cmd_mcp)
 
     p = sub.add_parser("ship", help="send the ledger and task log to Loki")
     p.add_argument("--url", help="Loki base URL (default: $LOKI_URL)")

@@ -41,7 +41,7 @@ point.
 
 ```bash
 make install                                  # .venv + dependencies
-make verify                                   # the gate: guard, ruff, 222 tests
+make verify                                   # the gate: guard, ruff, 359 tests
 
 ./bin/watermill projects                      # what this factory drives
 ./bin/watermill validate                      # do the contracts parse
@@ -65,6 +65,9 @@ Running one:
 
 # Unattended. Refuses every skip flag.
 ./bin/watermill run zimmy-life-tracker --max-spend 10 --max-tasks 5 --unattended
+
+# ...with the context graph as a tool the agent can call mid-task.
+./bin/watermill run zimmy-life-tracker --max-spend 5 --max-tasks 1 --supervised --recall
 ```
 
 There is **no default for `--max-spend`** and the run refuses to start without
@@ -87,6 +90,19 @@ Afterwards:
 ./bin/watermill publish                       # PUT it to Zimmy's Water Mill tab
 ```
 
+What the factory has learned ([docs/KNOWLEDGE.md](docs/KNOWLEDGE.md)):
+
+```bash
+./bin/watermill recall "gate fails on a clean checkout"   # ask the context graph
+./bin/watermill recall --detail f-20260828-a1b2           # open one answer in full
+./bin/watermill remember <cell> lesson "..." --on 2026-08-01 --path db.py
+./bin/watermill remember <cell> lesson "..." --supersedes f-...  # when it stops being true
+./bin/watermill confirm f-...                             # it still holds; reset its clock
+./bin/watermill proposals                                 # agent findings awaiting a person
+./bin/watermill review                                    # the monthly sweep
+./bin/watermill review --check                            # exit 1 if the sweep stopped happening
+```
+
 ## Layout
 
 | Path | What |
@@ -104,11 +120,16 @@ Afterwards:
 | `watermill/report.py` | The morning report. Pure |
 | `watermill/ledger.py` | Append-only history across projects, one line per run |
 | `watermill/tasklog.py` | One line per task, and why each one went wrong |
+| `watermill/knowledge.py` | Findings: dated, superseded rather than edited, never overwritten |
+| `watermill/recall.py` | The context graph, and the one budgeted way to query it |
+| `watermill/mcp.py` | That graph as a tool the agent calls mid-task |
+| `watermill/review.py` | The monthly sweep over what the factory believes |
 | `watermill/land.py` | The pull request: create, verify, merge. Off the run loop |
 | `watermill/shipper.py` | Ships both to Loki for Grafana |
 | `watermill/publish.py` | A status snapshot of every project, PUT to Zimmy. Off the run loop |
 | `projects/` | Vendored contracts, for projects that carry none yet |
 | `runs/` | Per-run logs. Gitignored, and **never pruned automatically** |
+| `knowledge/` | `findings.jsonl`. **Committed**, unlike `runs/` |
 | `docs/` | The contract spec, the safety model, onboarding, calibration |
 
 ## Documentation
@@ -118,6 +139,7 @@ Afterwards:
 - **[docs/ONBOARDING.md](docs/ONBOARDING.md)** — bringing a new project into the factory
 - **[docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)** — shipping to Loki, and the LogQL worth pinning
 - **[docs/PUBLISH.md](docs/PUBLISH.md)** — the status snapshot Zimmy draws, its schema, and when to send it
+- **[docs/KNOWLEDGE.md](docs/KNOWLEDGE.md)** — the context graph: how it is queried, why it is never loaded, and the monthly sweep
 - **[docs/CALIBRATION.md](docs/CALIBRATION.md)** — the supervised session that has to happen before an unattended night, and where a lesson goes afterwards
 
 ## Registered projects

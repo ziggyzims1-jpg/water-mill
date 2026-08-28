@@ -1,6 +1,6 @@
 # Status
 
-**As of 2026-08-27.** The single place that says where the factory actually is.
+**As of 2026-08-28.** The single place that says where the factory actually is.
 
 `docs/PLAN.md` says what is being built and why. This file says what exists.
 When they disagree, this file is right and the plan is stale — **fix the plan in
@@ -18,10 +18,13 @@ and independently checks what reached the repository. **The loop has now run
 against a real agent, supervised, twice, and kept work both times** — the first
 two rows of evidence this project has ever had that are not about a stub. Two
 of eight calibration tasks are done and **neither has been annotated**, so the
-finding the exercise exists to produce does not exist yet. Everything
-downstream — pricing, the maintenance line, cell one, every metric in the
-plan's §14 — remains unmeasured. The next unit of progress is not a feature. It
-is the judgement on the two tasks that have already run.
+finding the exercise exists to produce does not exist yet. There is now a
+**context graph** for those findings to live in — dated, superseded rather than
+edited, queryable by the agent mid-task, swept monthly — which changes where a
+judgement goes and changes nothing about the fact that none has been made.
+Everything downstream — pricing, the maintenance line, cell one, every metric in
+the plan's §14 — remains unmeasured. The next unit of progress is not a feature.
+It is the judgement on the two tasks that have already run.
 
 ---
 
@@ -47,7 +50,7 @@ arrived early with Water Mill; several Phase-0 items were skipped entirely.
 | | Evidence |
 |---|---|
 | Zimmy's merge gate | `make verify` — guard, build, ruff, ESLint, both suites, ~1m31s. CI runs exactly that command |
-| Water Mill's own gate | `make verify` — guard, ruff, **196 tests, ~23s**, from a clean `make install` |
+| Water Mill's own gate | `make verify` — guard, ruff, **359 tests, ~32s**, from a clean `make install` |
 | Restore, drilled | `scripts/backup_drill.py`, heartbeat checked daily by a separate job |
 | Invariants and corpus | `tests/test_invariants.py` over 17 synthetic personas, deterministic from one seed |
 | Work graph | 47 Tier-1 tasks in 4 epics, every one naming its files, its verification and what it must not touch |
@@ -57,6 +60,7 @@ arrived early with Water Mill; several Phase-0 items were skipped entirely.
 | Shipping to Loki | `watermill ship` reads the ledger and task log and pushes what is new. Off the run loop, high-water mark advances only after a push returned. **Pointed at a real Loki, which accepted the push** — the transport is no longer a guess |
 | Publishing to Zimmy | `watermill publish` assembles one status snapshot per project (queue, runs, tasks, pull requests, attention) and PUTs it to `/api/watermill`. **Met a real Zimmy once** (2026-08-28): a local zimmy-life-tracker 4.8.0 on a scratch database accepted a real snapshot via an admin API key (`published snapshot 1 ... (201)`) and its Water Mill tab rendered it -- 9 runs, 100% keep rate, five epics, the attention list. Not yet run against the Pi, and not yet on a schedule. Known gap: a pull request whose title lacks a bead id arrives with `task_id: null` (millstone titles carry the id only in the body), so the tab shows the branch instead |
 | The knowledge surfaces | `notes` in the contract reaches the prompt; `tasklog.py` records one line per task; `watermill tasks` counts root causes across projects. **All three are empty** — see below |
+| The context graph | `watermill/knowledge.py` + `recall.py` + `mcp.py` + `review.py`: dated findings, superseded rather than edited, queried under a hard result budget, offered to the agent mid-task as an MCP tool, and swept monthly. 83 tests, `docs/KNOWLEDGE.md`. **It holds nothing, and the tool has never been called by a real agent** — see below |
 
 ## What is not
 
@@ -90,13 +94,27 @@ outside.
   (`docs/OBSERVABILITY.md`). A dashboard somebody has to remember to open is
   not that. Until that alert exists, absence is still unwatched.
 - **The knowledge surfaces exist and hold nothing.** A contract can carry
-  `notes` into the prompt, the task log can count root causes, and
-  `docs/calibration/` has a record per project — but every one of them is empty,
+  `notes` into the prompt, the task log can count root causes,
+  `docs/calibration/` has a record per project, and there is now a **context
+  graph** an agent can query mid-task (`knowledge/findings.jsonl`,
+  `docs/KNOWLEDGE.md`) — but every one of them is empty,
   because a note is written after a task goes wrong and no task has run. They
   were built now so the first supervised session has somewhere to put what it
   finds; filling them in from either project's CLAUDE.md would put guesses in
   every prompt, and a guess is indistinguishable from a lesson once it is in the
   list.
+- **The context graph's tool has never been called by a real agent.** The
+  protocol is tested end to end — handshake, `tools/list`, `tools/call`, the
+  quarantine, a malformed frame — against real newline-delimited JSON-RPC, and
+  the engine's wiring is tested against a real git repository. What is *not*
+  tested is the thing that will break: whether `claude -p` accepts
+  `--mcp-config` and `--allowedTools` spelled the way `engine._recall_args`
+  spells them, and whether an MCP call needs more than that under
+  `--permission-mode acceptEdits`. That is exactly the status `land` had before
+  it met a real forge and found a bug on its first attempt, so `--recall` is
+  **off by default**, and the way to learn is one supervised task with it on,
+  then `runs/<project>/<run>/tasks/<task>.json` for whether the tool was called
+  at all.
 - **`bd` is installed and preflight is green.** `./bin/watermill doctor` reports
   zero refusals for `zimmy-life-tracker`. This was the one thing blocking a
   first run and it is no longer blocking anything.
@@ -135,6 +153,9 @@ Every number that should be climbing and is currently zero.
 | Cells sold | **0** |
 | Tasks with a recorded root cause | **0** -- the gap that matters |
 | Contract notes carried into a prompt | **0** |
+| Findings in the context graph | **0** |
+| Recall calls made by a real agent | **0** |
+| Monthly knowledge sweeps recorded | **0** |
 | Tier-1 tasks queued and ready | **48** |
 | Fenced paths enforced | **24** |
 
@@ -161,6 +182,13 @@ Then record what you concluded, while it is still fresh:
 That is the first row of `docs/calibration/zimmy-life-tracker.md` and the first
 line in the task log with a judgement on it. Both are empty right now, and the
 counters above stay at zero until one task has been watched and named.
+
+Anything that judgement teaches which is worth carrying to the *next* task goes
+into the context graph in the same sitting, while it is still fresh:
+
+```bash
+./bin/watermill remember zimmy-life-tracker lesson "..." --path <file> --task <id>
+```
 
 Nothing in the plan past Phase 2 can be honestly worked on before that number
 stops being zero.

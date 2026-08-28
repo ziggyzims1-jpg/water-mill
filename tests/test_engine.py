@@ -12,6 +12,7 @@ a run that reports no cost.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -410,3 +411,61 @@ def test_the_prompt_is_written_for_the_morning(
     prompt = (tmp_path / "logs" / "run-1" / "prompts" / "t-1.txt").read_text()
     assert "Rename the widget." in prompt
     assert "PROTECTED.md" in prompt  # the fence is stated as well as enforced
+
+
+# -- the context graph, wired to a run -------------------------------------
+
+
+def test_recall_is_not_wired_unless_the_run_asks_for_it(
+    fake_project, set_tasks, stub_env, engine_for, tmp_path
+):
+    """Off by default. The seam has never met a real agent, and a default that
+    changes the command every task is sent is not the place to find that out."""
+    set_tasks({"id": "t-1", "title": "add a feature"})
+    stub_env("succeed", STUB_TASK_ID="t-1")
+
+    engine_for().run()
+
+    prompt = (tmp_path / "logs" / "run-1" / "prompts" / "t-1.txt").read_text()
+    assert "recall" not in prompt
+    assert not (tmp_path / "logs" / "run-1" / "mcp").exists()
+
+
+def test_recall_wires_the_tool_without_touching_the_project(
+    fake_project, set_tasks, stub_env, engine_for, tmp_path
+):
+    """The config file goes in the run's log directory, never in the target.
+
+    A file dropped in the project shows up in `git status`, and a task that
+    leaves the tree dirty is discarded -- so wiring a tool would have failed
+    the task it was meant to help.
+    """
+    set_tasks({"id": "t-1", "title": "add a feature"})
+    stub_env("succeed", STUB_TASK_ID="t-1")
+
+    state = engine_for(recall=True).run()
+
+    assert [t.outcome for t in state.tasks] == [COMPLETED]
+    assert _tree_clean(fake_project)
+    config = tmp_path / "logs" / "run-1" / "mcp" / "t-1.json"
+    assert config.is_file()
+    assert not (fake_project / ".mcp.json").exists()
+
+    document = json.loads(config.read_text())
+    args = document["mcpServers"]["watermill"]["args"]
+    assert args[1:3] == ["mcp", "--root"]
+    assert "--cell" in args and "target" in args
+    assert "t-1" in args, "the task is stamped by the engine, not claimed by the agent"
+
+
+def test_a_wired_run_tells_the_agent_the_tool_exists(
+    fake_project, set_tasks, stub_env, engine_for, tmp_path
+):
+    set_tasks({"id": "t-1", "title": "add a feature"})
+    stub_env("succeed", STUB_TASK_ID="t-1")
+
+    engine_for(recall=True).run()
+
+    prompt = (tmp_path / "logs" / "run-1" / "prompts" / "t-1.txt").read_text()
+    assert "`recall` tool" in prompt
+    assert "propose" in prompt

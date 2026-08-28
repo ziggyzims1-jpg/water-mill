@@ -37,14 +37,20 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 | `watermill/report.py` | The morning report (pure) |
 | `watermill/ledger.py` | Append-only cross-project history, one line per run |
 | `watermill/tasklog.py` | The same, one line per **task**, plus the root-cause taxonomy |
+| `watermill/knowledge.py` | Findings: what was learned, when it was observed, and what superseded it |
+| `watermill/recall.py` | The context graph over all three logs, and the one budgeted way to query it |
+| `watermill/mcp.py` | The graph as a tool the agent calls mid-task. The only seam that runs *during* a task |
+| `watermill/review.py` | The monthly sweep, and the check that notices the sweep stopped happening |
 | `watermill/land.py` | The pull request: create, verify, merge. Never part of a run |
 | `watermill/shipper.py` | Ships both to Loki. A reader, never part of a run |
 | `watermill/publish.py` | Assembles a status snapshot of every project and PUTs it to Zimmy. A reader, never part of a run; unknown is omitted, never zeroed |
 | `projects/` | Vendored contracts for projects that carry none yet |
 | `docs/calibration/` | One findings record per project. The method is `docs/CALIBRATION.md` |
 | `docs/OBSERVABILITY.md` | Shipping to Loki, and the LogQL worth pinning |
+| `docs/KNOWLEDGE.md` | The context graph: why it is queried and never loaded, and the monthly sweep |
 | `docs/` | Contract spec, safety model, onboarding, calibration. **`STATUS.md` is where things actually are; `PLAN.md` is what is being built and why** |
 | `runs/` | Per-run logs. Gitignored, **never pruned automatically** |
+| `knowledge/` | `findings.jsonl` -- **committed**, unlike `runs/`. See `docs/KNOWLEDGE.md` |
 
 ## Conventions
 
@@ -97,19 +103,44 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
   the checks. A guess stored in the field a judgement belongs in is worse than a
   blank, because it counts.
 
-- **Knowledge has three destinations and they are not interchangeable.** A
+- **Knowledge has four destinations and they are not interchangeable.** A
   lesson that can be mechanised goes into the gate (unignorable) or
   `fence.paths` (checked against the diff). Only what neither can express goes
   into `notes` in the contract, which reaches the agent's prompt as advice and
   is never checked afterwards. Writing a mechanisable rule as a note downgrades
-  an enforced guarantee to a suggestion.
+  an enforced guarantee to a suggestion. The fourth is the context graph
+  (`knowledge/findings.jsonl`, `docs/KNOWLEDGE.md`) — queried rather than
+  carried, so it holds what is worth knowing *sometimes* rather than what is
+  worth saying every time. It is the weakest of the four, and
+  `remember --destination` plus the monthly sweep exist to keep a lesson from
+  settling there when one of the first three could hold it.
+
+- **A context surface is queried, never loaded.** The findings never enter a
+  prompt; six lines saying a `recall` tool exists do. Anything an agent reads on
+  every task is paid for on every task, so a surface that returns everything it
+  knows costs more as the factory learns more — which is backwards, and is how a
+  knowledge base ends up switched off. `recall` returns a few one-line hits
+  under a character budget and says how many it left; `detail` opens exactly
+  one. Knowledge growing must make the answers better, never bigger.
+
+- **A finding carries the date it was observed, and a belief that changes is
+  superseded rather than edited.** `observed_at` is when the thing happened and
+  is not the day it was typed up; staleness is measured from it, or from the
+  last time somebody confirmed it. A stale finding is still returned and
+  labelled, because it may be the only thing anybody knows. A finding that
+  stopped being true gets a `superseded_by` edge to the one that replaced it and
+  both lines stay, so looking up an old id says what the belief moved to instead
+  of returning nothing.
 
 - **Silence is a failure mode, so something has to watch for absence.** A night
   that never ran looks exactly like a quiet night: both produce nothing. That is
   why `docs/OBSERVABILITY.md` makes `count_over_time(...[24h])` the first panel
   and the thing to alert on. This is the second sighting of the rule — the first
   project's backup drill needed a separate job to notice the drill had stopped —
-  so by the rule below it now lives here.
+  so by the rule below it now lives here. Third sighting:
+  `watermill review --check`, which fails when the monthly knowledge sweep has
+  stopped running, because a sweep nobody ran and a month with nothing to review
+  produce identical output.
 
 - **Anything that talks to a third party stays off the run loop.** `ship` is its
   own command with its own exit code, so a Loki outage cannot hang a night or

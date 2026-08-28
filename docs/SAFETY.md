@@ -138,8 +138,19 @@ things it is easy to assume.
   human reading the diff, and a green `land` is not evidence that anybody has.
   While the ramp is young, `--no-merge` is the honest setting: it opens the
   pull request, proves it green, and leaves the button to a person.
-- **Stub-agent tests.** 123 of them, and they prove the orchestrator's control
+- **Stub-agent tests.** 126 of them, and they prove the orchestrator's control
   flow. They say nothing about how a real agent behaves inside it.
+- **The context graph.** `--recall` gives the agent a tool that reads what this
+  factory has learned (`docs/KNOWLEDGE.md`). It is *advice with a search box*,
+  and advice is a request: nothing recalled is checked afterwards, nothing
+  recalled can widen a task's scope, and the fence, the gate and the discard
+  decide the outcome exactly as they did before. Two consequences worth stating.
+  A finding is written by a person or proposed by an agent, so the text an agent
+  reads may be text an agent wrote — which is why a proposal is quarantined
+  until somebody promotes it, and why nothing in the store is ever treated as an
+  instruction. And it is the only thing here that runs *during* a task, which is
+  acceptable only because every call is a local file read: no network, no port,
+  nothing on the other end that can be slow.
 - **This document.** Doctrine that exists but does not load is decoration.
 
 ## The cleanup rule

@@ -25,13 +25,15 @@ from __future__ import annotations
 
 import contextlib
 import json
+import shlex
 import signal
+import sys
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import gitwork
+from . import gitwork, mcp
 from .agent import DEFAULT_AGENT_COMMAND, build_prompt, invoke
 from .caps import Caps, Tally, check
 from .contract import Contract
@@ -154,6 +156,7 @@ class Engine:
         skip_gate: bool = False,
         skip_backup: bool = False,
         pause_between=None,
+        recall: bool = False,
     ):
         self.project = project
         self.contract = contract
@@ -165,6 +168,7 @@ class Engine:
         self.skip_gate = skip_gate
         self.skip_backup = skip_backup
         self.pause_between = pause_between
+        self.recall = recall
         self.queue = WorkQueue(contract.queue, project.path)
         self._interrupted = False
         self._claimed: str | None = None
@@ -303,7 +307,11 @@ class Engine:
         self._claimed = task.id
 
         spec = self.queue.show(task.id)
-        prompt = build_prompt(task, self.contract, spec)
+        # Wired before the prompt is built, and the prompt is told what actually
+        # got wired. An agent promised a tool it does not have spends a turn
+        # discovering that and may distrust the rest of the prompt with it.
+        recall_args = self._recall_args(task)
+        prompt = build_prompt(task, self.contract, spec, recall=bool(recall_args))
         (self.log_dir / "prompts").mkdir(parents=True, exist_ok=True)
         (self.log_dir / "prompts" / f"{_safe(task.id)}.txt").write_text(
             prompt, encoding="utf-8"
@@ -316,6 +324,7 @@ class Engine:
             agent_command=self.agent_command,
             timeout=self.caps.task_timeout_seconds,
             log_path=self.log_dir / "tasks" / f"{_safe(task.id)}.json",
+            extra_args=recall_args,
         )
         duration = time.monotonic() - started
         cost = outcome.cost_cents
@@ -366,6 +375,43 @@ class Engine:
         )
         self.state.tally.record_success(cost)
         self._emit(f"   kept: {commit[0] if commit else 'no commit recorded'}")
+
+    def _recall_args(self, task: Task) -> str:
+        """Wire the context graph to this task's agent, or return nothing.
+
+        The config file is written into **this run's log directory**, never
+        into the target repository: a file dropped in the project shows up in
+        `git status`, and a task that leaves the tree dirty is discarded. The
+        fence would eventually catch it; the tree check catches it at once, and
+        neither should ever have to.
+
+        Every failure here degrades to running without the tool. A missing
+        tool disables a feature, never the run -- and the prompt is built from
+        what this returned, so it never advertises a tool that is not there.
+        """
+        if not self.recall:
+            return ""
+        entry = Path(self.project.root) / "bin" / "watermill"
+        command = [
+            sys.executable, str(entry), "mcp",
+            "--root", str(self.project.root),
+            "--cell", self.contract.name,
+            "--run", self.state.run_id,
+            "--task", task.id,
+        ]
+        path = self.log_dir / "mcp" / f"{_safe(task.id)}.json"
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(mcp.config_document(command), indent=2), encoding="utf-8"
+            )
+        except OSError as exc:
+            self.state.anomalies.append(f"could not wire recall for {task.id}: {exc}")
+            return ""
+        tools = ",".join(
+            f"mcp__{mcp.SERVER_NAME}__{name}" for name in ("recall", "detail", "propose")
+        )
+        return f"--mcp-config {shlex.quote(str(path))} --allowedTools {tools}"
 
     def _verify(self, task: Task, base_sha: str) -> str | None:
         """Independent checks. Returns a refusal reason, or None to keep the work.
