@@ -1,0 +1,81 @@
+# ZIM Dashboard Demo -- sequence 1b, the factory's first real-world-demo cell.
+#
+# Vendored here like zimmy-life-tracker's contract, and for the same reason:
+# the project has not adopted a `watermill.yaml` of its own yet. Repo naming
+# follows the Water Mill convention `<project>-cell-<cell#>`.
+#
+# The project is pre-scaffold: the gate below is what the scaffold beads will
+# build — by stamping from `watermill-cell-template`, which ships a proven
+# green `make verify`, not from scratch. Until the scaffold epic lands, runs
+# should be supervised. Once the cell carries its own watermill.yaml (the
+# template includes one), it wins over this file; delete this then.
+
+version: 1
+name: zim-dashboard-demo-cell-1b
+
+description: >
+  Dashboard demo for ZIM Consulting, a nonprofit consultancy. Role-based
+  logins (Admin / Employee / Client), cron-jobs on triggers, data
+  visualization with automated refresh and subscribers, and stubbed
+  integrations (Monday.com, QuickBooks, bill.com, SimpleFIN, evaluations,
+  marketing, scheduling). Skeleton-first: stub clients, mock fixtures, real
+  seams for the API calls.
+
+commands:
+  gate: make verify
+  install: make install
+
+git:
+  base_branch: main
+  target: branch
+  remote: origin
+
+review:
+  create: gh pr create --base {base} --head {branch} --title {title} --body {body}
+  verify: gh pr checks {branch} --watch --fail-fast
+  merge: gh pr merge {branch} --squash --delete-branch
+
+queue:
+  kind: beads
+  ready: bd ready --json
+  stale: bd list --status in_progress --json
+  show: bd show {id}
+  claim: bd update {id} --claim
+  release: bd update {id} --status open
+  close: bd close {id}
+  comment: bd comment {id} {text}
+  exclude_types:
+    - epic
+
+fence:
+  paths:
+    # The gate and CI, once they exist -- an agent that can edit these can
+    # make itself pass.
+    - Makefile
+    - .github/workflows/
+    # The schema, once it exists: append-only MIGRATIONS, same rule as zimmy.
+    - db.py
+    # The work graph and doctrine.
+    - .beads/
+    - CLAUDE.md
+    # Brand assets are the client's identity, not a task's to restyle.
+    - assets/branding/
+    # INTEGRATIONS ARE GATED BY DEFAULT — see docs/INTEGRATIONS.md in this
+    # repo. Provider modules live under services/integrations/ and stay
+    # fenced until a human wires the provider, proves it live, and files the
+    # wiring record (docs/integrations/<provider>.md in the cell). Ungate by
+    # replacing this entry with one entry per still-gated module in the same
+    # PR as the wiring record; new providers are added back here on creation.
+    - services/integrations/
+    - docs/integrations/
+
+environment:
+  min_free_gb: 2
+
+notes: []
+
+caps:
+  # New cell, night one: small.
+  max_tasks: 5
+  max_hours: 3
+  task_timeout_minutes: 30
