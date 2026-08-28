@@ -60,7 +60,7 @@ fence:
     - CLAUDE.md
     # Brand assets are the client's identity, not a task's to restyle.
     - assets/branding/
-    # INTEGRATIONS ARE GATED BY DEFAULT — see docs/INTEGRATIONS.md in this
+    # INTEGRATIONS ARE GATED BY DEFAULT — see docs/policies/INTEGRATIONS.md in this
     # repo. Provider modules live under services/integrations/ and stay
     # fenced until a human wires the provider, proves it live, and files the
     # wiring record (docs/integrations/<provider>.md in the cell). Ungate by
