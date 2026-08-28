@@ -83,6 +83,8 @@ Afterwards:
 ./bin/watermill tasks --unannotated           # what still needs a judgement
 ./bin/watermill annotate <proj> <id> <cause>  # record why one went wrong
 ./bin/watermill ship                          # push both to Loki for Grafana
+./bin/watermill publish --dry-run             # the status snapshot Zimmy would receive
+./bin/watermill publish                       # PUT it to Zimmy's Water Mill tab
 ```
 
 ## Layout
@@ -104,6 +106,7 @@ Afterwards:
 | `watermill/tasklog.py` | One line per task, and why each one went wrong |
 | `watermill/land.py` | The pull request: create, verify, merge. Off the run loop |
 | `watermill/shipper.py` | Ships both to Loki for Grafana |
+| `watermill/publish.py` | A status snapshot of every project, PUT to Zimmy. Off the run loop |
 | `projects/` | Vendored contracts, for projects that carry none yet |
 | `runs/` | Per-run logs. Gitignored, and **never pruned automatically** |
 | `docs/` | The contract spec, the safety model, onboarding, calibration |
@@ -114,6 +117,7 @@ Afterwards:
 - **[docs/SAFETY.md](docs/SAFETY.md)** — what is actually protecting you, and what is not
 - **[docs/ONBOARDING.md](docs/ONBOARDING.md)** — bringing a new project into the factory
 - **[docs/OBSERVABILITY.md](docs/OBSERVABILITY.md)** — shipping to Loki, and the LogQL worth pinning
+- **[docs/PUBLISH.md](docs/PUBLISH.md)** — the status snapshot Zimmy draws, its schema, and when to send it
 - **[docs/CALIBRATION.md](docs/CALIBRATION.md)** — the supervised session that has to happen before an unattended night, and where a lesson goes afterwards
 
 ## Registered projects

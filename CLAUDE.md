@@ -39,6 +39,7 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 | `watermill/tasklog.py` | The same, one line per **task**, plus the root-cause taxonomy |
 | `watermill/land.py` | The pull request: create, verify, merge. Never part of a run |
 | `watermill/shipper.py` | Ships both to Loki. A reader, never part of a run |
+| `watermill/publish.py` | Assembles a status snapshot of every project and PUTs it to Zimmy. A reader, never part of a run; unknown is omitted, never zeroed |
 | `projects/` | Vendored contracts for projects that carry none yet |
 | `docs/calibration/` | One findings record per project. The method is `docs/CALIBRATION.md` |
 | `docs/OBSERVABILITY.md` | Shipping to Loki, and the LogQL worth pinning |
