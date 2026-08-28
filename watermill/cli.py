@@ -19,7 +19,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import land, ledger, report, shipper, tasklog
+from . import land, ledger, publish, report, shipper, tasklog
 from .caps import Caps
 from .contract import CONTRACT_FILENAME
 from .engine import Engine
@@ -545,6 +545,33 @@ def cmd_ship(args) -> int:
     return 0
 
 
+def cmd_publish(args) -> int:
+    """PUT a status snapshot of every project to the Zimmy Life Tracker.
+
+    A reader, like `ship`: never part of a run, never a write to a target
+    repository or to the ledger. A missing URL or key is a refusal (3) and
+    nothing is sent; a push that was attempted and did not land is a failure
+    (1). Both messages name what to set and neither prints the key.
+    """
+    root = factory_root(args.root)
+    summary = publish.publish(
+        root, url=args.to, key_env=args.key_env, project=args.project,
+        dry_run=args.dry_run, out=Path(args.out) if args.out else None,
+    )
+    if summary["dry_run"]:
+        if summary["out"] is not None:
+            print(f"wrote {summary['out']}")
+        else:
+            print(summary["text"], end="")
+        return 0
+    snapshot = summary["snapshot_id"]
+    print(
+        f"published snapshot {snapshot if snapshot is not None else '(no id returned)'} "
+        f"at {summary['published_at']} ({summary['status']})"
+    )
+    return 0
+
+
 # -- parser ----------------------------------------------------------------
 
 
@@ -651,6 +678,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--resend", action="store_true",
                    help="ignore the high-water mark and re-send everything")
     p.set_defaults(func=cmd_ship)
+
+    p = sub.add_parser("publish", help="push a status snapshot to the Zimmy Life Tracker")
+    p.add_argument("--to", help=f"Zimmy base URL (default: ${publish.URL_ENV})")
+    p.add_argument("--key-env", metavar="NAME",
+                   help=f"environment variable holding the API key (default: {publish.KEY_ENV})")
+    p.add_argument("--dry-run", action="store_true",
+                   help="print the document; send nothing")
+    p.add_argument("--out", metavar="FILE", help="with --dry-run, write the document here")
+    p.add_argument("--project", help="only this project (default: every registered one)")
+    p.set_defaults(func=cmd_publish)
 
     p = sub.add_parser("release", help="hand a stuck task back to the queue")
     p.add_argument("project")
