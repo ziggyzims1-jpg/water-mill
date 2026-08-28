@@ -75,3 +75,13 @@ def test_a_spec_that_never_names_the_task_gets_the_id_prepended():
 def test_the_gate_command_is_named():
     prompt = build_prompt(TASK, _contract(commands={"gate": "./run-ci.sh"}), "t-1: x")
     assert "./run-ci.sh" in prompt
+
+
+def test_the_agent_is_told_to_sign_off_with_a_handoff():
+    """Every agent ends with a handoff -- also, and especially, when stuck."""
+    prompt = build_prompt(TASK, _contract())
+    assert "\nHANDOFF\n" in prompt
+    assert "did not\nwork" in prompt
+    tail = prompt.split("HANDOFF", 1)[1]
+    assert "stuck" in prompt.split("## Before you sign off", 1)[1]
+    assert "Name files and functions" in tail
