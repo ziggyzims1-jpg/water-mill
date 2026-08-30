@@ -48,9 +48,16 @@ TASK = "task"
 RUN = "run"
 
 #: Provenance tiers, in descending order of what an answer may claim.
+#:
+#: `REJECTED` is its own tier rather than a flavour of `PROPOSED` because the
+#: two are read differently -- a proposal is waiting for a person, a rejection
+#: has had one -- but they are searched identically: neither is ever returned.
+#: Deriving the tier from anything other than the record's status is how the
+#: quarantine leaked once already; see `build`.
 JUDGED = "judged"
 OBSERVED = "observed"
 PROPOSED = "proposed"
+REJECTED = "rejected"
 
 #: The result budget. Small on purpose -- see the module docstring. A caller
 #: may lower these, and `MAX_LIMIT` is the ceiling nobody can raise.
@@ -207,7 +214,16 @@ def build(root: Path, as_of: date | None = None) -> Graph:
 
     for record in knowledge.read(root, include_superseded=True):
         status = record.status
-        provenance = PROPOSED if status == knowledge.PROPOSED else JUDGED
+        # Every status that is not a person's standing judgement gets its own
+        # tier. Written as a mapping rather than as `PROPOSED if ... else
+        # JUDGED`, which is what this was: that spelling made *rejected* the
+        # one status it did not name, so rejecting a proposal promoted it --
+        # out of quarantine and into `search` labelled as a human judgement,
+        # which is the exact opposite of what the person deciding asked for.
+        provenance = {
+            knowledge.PROPOSED: PROPOSED,
+            knowledge.REJECTED: REJECTED,
+        }.get(status, JUDGED)
         graph.nodes.append(
             Node(
                 id=record.id,
@@ -397,6 +413,13 @@ def detail(graph: Graph, node_id: str, budget_chars: int = 2000) -> str:
 
     lines = [f"{node.id}  [{node.label or node.kind}] {node.cell} {node.date}".rstrip()]
     lines.append(f"provenance: {node.provenance}")
+    if node.provenance == REJECTED:
+        # Reachable with an id from a sweep or a commit message. Saying nothing
+        # would render a rejected guess as ordinary text under an id, which is
+        # the shape somebody trusts.
+        lines.append("REJECTED: a person looked at this and did not agree with it.")
+    elif node.provenance == PROPOSED:
+        lines.append("PROPOSED: an agent's guess, not yet reviewed by anybody.")
     if node.stale:
         age = node.meta.get("age_days")
         lines.append(
@@ -496,6 +519,11 @@ def stale(graph: Graph) -> list[Node]:
 
 def _searchable(node: Node, include_proposed: bool) -> bool:
     if node.meta.get("superseded_by"):
+        return False
+    if node.provenance == REJECTED:
+        # Not even for `--include-proposed`, which is a person asking to see
+        # what is *waiting* on them. A rejection is a decision already taken,
+        # and re-surfacing it is asking the same question twice.
         return False
     return include_proposed or node.provenance != PROPOSED
 

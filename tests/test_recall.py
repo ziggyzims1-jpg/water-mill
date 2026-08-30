@@ -83,6 +83,31 @@ def test_a_promoted_proposal_becomes_visible(tmp_path: Path):
     assert recall.search(recall.build(tmp_path), "migrations").hits
 
 
+def test_a_rejected_proposal_stays_invisible(tmp_path: Path):
+    """Rejecting must not be the thing that publishes it.
+
+    The provenance tier was derived as "proposed, else judged", which left
+    `rejected` falling through to `judged`: a person who disagreed with a guess
+    made it searchable by every agent, wearing the label reserved for a human
+    judgement. The one decision that is supposed to bury a finding was the only
+    one that released it.
+    """
+    line = knowledge.propose(
+        tmp_path, cell="zimmy", kind="lesson", text="The gate is safe to skip on Fridays."
+    )
+    knowledge.decide(tmp_path, line["id"], promote=False, why="wrong and dangerous")
+    graph = recall.build(tmp_path)
+
+    assert recall.search(graph, "gate skip fridays").hits == []
+    assert recall.search(graph, "gate skip fridays", include_proposed=True).hits == []
+    assert graph.by_id(line["id"]).provenance == recall.REJECTED
+    # It is not waiting on anybody either -- the sweep already heard about it.
+    assert recall.proposals(graph) == []
+    assert recall.unmechanised(graph) == []
+    # Still openable by id, and honest about what happened to it.
+    assert "REJECTED" in recall.detail(graph, line["id"])
+
+
 def test_a_superseded_finding_is_not_returned_but_is_still_findable_by_id(tmp_path: Path):
     old = _finding(tmp_path, "The academic solver licence is current.")
     new = _finding(tmp_path, "The solver licence expired; HiGHS is the fallback.")
@@ -123,10 +148,21 @@ def test_the_result_set_is_capped_however_much_is_known(tmp_path: Path):
 
 
 def test_the_limit_has_a_ceiling_no_caller_can_raise(tmp_path: Path):
+    """The ceiling, with the character budget taken out of the way.
+
+    Asserted against an effectively unbounded `budget_chars` on purpose. With
+    the default budget the answer is cut to a handful of lines before `limit`
+    is ever consulted, so this passed with the `MAX_LIMIT` clamp deleted --
+    it was measuring the budget and reporting on the ceiling.
+    """
     for index in range(80):
         _finding(tmp_path, f"A finding about the gate, number {index}.")
-    answer = recall.search(recall.build(tmp_path), "gate", limit=500)
-    assert len(answer.hits) <= recall.MAX_LIMIT
+    answer = recall.search(
+        recall.build(tmp_path), "gate", limit=500, budget_chars=10**6
+    )
+    assert len(answer.hits) == recall.MAX_LIMIT
+    assert answer.matched == 80
+    assert answer.truncated
 
 
 def test_the_rendered_answer_stays_under_the_character_budget(tmp_path: Path):

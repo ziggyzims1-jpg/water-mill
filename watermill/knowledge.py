@@ -499,7 +499,7 @@ def _clean_refs(refs: dict | None) -> dict:
 
 
 def _new_id(observed_at: str) -> str:
-    """`f-20260828-a1b2`: the date it happened, then four hex.
+    """`f-20260828-a1b2c3`: the date it happened, then six hex.
 
     The date is in the identifier on purpose. A finding id turns up in commit
     messages, in a contract's notes and in another finding's supersede edge,

@@ -111,6 +111,12 @@ watermill proposals --promote f-...        # agents can now recall it
 watermill proposals --reject f-... --why "not true"
 ```
 
+A rejected proposal stays in the file and stays invisible: rejection is a
+judgement, not a deletion, so the line survives and `recall` still will not
+return it -- to an agent or to `--include-proposed`. `detail` on its id says it
+was rejected rather than printing it as ordinary text, because an id in a
+commit message outlives the decision behind it.
+
 This is the task log's `hint`-versus-annotation boundary one level up. A machine
 records what happened; only a person records why. A guess stored in the field a
 judgement belongs in is worse than a blank, because it counts.
