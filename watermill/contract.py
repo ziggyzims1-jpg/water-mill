@@ -529,6 +529,36 @@ class Notes:
 
 
 @dataclass(frozen=True)
+class Knowledge:
+    """Whether a run offers the agent the context graph as a tool.
+
+    `recall` is the one wiring decision the graph needs from a contract, and
+    it lives here rather than in the CLI's defaults because it is a property
+    of the project, not of the person typing the command: a project whose seam
+    has been proven by a real run keeps it on, one that has not keeps it off,
+    and the command line overrides either way (`--recall` / `--no-recall`).
+    Off is the default for a new contract for the reason `docs/KNOWLEDGE.md`
+    gives -- a flag that changes the command every task is sent is not where
+    you discover the flag is wrong.
+    """
+
+    recall: bool = False
+
+    _KEYS = {"recall"}
+
+    @classmethod
+    def parse(cls, raw: Any) -> Knowledge:
+        got = _require_mapping(raw, "knowledge")
+        _reject_unknown(got, cls._KEYS, "knowledge")
+        recall = got.get("recall", False)
+        if not isinstance(recall, bool):
+            raise ContractError(
+                f"knowledge.recall: expected true or false, got {recall!r}"
+            )
+        return cls(recall=recall)
+
+
+@dataclass(frozen=True)
 class Contract:
     """A validated project contract."""
 
@@ -541,12 +571,13 @@ class Contract:
     environment: Environment = field(default_factory=Environment)
     caps: Caps = field(default_factory=Caps)
     notes: Notes = field(default_factory=Notes)
+    knowledge: Knowledge = field(default_factory=Knowledge)
     description: str = ""
     source: Path | None = None
 
     _TOP = {
         "version", "name", "description", "commands", "git", "queue",
-        "review", "fence", "environment", "caps", "notes",
+        "review", "fence", "environment", "caps", "notes", "knowledge",
     }
 
     @classmethod
@@ -583,6 +614,7 @@ class Contract:
             environment=Environment.parse(got.get("environment")),
             caps=Caps.parse(got.get("caps")),
             notes=Notes.parse(got.get("notes")),
+            knowledge=Knowledge.parse(got.get("knowledge")),
             source=source,
         )
 

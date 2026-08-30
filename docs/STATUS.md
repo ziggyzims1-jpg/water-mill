@@ -60,7 +60,7 @@ arrived early with Water Mill; several Phase-0 items were skipped entirely.
 | Shipping to Loki | `watermill ship` reads the ledger and task log and pushes what is new. Off the run loop, high-water mark advances only after a push returned. **Pointed at a real Loki, which accepted the push** — the transport is no longer a guess |
 | Publishing to Zimmy | `watermill publish` assembles one status snapshot per project (queue, runs, tasks, pull requests, attention) and PUTs it to `/api/watermill`. **Met a real Zimmy once** (2026-08-28): a local zimmy-life-tracker 4.8.0 on a scratch database accepted a real snapshot via an admin API key (`published snapshot 1 ... (201)`) and its Water Mill tab rendered it -- 9 runs, 100% keep rate, five epics, the attention list. Not yet run against the Pi, and not yet on a schedule. Known gap: a pull request whose title lacks a bead id arrives with `task_id: null` (millstone titles carry the id only in the body), so the tab shows the branch instead |
 | The knowledge surfaces | `notes` in the contract reaches the prompt; `tasklog.py` records one line per task; `watermill tasks` counts root causes across projects. **All three are empty** — see below |
-| The context graph | `watermill/knowledge.py` + `recall.py` + `mcp.py` + `review.py`: dated findings, superseded rather than edited, queried under a hard result budget, offered to the agent mid-task as an MCP tool, and swept monthly. 97 tests, `docs/KNOWLEDGE.md`. **It holds nothing, and the tool has never been called by a real agent** — see below |
+| The context graph | `watermill/knowledge.py` + `recall.py` + `mcp.py` + `review.py`: dated findings, superseded rather than edited, queried under a hard result budget, offered to the agent mid-task as an MCP tool, and swept monthly. `docs/KNOWLEDGE.md`. **It holds no human findings yet; the tool has been reached by a real agent once** — see below |
 
 ## What is not
 
@@ -103,18 +103,15 @@ outside.
   finds; filling them in from either project's CLAUDE.md would put guesses in
   every prompt, and a guess is indistinguishable from a lesson once it is in the
   list.
-- **The context graph's tool has never been called by a real agent.** The
-  protocol is tested end to end — handshake, `tools/list`, `tools/call`, the
-  quarantine, a malformed frame — against real newline-delimited JSON-RPC, and
-  the engine's wiring is tested against a real git repository. What is *not*
-  tested is the thing that will break: whether `claude -p` accepts
-  `--mcp-config` and `--allowedTools` spelled the way `engine._recall_args`
-  spells them, and whether an MCP call needs more than that under
-  `--permission-mode acceptEdits`. That is exactly the status `land` had before
-  it met a real forge and found a bug on its first attempt, so `--recall` is
-  **off by default**, and the way to learn is one supervised task with it on,
-  then `runs/<project>/<run>/tasks/<task>.json` for whether the tool was called
-  at all.
+- **The context graph's tool has been called by a real agent, once.** Run
+  `20260830-090740` (supervised, `--recall`): the first attempt failed with
+  `CONNECTION_CLOSED` because `engine._recall_args` put the global `--root`
+  after the `mcp` subcommand -- the exact class of bug this entry predicted --
+  and the test had pinned the broken order. Fixed in review (#15); the re-run
+  recorded one `recall` search and one proposal. `zimmy-life-tracker`'s
+  contract now carries `knowledge: {recall: true}`. The graph still holds no
+  human-written findings; the one unanswered question from that run is the
+  first to write.
 - **`bd` is installed and preflight is green.** `./bin/watermill doctor` reports
   zero refusals for `zimmy-life-tracker`. This was the one thing blocking a
   first run and it is no longer blocking anything.
@@ -154,7 +151,7 @@ Every number that should be climbing and is currently zero.
 | Tasks with a recorded root cause | **0** -- the gap that matters |
 | Contract notes carried into a prompt | **0** |
 | Findings in the context graph | **0** |
-| Recall calls made by a real agent | **0** |
+| Recall calls made by a real agent | **1** (run `20260830-090740`) |
 | Monthly knowledge sweeps recorded | **0** |
 | Tier-1 tasks queued and ready | **48** |
 | Fenced paths enforced | **24** |
