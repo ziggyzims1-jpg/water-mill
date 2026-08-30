@@ -85,3 +85,24 @@ def test_the_agent_is_told_to_sign_off_with_a_handoff():
     tail = prompt.split("HANDOFF", 1)[1]
     assert "stuck" in prompt.split("## Before you sign off", 1)[1]
     assert "Name files and functions" in tail
+
+
+def test_a_run_without_the_context_graph_says_nothing_about_it():
+    """An agent told about a tool it does not have spends a turn discovering
+    that, and may distrust the rest of the prompt with it."""
+    assert "recall" not in build_prompt(TASK, _contract())
+
+
+def test_a_wired_run_describes_the_tool_and_carries_no_findings():
+    """The knowledge itself is never pasted in. A prompt that carried every
+    finding would cost tokens on every task forever and get worse as the
+    factory learned more, which is the reverse of what a memory is for."""
+    prompt = build_prompt(TASK, _contract(), recall=True)
+    assert "`recall` tool" in prompt
+    assert "propose" in prompt
+    assert len(prompt) - len(build_prompt(TASK, _contract())) < 800
+
+
+def test_the_task_still_leads_a_wired_prompt():
+    prompt = build_prompt(TASK, _contract(), "t-1: the real work", recall=True)
+    assert prompt.index("the real work") < prompt.index("recall")
