@@ -109,9 +109,15 @@ outside.
   after the `mcp` subcommand -- the exact class of bug this entry predicted --
   and the test had pinned the broken order. Fixed in review (#15); the re-run
   recorded one `recall` search and one proposal. `zimmy-life-tracker`'s
-  contract now carries `knowledge: {recall: true}`. The graph still holds no
-  human-written findings; the one unanswered question from that run is the
-  first to write.
+  contract now carries `knowledge: {recall: true}`.
+- **The graph holds its first sixteen human-written findings (2026-08-30).**
+  All from the mill crew standing up `zim-dashboard-demo-cell-1b` (PRs #1–#4,
+  now a registered project): every code PR was `approve_after_fixes`, and each
+  defect sluice found — a 500 on malformed login JSON, a missing `SameSite`,
+  a cross-session React state leak, an SPA fallback swallowing API 404s, a
+  dark-mode contrast hole inherited from the template — is a dated finding
+  with its task, path and commit. Three carry `--cause gate-hole` and none
+  is mechanised yet; the first sweep will name them.
 - **`bd` is installed and preflight is green.** `./bin/watermill doctor` reports
   zero refusals for `zimmy-life-tracker`. This was the one thing blocking a
   first run and it is no longer blocking anything.

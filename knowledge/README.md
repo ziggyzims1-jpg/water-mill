@@ -23,7 +23,10 @@ watermill review                                  # the monthly sweep
 
 Everything else is in [`docs/KNOWLEDGE.md`](../docs/KNOWLEDGE.md).
 
-**It is empty, and that is correct.** A finding is written after a task has gone
+**It was empty until 2026-08-30, and that was correct.** The first sixteen
+findings came from the mill standing up `zim-dashboard-demo-cell-1b` (PRs #1–#4),
+every one of them something sluice found broken in a task and fixed on the
+branch. A finding is written after a task has gone
 wrong. Seeding it from either project's CLAUDE.md would put guesses in front of
 every future agent, and a guess is indistinguishable from a lesson once it is in
 the list.
