@@ -66,7 +66,7 @@ or a bug you found. Both are worth more than a green run.
 Do only what this task names. Do not refactor code you happened to read, do not
 fix unrelated problems you noticed, and do not widen the change because it
 looked easy. Anything else you find is worth filing, not fixing.
-{notes_block}
+{recall_block}{notes_block}
 ## When you are done
 
 If the task is complete and the gate passes, commit your work. The commit
@@ -122,6 +122,34 @@ class Outcome:
 
 
 
+#: What the prompt says about the tool, and all it says. The knowledge itself is
+#: never pasted in here: a prompt that carries every finding costs tokens on
+#: every task forever and gets worse as the factory learns more, which is the
+#: reverse of what a memory is for. Six lines that make a query possible beat
+#: sixty that answer a question nobody asked.
+RECALL_BLOCK = """
+## What this factory already knows
+
+You have a `recall` tool over every failure, root cause and finding from every
+project this factory drives. Call it when a gate fails for a reason you do not
+recognise, before changing a file whose conventions you are guessing at, or
+when the spec seems to assume something. It answers in a few lines; `detail`
+opens one of them. If this task teaches you something the next agent would
+want, `propose` it in one sentence -- a person reviews it before anyone reads
+it, so an uncertain finding is worth filing rather than worth suppressing.
+"""
+
+
+def _recall_block(enabled: bool) -> str:
+    """Rendered only when the tool is actually wired to this run.
+
+    An agent told about a tool it does not have will spend a turn discovering
+    that, and may conclude the whole prompt is describing a different setup
+    than the one it is in.
+    """
+    return RECALL_BLOCK if enabled else ""
+
+
 def _notes_block(contract: Contract) -> str:
     """The project's accumulated notes, or nothing at all.
 
@@ -144,7 +172,9 @@ def _notes_block(contract: Contract) -> str:
     )
 
 
-def build_prompt(task: Task, contract: Contract, spec: str = "") -> str:
+def build_prompt(
+    task: Task, contract: Contract, spec: str = "", *, recall: bool = False
+) -> str:
     """The exact text handed to the agent for one task.
 
     `spec` is whatever the queue's `show` command printed. It is included
@@ -173,6 +203,7 @@ def build_prompt(task: Task, contract: Contract, spec: str = "") -> str:
         task_block=task_block,
         gate=contract.commands.gate,
         fence_block=fence_block,
+        recall_block=_recall_block(recall),
         notes_block=_notes_block(contract),
         task_id=task.id,
     )
@@ -185,6 +216,7 @@ def invoke(
     agent_command: str,
     timeout: float,
     log_path: Path | None = None,
+    extra_args: str = "",
 ) -> Outcome:
     """Run the agent once on one task.
 
@@ -192,13 +224,18 @@ def invoke(
     thousands of characters, and an argv limit is a truncation that looks like
     the agent misunderstanding a complete instruction.
 
+    `extra_args` is appended to the command rather than merged into it. What
+    goes there is the recall tool's wiring, which is the factory's business and
+    not the contract's -- a project should not have to restate the agent
+    command to gain a tool the orchestrator is offering it.
+
     The full JSON transcript is captured in memory to be metered and is written
     to `log_path` for the morning. It is not streamed to the log directly,
     because the meter needs the whole document and a half-written file on a
     timeout would parse as no cost when the agent in fact spent one.
     """
     result = run(
-        agent_command,
+        f"{agent_command} {extra_args}".strip() if extra_args else agent_command,
         cwd=cwd,
         timeout=timeout,
         stdin_text=prompt,

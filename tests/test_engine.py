@@ -12,6 +12,7 @@ a run that reports no cost.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -410,3 +411,111 @@ def test_the_prompt_is_written_for_the_morning(
     prompt = (tmp_path / "logs" / "run-1" / "prompts" / "t-1.txt").read_text()
     assert "Rename the widget." in prompt
     assert "PROTECTED.md" in prompt  # the fence is stated as well as enforced
+
+
+# -- the context graph, wired to a run -------------------------------------
+
+
+def test_recall_is_not_wired_unless_the_run_asks_for_it(
+    fake_project, set_tasks, stub_env, engine_for, tmp_path
+):
+    """Off by default. The seam has never met a real agent, and a default that
+    changes the command every task is sent is not the place to find that out."""
+    set_tasks({"id": "t-1", "title": "add a feature"})
+    stub_env("succeed", STUB_TASK_ID="t-1")
+
+    engine_for().run()
+
+    prompt = (tmp_path / "logs" / "run-1" / "prompts" / "t-1.txt").read_text()
+    assert "recall" not in prompt
+    assert not (tmp_path / "logs" / "run-1" / "mcp").exists()
+
+
+def test_recall_wires_the_tool_without_touching_the_project(
+    fake_project, set_tasks, stub_env, engine_for, tmp_path
+):
+    """The config file goes in the run's log directory, never in the target.
+
+    A file dropped in the project shows up in `git status`, and a task that
+    leaves the tree dirty is discarded -- so wiring a tool would have failed
+    the task it was meant to help.
+    """
+    set_tasks({"id": "t-1", "title": "add a feature"})
+    stub_env("succeed", STUB_TASK_ID="t-1")
+
+    state = engine_for(recall=True).run()
+
+    assert [t.outcome for t in state.tasks] == [COMPLETED]
+    assert _tree_clean(fake_project)
+    config = tmp_path / "logs" / "run-1" / "mcp" / "t-1.json"
+    assert config.is_file()
+    assert not (fake_project / ".mcp.json").exists()
+
+    document = json.loads(config.read_text())
+    args = document["mcpServers"]["watermill"]["args"]
+    assert args[1] == "--root" and args[3] == "mcp", (
+        "--root is a global option and has to precede the subcommand; the other "
+        "order exits 2 before a frame is read"
+    )
+    assert "--cell" in args and "target" in args
+    assert "t-1" in args, "the task is stamped by the engine, not claimed by the agent"
+
+
+def test_the_wired_command_actually_starts_a_server_that_answers(
+    fake_project, set_tasks, stub_env, engine_for, tmp_path
+):
+    """Run the argv the engine wrote, and speak the protocol to it.
+
+    Every other test here asserts the *shape* of that command, and the shape
+    was wrong for a reason no shape assertion can see: `--root` is a global
+    option, and spelled after the subcommand argparse exits 2 before reading a
+    frame. The agent's transcript then shows `CONNECTION_CLOSED`, which is
+    indistinguishable from an agent that simply did not call the tool -- so
+    the bug survived a green suite and was found by a real run.
+
+    This executes it. A command that cannot complete a handshake fails here.
+    """
+    set_tasks({"id": "t-1", "title": "add a feature"})
+    stub_env("succeed", STUB_TASK_ID="t-1")
+    engine_for(recall=True).run()
+
+    document = json.loads(
+        (tmp_path / "logs" / "run-1" / "mcp" / "t-1.json").read_text()
+    )
+    server = document["mcpServers"]["watermill"]
+    # The engine points `bin/watermill` at its own factory root, which under
+    # test is a tmp directory holding no checkout. Everything after argv[0] --
+    # the ordering that was wrong -- is the engine's own, unmodified.
+    argv = [server["command"], str(Path(__file__).resolve().parent.parent / "bin" / "watermill")]
+    argv += server["args"][1:]
+    frames = [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+         "params": {"protocolVersion": "2024-11-05"}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+    ]
+    completed = subprocess.run(
+        argv,
+        input="".join(json.dumps(f) + "\n" for f in frames),
+        capture_output=True, text=True, timeout=60,
+    )
+    assert completed.returncode == 0, completed.stderr
+    replies = [json.loads(line) for line in completed.stdout.splitlines() if line.strip()]
+    assert [r["id"] for r in replies] == [1, 2]
+    assert replies[0]["result"]["serverInfo"]["name"] == "watermill"
+    assert {t["name"] for t in replies[1]["result"]["tools"]} == {
+        "recall", "detail", "propose"
+    }
+
+
+def test_a_wired_run_tells_the_agent_the_tool_exists(
+    fake_project, set_tasks, stub_env, engine_for, tmp_path
+):
+    set_tasks({"id": "t-1", "title": "add a feature"})
+    stub_env("succeed", STUB_TASK_ID="t-1")
+
+    engine_for(recall=True).run()
+
+    prompt = (tmp_path / "logs" / "run-1" / "prompts" / "t-1.txt").read_text()
+    assert "`recall` tool" in prompt
+    assert "propose" in prompt

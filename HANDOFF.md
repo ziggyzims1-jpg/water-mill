@@ -1,5 +1,10 @@
 # Handoff — Water Mill as the AI Software Factory
 
+> **A newer handoff exists: [`HANDOFF-2026-08-28.md`](HANDOFF-2026-08-28.md)**
+> (the context graph, PR #15). This file is the first session's snapshot and
+> its numbers are of that date — 132 tests, not the current count. The live
+> position is always `docs/STATUS.md`.
+
 **Written:** 2026-08-26 · **Branch:** `claude/chat-session-6rmwhn` — **merged
 to `main` as #1** · **Gate:** `make verify` green — ruff + 132 tests, ~17s
 
