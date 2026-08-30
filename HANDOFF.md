@@ -346,3 +346,140 @@ cap that assumes the run is misbehaving, so it is the only one that fails closed
 `--unattended` refuses `--skip-gate` and `--skip-backup` outright. A skipped
 baseline makes every later result in the run unattributable, which is acceptable
 only while somebody is reading the diff.
+
+---
+
+## Sluice (2026-08-30)
+
+Review of **PR #15** (`claude/water-mill-context-graph-r8v586`, the context
+graph). Verdict: **approve after fixes** — two commits pushed, both for real
+bugs, one of which made the headline feature not work at all. Head is now
+`4debd81`, CI `verify` **pass** (40s), mergeable. Do not re-review from the
+branch's own `HANDOFF-2026-08-28.md`: its step 2 was right that the MCP wiring
+was unproven, and it was broken.
+
+## What I verified independently
+
+- `make verify` in a fresh worktree with a real `.venv` (`make install`):
+  **green at every stage** — before my changes 373 passed, after 375.
+- **Mutation tests.** Budget: deleting the `budget_chars` break and raising
+  `DEFAULT_LIMIT` are both caught. Deleting the `MAX_LIMIT` clamp was **not**
+  caught — see the fix below. Quarantine: reverting either half of my
+  `recall.build` fix is caught by the new test.
+- **The proof run.** Real `claude -p` 2.1.251, twice: once with the argv
+  `engine._recall_args` builds (failed, `CONNECTION_CLOSED`), once corrected
+  (the agent called the tool and quoted a seeded finding back verbatim).
+  Then a full `watermill run ... --supervised --recall`, run `20260830-090740`.
+
+## The two fixes
+
+**`4debd81` — `engine._recall_args` wrote a command that could not start.**
+It spelled `watermill mcp --root <path> ...`, but `--root` belongs to the
+top-level parser and must precede the subcommand. argparse exited 2 before
+reading a frame, so every wired task got `CONNECTION_CLOSED` and no tool.
+This is the third row of the branch handoff's own table, and it was invisible
+in exactly the way that table feared: from a transcript, a server that dies at
+startup looks identical to an agent that chose not to call the tool. The test
+`test_recall_wires_the_tool_without_touching_the_project` asserted
+`args[1:3] == ["mcp", "--root"]` — it **pinned the broken order**, describing
+the command's shape and never running it. It now checks the order that parses,
+and a new `test_the_wired_command_actually_starts_a_server_that_answers`
+executes the engine's own argv and completes a handshake. Both fail if the old
+order is restored.
+
+**`86e05cf` — rejecting a proposal was the one decision that published it.**
+`recall.build` derived provenance as `PROPOSED if status == PROPOSED else
+JUDGED`, which named every status except `rejected`. So `proposals --reject`
+moved a finding *out* of quarantine and into `search`, wearing the `judged`
+label reserved for a human judgement — the inverse of what the person deciding
+asked for, and worse than doing nothing. `REJECTED` is now its own provenance
+tier, `_searchable` excludes it for every caller including
+`--include-proposed`, and `detail` says so rather than printing the text
+plainly. Also in that commit: the `MAX_LIMIT` ceiling test passed with the
+clamp deleted (the character budget cut the answer long before `limit` was
+consulted — it measured the budget and reported on the ceiling); it now asserts
+against an unbounded `budget_chars`. Plus a one-word docstring fix in
+`knowledge._new_id` ("four hex" vs the six the code writes) and a paragraph in
+`docs/KNOWLEDGE.md` on what rejection does.
+
+## The proof run — run `20260830-090740`, classified: **calls recorded**
+
+Run on a **throwaway rig**, never the real checkouts: a clone of
+zimmy-life-tracker with its own copied beads DB and `origin` pointed at a dead
+path, plus a detached water-mill worktree at the PR head. Both deleted. The
+real zimmy checkout was never touched (still `main`, same dirty
+`brain/handoffs/*`, no `watermill/*` branch), and the real water-mill `runs/`
+and `knowledge/` were not written to.
+
+Task `Zimmy Life Tracker-0p5` escalated — but for an unrelated reason: the
+nested agent's permission layer refused `pytest`, `ruff`, `make` and
+`git add/commit`, so it could not run the gate or commit. That is an artifact
+of running `claude -p` inside an already-sandboxed session, not a PR #15
+defect. The seam itself worked:
+
+```
+$ ./bin/watermill recall --usage
+1 search(es), 0 opened, 1 proposed, across 1 task(s)
+0% of searches returned something.
+
+Asked and not answered -- these are the findings worth writing:
+    command requires approval sandbox pytest git commit blocked
+```
+
+The agent called `recall` (0 hits, correct — the graph is empty) and `propose`,
+filing `f-20260830-71ef33`. Provenance was stamped by the orchestrator, not
+claimed: the finding carries `cell`, `run_id` and `task_id` the engine supplied,
+`author: agent`, and `watermill recall` cannot see it while `watermill
+proposals` lists it. Quarantine confirmed on real data, not just in tests.
+
+**For the lander: the branch handoff's `grep -c mcp__watermill
+runs/.../tasks/<task>.json` is not a valid detector — it returned `0` on this
+successful run.** `--output-format json` persists only the final result, not
+the tool-call transcript. `recall --usage` is the only thing that answers the
+question, which is what `usage.py` was built for.
+
+## Not fixed — worth a follow-up bead, none blocking
+
+- **`recall._clip` collapses whitespace only when the text has no newline**
+  (`" ".join(text.split()) if "\n" not in text else text`). That is backwards
+  for `Hit.line()`, whose whole contract is one line per hit: a multi-line
+  `text` renders as multiple lines and skews the budget. Reachable by a person
+  typing a multi-line `remember`, since `knowledge.record` does not reject
+  newlines. The same helper serves `detail`, where preserving a paragraph is
+  right — so the fix is probably two helpers, which is more than a review
+  should change.
+- **`review.sweep` uses `if elapsed` where it means `if elapsed is not None`.**
+  A sweep recorded today (`elapsed == 0`) falls back to a 35-day window instead
+  of a 0-day one, so running `review` twice in a day reports the same usage
+  stats. Harmless today; it is the classic falsy-zero bug and will read as a
+  glitch the first time somebody notices.
+- **`knowledge/findings.jsonl` is not in the commit.** Not gitignored either —
+  only `runs/` is — so the design holds and the first real finding will be
+  committable. The PR body's table calls the file "Committed", which is a claim
+  about a file that does not exist yet. Leave it empty (the branch handoff is
+  right about not seeding it); the row is just slightly ahead of itself.
+- **Preflight refuses a fresh checkout** on `verified restore` (no backup
+  heartbeat) and, under any path containing `tmp`/`test`/`scratch`, on the
+  baseline gate — zimmy's `backup_restore._check_target` treats a "scratchy"
+  cwd as permission, so `test_refuses_a_non_local_connection_string` fails from
+  `/private/tmp`. Pre-existing and environmental, confirmed by reading
+  `scripts/backup_restore.py:84`. It cost two failed run attempts; anybody
+  reproducing this needs a rig outside `/private/tmp` and `--skip-backup`.
+
+## Scope
+
+No fenced path touched: no `Makefile`, no `.github/workflows/`, no backup
+scripts, nothing in `brain/` or `.beads/`. `CLAUDE.md` is edited as the layout
+table plus four conventions, which is the doc update this repo's own convention
+requires. My own changes stayed inside `watermill/recall.py`,
+`watermill/engine.py`, `watermill/knowledge.py`, `tests/test_recall.py`,
+`tests/test_engine.py`, `docs/KNOWLEDGE.md`.
+
+## Side effects
+
+**None outstanding.** No zimmy PR was created (`land` never runs during a run).
+No real bead was claimed, released or closed — the eight that were `in_progress`
+at the start were **closed by their own mill agents** between 13:01 and 13:06
+UTC, which a release would not have done. `docs/STATUS.md` still says zero
+findings and zero recall calls; after this review that is no longer quite true
+of the code's capability, though it is still true of the committed store.
