@@ -278,3 +278,28 @@ def test_a_misspelled_notes_key_is_refused_like_any_other():
             "git": {"base_branch": "main"},
             "note": ["singular is a typo"],
         })
+
+
+# --- knowledge --------------------------------------------------------------
+
+
+def test_a_contract_with_no_knowledge_section_keeps_recall_off():
+    """Off is the default: a new contract has not proven the seam."""
+    assert Contract.parse(MINIMAL).knowledge.recall is False
+
+
+def test_knowledge_recall_true_round_trips():
+    raw = {**MINIMAL, "knowledge": {"recall": True}}
+    assert Contract.parse(raw).knowledge.recall is True
+
+
+def test_knowledge_recall_must_be_a_bool():
+    """YAML's `recall: yes` is a bool, but `recall: "true"` is a string and a
+    string is not a decision."""
+    with pytest.raises(ContractError, match="knowledge.recall"):
+        Contract.parse({**MINIMAL, "knowledge": {"recall": "true"}})
+
+
+def test_knowledge_refuses_unknown_keys():
+    with pytest.raises(ContractError, match="unknown key"):
+        Contract.parse({**MINIMAL, "knowledge": {"recal": True}})

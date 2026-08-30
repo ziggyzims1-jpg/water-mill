@@ -208,6 +208,24 @@ bullet.
 
 Where they come from: [CALIBRATION.md](CALIBRATION.md).
 
+
+### `knowledge` — optional
+
+Whether a run offers the agent the context graph (`docs/KNOWLEDGE.md`) as a
+tool it can call mid-task.
+
+```yaml
+knowledge:
+  recall: true
+```
+
+`recall` defaults to **false**: a flag that changes the command every task is
+sent is not where you discover the flag is wrong, so a new contract keeps the
+tool off until one supervised run with `--recall` has proven the seam. After
+that it belongs here rather than on the command line, because it is a property
+of the project, not of the person typing. `watermill run --recall` and
+`--no-recall` override it either way for a single run.
+
 ### `environment.forbid_env` · `environment.min_free_gb`
 
 `forbid_env` refuses the run when a named variable holds a named value. The

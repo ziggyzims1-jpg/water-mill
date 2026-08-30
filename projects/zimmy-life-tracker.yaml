@@ -155,3 +155,10 @@ caps:
   max_tasks: 5
   max_hours: 3
   task_timeout_minutes: 30
+
+knowledge:
+  # The context graph as a tool the agent can call mid-task. On, because the
+  # seam was proven against a real `claude -p` on 2026-08-30 (run
+  # 20260830-090740: one recall call, one proposal filed). `--no-recall`
+  # withholds it for a single run.
+  recall: true
