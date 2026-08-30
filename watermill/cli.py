@@ -200,6 +200,16 @@ def cmd_doctor(args) -> int:
     return worst
 
 
+
+def _resolve_recall(flag: bool | None, contract) -> bool:
+    """The contract decides; an explicit flag overrides it either way.
+
+    `None` means neither `--recall` nor `--no-recall` was given. Kept as its
+    own function so the precedence is one line that a test can pin, rather
+    than a fact spread across the parser and the engine call.
+    """
+    return contract.knowledge.recall if flag is None else flag
+
 def cmd_run(args) -> int:
     root = factory_root(args.root)
     registry = Registry.load(root)
@@ -219,6 +229,7 @@ def cmd_run(args) -> int:
     log_dir = root / "runs" / project.name / run_id
 
     pause = _supervised_pause if args.supervised else None
+    recall = _resolve_recall(args.recall, contract)
     engine = Engine(
         project,
         contract,
@@ -230,11 +241,13 @@ def cmd_run(args) -> int:
         skip_gate=args.skip_gate,
         skip_backup=args.skip_backup,
         pause_between=pause,
-        recall=args.recall,
+        recall=recall,
     )
 
     print(f"Water Mill -- {contract.name} -- run {run_id}")
     print(f"logs: {log_dir}")
+    print(f"recall: {'on' if recall else 'off'} "
+          f"({'command line' if args.recall is not None else 'contract'})")
     print()
 
     try:
@@ -825,8 +838,14 @@ def build_parser() -> argparse.ArgumentParser:
                    help="skip the baseline gate (never on an unattended run)")
     p.add_argument("--skip-backup", action="store_true")
     p.add_argument("--agent", default=None)
-    p.add_argument("--recall", action="store_true",
-                   help="give the agent the context graph as a tool (see docs/KNOWLEDGE.md)")
+    recall_group = p.add_mutually_exclusive_group()
+    recall_group.add_argument(
+        "--recall", dest="recall", action="store_const", const=True, default=None,
+        help="give the agent the context graph as a tool, whatever the contract "
+             "says (see docs/KNOWLEDGE.md)")
+    recall_group.add_argument(
+        "--no-recall", dest="recall", action="store_const", const=False,
+        help="withhold the tool, whatever the contract says")
     p.set_defaults(func=cmd_run)
 
     p = sub.add_parser("status", help="readiness and recent history per project")

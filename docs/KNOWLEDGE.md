@@ -265,11 +265,20 @@ somebody either mechanises it or says why it cannot be.
 
 ## Wiring it to a run
 
-Off by default:
+The contract decides, and the command line overrides it for one run:
+
+```yaml
+knowledge:
+  recall: true      # off for a new contract until a supervised run has proven the seam
+```
 
 ```bash
-./bin/watermill run zimmy-life-tracker --max-spend 5 --max-tasks 1 --supervised --recall
+./bin/watermill run zimmy-life-tracker --max-spend 5 --max-tasks 1 --supervised --recall     # on, whatever the contract says
+./bin/watermill run zimmy-life-tracker --max-spend 5 --max-tasks 1 --supervised --no-recall  # off, whatever the contract says
 ```
+
+`run` prints `recall: on (contract)` or `recall: off (command line)` at the top
+so a log says which it was. `zimmy-life-tracker` has it on since 2026-08-30.
 
 With `--recall` the engine writes an MCP config into **the run's own log
 directory** -- never into the target repository, where it would show up in `git
@@ -278,11 +287,15 @@ status` and get the task discarded for leaving the tree dirty -- and appends
 prompt is then built from what actually got wired, so it never advertises a tool
 that is not there.
 
-**This seam has not met a real agent.** Everything above is tested against the
-protocol, not against `claude -p`: the exact flag spelling, and whether an MCP
-tool call needs more than `--allowedTools` under `--permission-mode
-acceptEdits`, are guesses until one supervised task proves otherwise. That is
-the same status `land` had before it met a real forge and found a bug on its
+**This seam met a real agent on 2026-08-30** (run `20260830-090740`), and the
+first attempt failed exactly the way the paragraph below predicted: the global
+`--root` was placed after the `mcp` subcommand, argparse exited before the
+handshake, and the agent reported `CONNECTION_CLOSED`. Fixed in the same
+review; the re-run recorded one `recall` call and one proposal. The
+`grep -c mcp__watermill` check on the task JSON returns 0 on a successful run
+(`--output-format json` keeps only the final result) -- `recall --usage` is the
+detector. The paragraph stays because the posture was right: that is the same
+status `land` had before it met a real forge and found a bug on its
 first attempt. Run it supervised, on one task, and read
 `runs/<project>/<run>/tasks/<task>.json` for whether the tool was called at all.
 

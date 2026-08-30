@@ -66,8 +66,10 @@ Running one:
 # Unattended. Refuses every skip flag.
 ./bin/watermill run zimmy-life-tracker --max-spend 10 --max-tasks 5 --unattended
 
-# ...with the context graph as a tool the agent can call mid-task.
-./bin/watermill run zimmy-life-tracker --max-spend 5 --max-tasks 1 --supervised --recall
+# The context graph is a tool the agent can call mid-task when the contract's
+# knowledge.recall is true (zimmy-life-tracker's is); --recall / --no-recall
+# override it for one run.
+./bin/watermill run zimmy-life-tracker --max-spend 5 --max-tasks 1 --supervised --no-recall
 ```
 
 There is **no default for `--max-spend`** and the run refuses to start without
