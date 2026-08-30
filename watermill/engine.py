@@ -392,9 +392,15 @@ class Engine:
         if not self.recall:
             return ""
         entry = Path(self.project.root) / "bin" / "watermill"
+        # `--root` is a *global* option and has to precede the subcommand.
+        # Spelled the other way round this parsed as an unrecognised argument,
+        # argparse exited 2 before a single frame was read, and the agent saw
+        # only `CONNECTION_CLOSED` -- a wiring failure that looks from the
+        # transcript exactly like an agent that chose not to call the tool.
         command = [
-            sys.executable, str(entry), "mcp",
+            sys.executable, str(entry),
             "--root", str(self.project.root),
+            "mcp",
             "--cell", self.contract.name,
             "--run", self.state.run_id,
             "--task", task.id,
