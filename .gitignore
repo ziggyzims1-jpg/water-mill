@@ -5,3 +5,6 @@ __pycache__/
 .venv/
 .pytest_cache/
 *.egg-info/
+
+# beads local-only runtime (interactions log says nothing a second machine needs)
+.beads/interactions.jsonl
