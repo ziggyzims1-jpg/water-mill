@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "water_mill",
+  "project_id": "f65cd32e-f473-4eeb-bb0b-88c05be7822c"
+}
