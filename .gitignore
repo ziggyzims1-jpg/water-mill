@@ -8,3 +8,9 @@ __pycache__/
 
 # beads local-only runtime (interactions log says nothing a second machine needs)
 .beads/interactions.jsonl
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
