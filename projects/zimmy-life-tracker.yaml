@@ -131,6 +131,30 @@ fence:
     - services/mfa_service.py
     - config.py
 
+    # External integrations, gated by default (docs/policies/INTEGRATIONS.md).
+    # zimmy predates the policy and keeps its providers in services/ rather
+    # than services/integrations/, so each provider module is listed on its
+    # own. A module leaves this list only in the PR that files its wiring
+    # record (zimmy-life-tracker/docs/integrations/<provider>.md) with a live
+    # proof, and every NEW provider module is added here in the change that
+    # creates it. A bead may still direct an edit to one of these, as with
+    # any fenced path.
+    #
+    # Ungated so far: Steam (services/steam_sync_service.py), proven live
+    # 2026-09-24 -- docs/integrations/steam.md.
+    - services/actual_service.py      # Actual Budget, via the actual-api sidecar's export
+    - actual-api/                     # the sidecar itself
+    - services/calendar_service.py    # ICS feed fetches
+    - services/gcal_service.py        # Google Calendar API
+    - services/drive_service.py       # Google Drive API
+    - services/oura_service.py        # Oura API + OAuth
+    - services/libby_client.py        # Libby / OverDrive (undocumented API)
+    - services/library_service.py     # Libby reconciliation on top of libby_client
+    - services/jewish_service.py      # Hebcal + Chabad RSS
+    - services/notify_service.py      # ntfy -- also carries the backup alerts
+    - services/vault_service.py       # git push to the Obsidian vault repo
+    - services/workout_service.py     # local LLM /api/generate for plan generation
+
 environment:
   forbid_env:
     FLASK_ENV: production
