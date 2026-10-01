@@ -18,6 +18,13 @@ make test-fast   # everything except the tests that drive real subprocesses
 make doctor      # preflight every registered project
 ```
 
+In a Claude Code cloud session, run `scripts/cloud-setup.sh` first (it is a
+no-op outside one unless given `--force`): it installs `bd`, bootstraps the
+beads database of water-mill and every sibling checkout with a `.beads/`, and
+runs `make install`. A fresh clone has none of those, so `bd prime` and the
+crew agents fail without it. Point the environment's setup script or a
+SessionStart hook at it.
+
 `make verify` is the gate and CI runs exactly that command, so a check that
 passes locally cannot fail in CI for a reason spelled out in a YAML file.
 
