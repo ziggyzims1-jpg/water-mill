@@ -4,8 +4,9 @@
       {
         "hooks": [
           {
-            "command": "bd prime --hook-json",
-            "type": "command"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/scripts/cloud-setup.sh\"; bd prime --hook-json",
+            "type": "command",
+            "timeout": 600
           }
         ],
         "matcher": ""
