@@ -190,7 +190,8 @@ Anything that judgement teaches which is worth carrying to the *next* task goes
 into the context graph in the same sitting, while it is still fresh:
 
 ```bash
-./bin/watermill remember zimmy-life-tracker lesson "..." --path <file> --task <id>
+./bin/watermill remember zimmy-life-tracker lesson "..." --cause <root-cause|none|pending> --tag <tag> \
+    --path <file> --task <id>
 ```
 
 Nothing in the plan past Phase 2 can be honestly worked on before that number

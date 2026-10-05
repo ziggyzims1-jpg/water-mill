@@ -49,6 +49,7 @@ class Sweep:
     proposals: list[recall.Node] = field(default_factory=list)
     unmechanised: list[recall.Node] = field(default_factory=list)
     promotable: list[tuple[str, list[recall.Node]]] = field(default_factory=list)
+    unstructured: list[recall.Node] = field(default_factory=list)
     unannotated: list[dict] = field(default_factory=list)
     findings: int = 0
     cells: list[str] = field(default_factory=list)
@@ -89,6 +90,7 @@ class Sweep:
             + len(self.proposals)
             + len(self.unmechanised)
             + len(self.promotable)
+            + len(self.unstructured)
             + len(self.unannotated)
             + len(self.unanswered)
             + len(self.lag)
@@ -155,6 +157,7 @@ def sweep(
         proposals=recall.proposals(graph),
         unmechanised=recall.unmechanised(graph),
         promotable=recall.promotable(graph),
+        unstructured=recall.missing_structure(graph),
         unannotated=pending[-unannotated_limit:],
         findings=len(findings),
         cells=graph.cells,
@@ -223,7 +226,8 @@ def render(state: Sweep) -> str:
                 f"{node.meta.get('age_days')}d: {_clip(node.text)}")
         add("")
         add("    watermill confirm <id>")
-        add("    watermill remember <cell> <kind> \"...\" --supersedes <id>")
+        add("    watermill remember <cell> <kind> \"...\" --cause <root-cause> --tag <tag> "
+            "--supersedes <id>")
         add("")
 
     if state.proposals:
@@ -266,6 +270,8 @@ def render(state: Sweep) -> str:
             add(f"- `{node.id}` [{node.cell or 'factory'}]: {_clip(node.text)}")
         add("")
 
+    lines.extend(_render_missing_structure(state))
+
     if state.unannotated:
         add(f"## No root cause yet -- {len(state.unannotated)} task(s)")
         add("")
@@ -301,13 +307,38 @@ def render(state: Sweep) -> str:
                 suffix = f"  (x{count})" if count > 1 else ""
                 add(f"- {_clip(question)}{suffix}")
             add("")
-            add("    watermill remember <cell> lesson \"...\"")
+            add("    watermill remember <cell> lesson \"...\" --cause <root-cause> --tag <tag>")
         add("")
 
     add("When you are done, record that the sweep happened:")
     add("")
     add("    watermill review --record")
     return "\n".join(lines) + "\n"
+
+
+def _render_missing_structure(state: Sweep) -> list[str]:
+    """The 'Missing structure' section: findings with no cause or no tags."""
+    if not state.unstructured:
+        return []
+    out = [
+        f"## Missing structure -- {len(state.unstructured)} finding(s)",
+        "",
+        "Each lacks a root cause or a tag, so the graph can reach it only by its "
+        "words. Add what is missing; it is a new line and edits nothing.",
+        "",
+    ]
+    for node in state.unstructured:
+        cause = node.meta.get("root_cause")
+        missing = [
+            label for label, absent in (
+                ("no cause", not cause), ("cause pending", cause == knowledge.PENDING),
+                ("no tags", not node.meta.get("tags")),
+            ) if absent
+        ]
+        out.append(f"- `{node.id}` [{node.cell or 'factory'}] {', '.join(missing)}: "
+                   f"{_clip(node.text)}")
+    out += ["", "    watermill annotate-finding <id> --cause <root-cause> --tag <tag>", ""]
+    return out
 
 
 def render_lag(state: Sweep, heading: bool = False) -> list[str]:
@@ -327,7 +358,8 @@ def render_lag(state: Sweep, heading: bool = False) -> list[str]:
             lines.append(f"- {item.bead} [{item.project}] landed {when}: {item.path}")
         lines += [
             "",
-            "    watermill remember <cell> lesson \"...\" --task <bead>",
+            "    watermill remember <cell> lesson \"...\" --cause pending --tag <tag> "
+            "--task <bead>",
             "    # or, in the handoff:  **Findings:** none -- <why nothing was learned>",
             "",
         ]
