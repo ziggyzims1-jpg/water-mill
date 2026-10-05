@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from . import (
@@ -767,7 +767,17 @@ def cmd_proposals(args) -> int:
 def cmd_review(args) -> int:
     """The monthly sweep over everything the factory believes."""
     root = factory_root(args.root)
-    state = review.sweep(root)
+    state = review.sweep(
+        root, lag_since=args.lag_since or review.LAG_SINCE,
+        lag_after_days=args.lag_days,
+    )
+
+    if args.lag:
+        # Just the list, for a hook or the lander. Prints nothing but the
+        # beads, and never fails: `--check` is the thing that gates.
+        text = "\n".join(review.render_lag(state)).strip()
+        print(text or "no landed bead is waiting on a finding")
+        return 0
 
     if args.check:
         # The heartbeat, for cron. A sweep that stopped happening looks exactly
@@ -1020,6 +1030,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--record", action="store_true", help="record that the sweep happened")
     p.add_argument("--check", action="store_true",
                    help="exit non-zero if the sweep itself is overdue")
+    p.add_argument("--lag", action="store_true",
+                   help="only the beads landed without a finding")
+    p.add_argument("--lag-days", type=int, default=review.LAG_AFTER_DAYS,
+                   help="--check fails on a bead landed more than this many days ago")
+    p.add_argument("--lag-since", type=date.fromisoformat, metavar="YYYY-MM-DD",
+                   help="ignore beads landed before this (default "
+                   f"{review.LAG_SINCE})")
     p.add_argument("--by")
     p.add_argument("--note")
     p.set_defaults(func=cmd_review)
