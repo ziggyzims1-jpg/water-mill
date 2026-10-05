@@ -23,7 +23,7 @@ when the prompt was assembled.
 | Sources of truth | `knowledge/findings.jsonl` (committed), `runs/tasks.jsonl`, `runs/index.jsonl` |
 | The graph | Built in memory on every call by `watermill/recall.py`. No index, no cache, nothing to invalidate |
 | Read by | `watermill recall`, and the agent's `recall` tool over MCP |
-| Written by | `watermill remember` / `confirm` (a person), the `propose` tool (an agent, quarantined) |
+| Written by | `watermill remember` / `confirm` / `annotate-finding` (a person), the `propose` tool (an agent, quarantined) |
 | Reviewed by | `watermill review`, monthly |
 
 Findings are **committed to this repository**; run history is not. That split is
@@ -99,6 +99,47 @@ That is the same rule as the ledger and the task log: **a correction is a new
 line, never an edit.** A store that can be edited is one whose history can be
 quietly improved.
 
+## Structure: a cause and a tag, required, and fillable later
+
+`remember` and the agent's `propose` tool refuse a finding with no root cause
+(`tasklog.ROOT_CAUSES`; `none` is an explicit answer, blank is not) or no tag.
+An untagged finding with no cause can be found only by its words, which is the
+one way the graph is not supposed to be reached.
+
+**`pending` means "owner to judge."** It is accepted wherever a finding's cause
+is (`remember`, `propose`, `annotate-finding`) and is deliberately *not* a root
+cause: it is not in `tasklog.ROOT_CAUSES`, `watermill annotate` (the task log)
+refuses it, and a finding whose merged cause is `pending` is listed under
+**Missing structure** until the owner annotates it. Three buckets --
+`none`, `gate-hole`, `agent-error` (`tasklog.HUMAN_ONLY`) -- are judgements only
+a person may make, so the agent's `propose` tool refuses them and offers
+`pending` or one of the specification buckets instead. Quarantine does not make
+that safe: a guess in a judgement field is still read later as a judgement.
+`remember` stays permissive because the owner uses it; crew agents that write
+through it use `pending` rather than any `HUMAN_ONLY` bucket.
+
+Findings written before that rule, and any whose cause turned out wrong, are
+fixed by an **annotation line** -- a new `kind_of_line: "annotation"` carrying
+`id` and any of `root_cause`, `tags`, `destination`, `by`. Nothing is edited:
+
+```bash
+watermill annotate-finding f-20260828-a1b2c3 --cause missing-context --tag fence --tag beads
+watermill annotate-finding f-1 f-2 f-3 --cause none --tag housekeeping   # one set of flags
+watermill annotate-finding --batch fixes.jsonl --json                     # or '-' for stdin
+```
+
+A batch is JSONL, one `{"id", "cause", "tags", "destination"}` per line. Every
+row is checked against the store -- and against the line cap below -- before
+the first line is written, so one bad row refuses the lot instead of leaving it
+half applied. The command is `annotate-finding` because `annotate` is the task
+log's verb for a task's root cause.
+
+`read()`, `get()`, `recall` and the sweep see the **merged** finding: the latest
+cause and the latest destination win, tags accumulate across the finding and
+every annotation. Annotations are metadata -- they feed `--cause` filtering and
+the sweep and do not appear in a recall hit, so the recall budget is unchanged.
+They are bounded by the same 4096-byte `O_APPEND` cap as every other line.
+
 ## What an agent may write, and what happens to it
 
 An agent's `propose` tool appends a finding **in quarantine**. It is never
@@ -139,7 +180,7 @@ finding that quietly stopped being true keeps being returned, carries the same
 confident date it always had, and is read by an agent as current. Nothing in the
 system can notice that on its own -- the world changed, not the file.
 
-The sweep is six lists, and every one of them is a decision a person has to
+The sweep is seven lists, and every one of them is a decision a person has to
 make:
 
 1. **Stale** -- 90+ days unconfirmed. `confirm` it or supersede it.
@@ -149,8 +190,11 @@ make:
    orchestrator's doctrine.
 4. **Still only advice** -- lessons that never became a gate check or a fence
    path. Advice is a request; a gate is not.
-5. **No root cause yet** -- discarded tasks nobody has annotated.
-6. **Landed without a finding** -- beads whose handoff is marked `**LANDED**` in
+5. **Missing structure** -- active findings that still lack a root cause (or
+   whose cause is still `pending`) or a tag after annotations are merged. Fix
+   with `annotate-finding`.
+6. **No root cause yet** -- discarded tasks nobody has annotated.
+7. **Landed without a finding** -- beads whose handoff is marked `**LANDED**` in
    a registered checkout (`brain/handoffs/mill/*.md`, dated by the last
    `## Tailrace (date)` heading) that no active finding cites in `refs.tasks`.
    Ids are normalised, so `Zimmy Life Tracker-092` and `zimmy-life-tracker-092`

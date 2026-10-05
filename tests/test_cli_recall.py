@@ -41,3 +41,53 @@ def test_the_parser_leaves_recall_unset_when_no_flag_is_given():
     assert parser.parse_args(["run", "demo", "--max-spend", "1"]).recall is None
     assert parser.parse_args(["run", "demo", "--max-spend", "1", "--recall"]).recall is True
     assert parser.parse_args(["run", "demo", "--max-spend", "1", "--no-recall"]).recall is False
+
+
+def test_annotate_finding_cli_batch_is_all_or_nothing(tmp_path, capsys):
+    import json
+
+    from watermill import knowledge
+
+    knowledge.record(tmp_path, cell="", kind="lesson", text="one",
+                     root_cause="none", tags=("t",))
+    fid = knowledge.read(tmp_path)[0].id
+    path = tmp_path / knowledge.KNOWLEDGE_FILENAME
+    size = path.stat().st_size
+
+    batch = tmp_path / "batch.jsonl"
+    batch.write_text(json.dumps({"id": fid, "cause": "gate-hole"}) + "\n"
+                     + json.dumps({"id": "f-nope", "tags": ["x"]}) + "\n")
+    assert cli.main(["--root", str(tmp_path), "annotate-finding", "--batch", str(batch)]) == 1
+    assert path.stat().st_size == size, "a bad row refuses the whole batch"
+
+    batch.write_text(json.dumps({"id": fid, "cause": "gate-hole", "tags": ["x"]}) + "\n")
+    assert cli.main(["--root", str(tmp_path), "annotate-finding", "--batch", str(batch),
+                     "--json"]) == 0
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])[0]["id"] == fid
+    assert knowledge.get(tmp_path, fid).root_cause == "gate-hole"
+
+    assert cli.main(["--root", str(tmp_path), "annotate-finding", fid,
+                     "--destination", "gate"]) == 0
+    assert knowledge.get(tmp_path, fid).destination == "gate"
+    assert cli.main(["--root", str(tmp_path), "annotate-finding", fid]) == 2
+
+
+def test_annotate_finding_batch_checks_the_line_cap_before_writing(tmp_path):
+    """An oversized row late in a batch must not leave the earlier rows written."""
+    import json
+
+    from watermill import knowledge
+
+    knowledge.record(tmp_path, cell="", kind="lesson", text="one",
+                     root_cause="pending", tags=("t",))
+    fid = knowledge.read(tmp_path)[0].id
+    path = tmp_path / knowledge.KNOWLEDGE_FILENAME
+    size = path.stat().st_size
+    batch = tmp_path / "batch.jsonl"
+    batch.write_text(json.dumps({"id": fid, "cause": "weak-scope"}) + "\n"
+                     + json.dumps({"id": fid, "tags": [f"{i}" + "x" * 50 for i in range(100)]})
+                     + "\n")
+    assert cli.main(["--root", str(tmp_path), "annotate-finding", "--batch", str(batch)]) == 2
+    assert path.stat().st_size == size
+    assert cli.main(["--root", str(tmp_path), "annotate-finding", fid,
+                     "--cause", "pending"]) == 0

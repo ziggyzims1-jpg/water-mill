@@ -238,8 +238,8 @@ def build(root: Path, as_of: date | None = None) -> Graph:
                     "status": status,
                     "detail": record.detail,
                     "destination": record.destination,
-                    "root_cause": record.finding.get("root_cause", ""),
-                    "tags": record.finding.get("tags", []),
+                    "root_cause": record.root_cause,
+                    "tags": record.tags,
                     "refs": record.refs,
                     "confirmed_at": record.confirmed_at,
                     "superseded_by": record.superseded_by,
@@ -497,6 +497,18 @@ def unmechanised(graph: Graph) -> list[Node]:
         and n.provenance == JUDGED
         and not n.meta.get("destination")
         and not n.meta.get("superseded_by")
+    ]
+
+
+def missing_structure(graph: Graph) -> list[Node]:
+    """Active findings still lacking a judged root cause or a tag after annotations
+    merge. A `pending` cause is listed: it is the owner's judgement still owed."""
+    return [
+        n for n in graph.nodes
+        if n.kind == FINDING
+        and n.provenance == JUDGED
+        and not n.meta.get("superseded_by")
+        and (n.meta.get("root_cause") in ("", knowledge.PENDING) or not n.meta.get("tags"))
     ]
 
 
