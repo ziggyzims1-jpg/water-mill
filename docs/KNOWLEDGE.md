@@ -154,7 +154,10 @@ make:
    a registered checkout (`brain/handoffs/mill/*.md`, dated by the last
    `## Tailrace (date)` heading) that no active finding cites in `refs.tasks`.
    Ids are normalised, so `Zimmy Life Tracker-092` and `zimmy-life-tracker-092`
-   are one bead. A handoff that says `**Findings:** none -- <why>` is covered:
+   are one bead; a bare slug (`092`) matches only on a finding filed against
+   that cell, so cite the full id with `--task`. A handoff marked `**LANDED**`
+   with no Tailrace date is listed as landed on an unknown date and is always
+   overdue -- it is not skipped. A handoff that says `**Findings:** none -- <why>` is covered:
    deciding nothing was learned is a decision, silence is not. Only beads landed
    on or after 2026-10-05 count (`--lag-since`); earlier ones were caught up by
    hand. A checkout that is not on this machine is reported, not an error.

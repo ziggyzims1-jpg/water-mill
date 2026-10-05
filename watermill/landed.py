@@ -26,7 +26,10 @@ _LANDED = re.compile(r"^\s*\*\*LANDED\*\*", re.MULTILINE)
 _TITLE = re.compile(r"^#\s+Handoff\s*[—–-]+\s*(.+?)\s*$", re.MULTILINE)
 _TAILRACE = re.compile(r"^##\s+Tailrace\s*\((\d{4}-\d{2}-\d{2})", re.MULTILINE)
 _NONE = re.compile(
-    r"^\s*[-*]?\s*\*\*Findings:\*\*\s*none\s*(--|\u2014|\u2013|-)\s*\S",
+    # One line only: `\s` would cross the newline and read the next bullet's
+    # dash as the separator, so a bare `none` above a list counted as covered.
+    r"^[ \t]*[-*]?[ \t]*\*\*Findings:\*\*[ \t]*none[ \t]*(--|\u2014|\u2013|-)"
+    r"[ \t]*[^\s\u2014\u2013-]",
     re.MULTILINE | re.IGNORECASE,
 )
 
@@ -37,7 +40,7 @@ class Landed:
 
     bead: str  # normalised, so it compares equal to a finding's ref
     project: str
-    landed_on: date
+    landed_on: date | None  # None: marked LANDED with no `## Tailrace (date)`
     path: Path
     waived: bool  # the handoff carries a `**Findings:** none -- why` line
 
@@ -53,10 +56,13 @@ def normalise(bead_id: str) -> str:
 
 
 def parse(path: Path, project: str) -> Landed | None:
-    """One handoff file, or None when it was never landed (or has no date).
+    """One handoff file, or None when it was never landed.
 
     The landing date is the last `## Tailrace (date)` heading: a later section
-    for a follow-up merge step is when the bead actually landed.
+    for a follow-up merge step is when the bead actually landed. A handoff
+    marked **LANDED** with no such heading keeps `landed_on=None` rather than
+    being dropped: this module exists to notice absences, and skipping the
+    files it cannot date would be one.
     """
     try:
         text = path.read_text(encoding="utf-8")
@@ -65,12 +71,10 @@ def parse(path: Path, project: str) -> Landed | None:
     if not _LANDED.search(text):
         return None
     dates = _TAILRACE.findall(text)
-    if not dates:
-        return None
     try:
-        landed_on = date.fromisoformat(dates[-1])
+        landed_on = date.fromisoformat(dates[-1]) if dates else None
     except ValueError:
-        return None
+        landed_on = None
     title = _TITLE.search(text)
     bead = normalise(title.group(1)) if title else normalise(f"{project}-{path.stem}")
     return Landed(

@@ -300,3 +300,52 @@ def test_check_fails_only_on_lag_past_the_grace_period(tmp_path: Path):
     assert code == 1 and "proj-abc" in line
 
     assert review.check_line(review.sweep(root, as_of=LAG_TODAY, lag_after_days=5))[1] == 0
+
+
+def test_a_bare_slug_covers_only_on_a_finding_filed_against_that_cell(tmp_path: Path):
+    root, handoffs = _root(tmp_path)
+    _landed(handoffs, "abc", "2026-10-06", title_id="proj-abc")
+    _landed(handoffs, "def", "2026-10-06", title_id="proj-def")
+    _finding(root, "x", cell="proj", refs={"tasks": ["abc"]})
+    _finding(root, "y", cell="other", refs={"tasks": ["def"]})
+    assert [i.bead for i in review.sweep(root, as_of=LAG_TODAY).lag] == ["proj-def"]
+
+
+def test_a_none_marker_with_nothing_after_the_dash_does_not_cover(tmp_path: Path):
+    """The reason must be on the marker's own line, not the next heading."""
+    root, handoffs = _root(tmp_path)
+    _landed(handoffs, "empty", "2026-10-06", "\n**Findings:** none --\n- next bullet\n")
+    _landed(handoffs, "bare", "2026-10-06", "\n**Findings:** none\n- next bullet\n")
+    lag = [i.bead for i in review.sweep(root, as_of=LAG_TODAY).lag]
+    assert lag == ["proj-bare", "proj-empty"]
+
+
+def test_the_landing_date_is_the_last_tailrace_heading(tmp_path: Path):
+    root, handoffs = _root(tmp_path)
+    (handoffs / "two.md").write_text(
+        "# Handoff — proj-two\n\n## Tailrace (2026-10-01)\n\nVERIFY_FAILED\n\n"
+        "## Tailrace (2026-10-06)\n\n**LANDED** merged.\n",
+        encoding="utf-8",
+    )
+    assert [i.landed_on for i in review.sweep(root, as_of=LAG_TODAY).lag] == [
+        date(2026, 10, 6)
+    ]
+
+
+def test_a_landed_handoff_with_no_tailrace_date_is_reported_and_fails_check(tmp_path: Path):
+    """Undatable is not the same as unlanded: dropping it would hide an absence."""
+    root, handoffs = _root(tmp_path)
+    (handoffs / "nodate.md").write_text(
+        "# Handoff — proj-nodate\n\n## Millstone (2026-08-01)\n\n**LANDED** by hand.\n",
+        encoding="utf-8",
+    )
+    state = review.sweep(root, as_of=LAG_TODAY)
+    assert [i.bead for i in state.lagging] == ["proj-nodate"]
+    assert "proj-nodate [proj] landed on an unknown date" in review.render(state)
+    assert review.check_line(state)[1] == 1
+
+
+def test_lag_is_due_only_strictly_more_than_the_grace_days_after_landing(tmp_path: Path):
+    root, handoffs = _root(tmp_path)
+    _landed(handoffs, "abc", "2026-10-08")  # exactly two days ago
+    assert review.check_line(review.sweep(root, as_of=LAG_TODAY))[1] == 0

@@ -62,7 +62,9 @@ class Sweep:
     def lagging(self) -> list[landed.Landed]:
         """The lag that is past its grace period -- what `--check` fails on."""
         limit = date.fromisoformat(self.today) - timedelta(days=self.lag_after_days)
-        return [item for item in self.lag if item.landed_on < limit]
+        return [
+            item for item in self.lag if item.landed_on is None or item.landed_on < limit
+        ]
 
     @property
     def never_reviewed(self) -> bool:
@@ -101,19 +103,25 @@ def uncovered(
     Covered means an active finding cites the bead in `refs.tasks`, or its
     handoff says `**Findings:** none -- <why>`. The second is a decision a
     person (or the lander) wrote down; silence is the thing being measured.
+    A ref may be the full id or, on a finding filed against the bead's cell,
+    the bare slug (`092`). A landed bead with no date cannot be shown to
+    predate `since`, so it always counts.
     """
-    cited = {
-        landed.normalise(str(task))
-        for record in knowledge.read(root)
-        for task in record.refs.get("tasks") or []
-    }
+    cited: set[str] = set()
+    for record in knowledge.read(root):
+        for task in record.refs.get("tasks") or []:
+            cited.add(landed.normalise(str(task)))
+            if record.cell:
+                cited.add(landed.normalise(f"{record.cell}-{task}"))
     found, missing = landed.read(root)
     lag = [
         item
         for item in found
-        if item.landed_on >= since and not item.waived and item.bead not in cited
+        if (item.landed_on is None or item.landed_on >= since)
+        and not item.waived
+        and item.bead not in cited
     ]
-    lag.sort(key=lambda item: (item.landed_on, item.project, item.bead))
+    lag.sort(key=lambda item: (item.landed_on or date.min, item.project, item.bead))
     return lag, missing
 
 
@@ -315,9 +323,8 @@ def render_lag(state: Sweep, heading: bool = False) -> list[str]:
             "",
         ]
         for item in state.lag:
-            lines.append(
-                f"- {item.bead} [{item.project}] landed {item.landed_on}: {item.path}"
-            )
+            when = item.landed_on or "on an unknown date (no `## Tailrace (date)`)"
+            lines.append(f"- {item.bead} [{item.project}] landed {when}: {item.path}")
         lines += [
             "",
             "    watermill remember <cell> lesson \"...\" --task <bead>",
