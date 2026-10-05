@@ -263,7 +263,8 @@ def _render_missing_structure(state: Sweep) -> list[str]:
         f"## Missing structure -- {len(state.unstructured)} finding(s)",
         "",
         "Each lacks a person-judged root cause (blank or `pending`) or a tag, so "
-        "the graph can reach it only by its words. Add what is missing; it is a new line and edits nothing.",
+        "the graph can reach it only by its words. Add what is missing; it is a new "
+        "line and edits nothing.",
         "",
     ]
     for node in state.unstructured:
