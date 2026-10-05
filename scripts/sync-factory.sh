@@ -11,7 +11,7 @@
 #
 # After the fast-forward it also prints `watermill review --lag` (landed beads
 # with no finding) to stderr, so a stale graph is visible at session start. If
-# the flag does not exist yet the command fails and nothing is printed.
+# the command fails nothing is printed.
 #
 # This runs inside a SessionStart hook, so it must NEVER fail and NEVER print to
 # stdout: `bd prime --hook-json` runs after it and its JSON must be the whole of
