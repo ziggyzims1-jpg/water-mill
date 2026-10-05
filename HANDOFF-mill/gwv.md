@@ -75,3 +75,19 @@ No conflicts. `bd close water-mill-gwv`: closed, no auto-export warning.
 **Findings:** none new from landing -- findings for gwv already on main (f-20261005-df2aac, -c0b715, -de41da, -916c4a).
 
 **Still open (orchestrator):** sluice's third pass recreated `bead/gwv` on the three agent-repo remotes (water-mill 5b9855a, template 7939620, zim cell 99bc26e) with the one-line "no `pull --autostash`" tailrace edit that is NOT on main there (zimmy has its skill version, merged). The four tailrace copies now differ until that is cherry-picked in a follow-up PR; then delete those branches. I did not touch them.
+
+## Sluice, follow-up (2026-10-05)
+
+Autostash line landed as follow-up PRs from fresh `gwv-autostash` branches off origin/main (cherry-picks of 5b9855a/7939620/99bc26e): water-mill #29, watermill-cell-template #7, zim-dashboard-demo-cell-1b #29. Each is a one-line tailrace.md change; after them all four tailrace copies match the workshop copy (md5 edb319e6). water-mill `make verify` passed. The recreated `bead/gwv` remote branches in those three repos are deleted (each checked: head was my duplicate commit, no open PR). Not merged; zimmy #219 and water-mill #28 untouched.
+
+## Tailrace follow-up (2026-10-05)
+
+**LANDED** all three autostash follow-ups, one at a time, each verify green on current head, squash-merged with branch deleted. Diffs were only `.claude/agents/tailrace.md`.
+
+- water-mill #29: a22d664ff1f2ba44c33c0153e79d509b27f860de
+- watermill-cell-template #7: fa74e4441e4b714f6fb8c784875f04de4bf21406
+- zim-dashboard-demo-cell-1b #29: 31c7e8aecfb5077dec26af81548ab54607aaa427
+
+No conflicts. No bd changes. Local checkouts fast-forwarded; tailrace.md md5 verified equal across all three (see report). The Sluice follow-up section above was uncommitted in this file and was committed together with this section.
+
+**Findings:** none -- one-line follow-up, lesson already recorded as f-20261005-d1a6d9
