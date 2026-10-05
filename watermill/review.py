@@ -27,10 +27,16 @@ resetting itself, which would make the whole staleness signal meaningless.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
-from . import knowledge, recall, tasklog, usage
+from . import knowledge, landed, recall, tasklog, usage
+
+#: Findings written by hand before this date caught the graph up; the lag list
+#: starts where that catch-up stopped.
+LAG_SINCE = date(2026, 10, 5)
+#: A bead may sit this many days between landing and its finding before it is lag.
+LAG_AFTER_DAYS = 2
 
 
 @dataclass
@@ -48,6 +54,17 @@ class Sweep:
     cells: list[str] = field(default_factory=list)
     usage: dict = field(default_factory=dict)
     unanswered: list[tuple[str, int]] = field(default_factory=list)
+    lag: list[landed.Landed] = field(default_factory=list)
+    lag_missing: list[str] = field(default_factory=list)
+    lag_after_days: int = LAG_AFTER_DAYS
+
+    @property
+    def lagging(self) -> list[landed.Landed]:
+        """The lag that is past its grace period -- what `--check` fails on."""
+        limit = date.fromisoformat(self.today) - timedelta(days=self.lag_after_days)
+        return [
+            item for item in self.lag if item.landed_on is None or item.landed_on < limit
+        ]
 
     @property
     def never_reviewed(self) -> bool:
@@ -74,10 +91,47 @@ class Sweep:
             + len(self.promotable)
             + len(self.unannotated)
             + len(self.unanswered)
+            + len(self.lag)
         )
 
 
-def sweep(root: Path, as_of: date | None = None, unannotated_limit: int = 10) -> Sweep:
+def uncovered(
+    root: Path, since: date = LAG_SINCE
+) -> tuple[list[landed.Landed], list[str]]:
+    """Beads the mill landed on/after `since` that no finding accounts for.
+
+    Covered means an active finding cites the bead in `refs.tasks`, or its
+    handoff says `**Findings:** none -- <why>`. The second is a decision a
+    person (or the lander) wrote down; silence is the thing being measured.
+    A ref may be the full id or, on a finding filed against the bead's cell,
+    the bare slug (`092`). A landed bead with no date cannot be shown to
+    predate `since`, so it always counts.
+    """
+    cited: set[str] = set()
+    for record in knowledge.read(root):
+        for task in record.refs.get("tasks") or []:
+            cited.add(landed.normalise(str(task)))
+            if record.cell:
+                cited.add(landed.normalise(f"{record.cell}-{task}"))
+    found, missing = landed.read(root)
+    lag = [
+        item
+        for item in found
+        if (item.landed_on is None or item.landed_on >= since)
+        and not item.waived
+        and item.bead not in cited
+    ]
+    lag.sort(key=lambda item: (item.landed_on or date.min, item.project, item.bead))
+    return lag, missing
+
+
+def sweep(
+    root: Path,
+    as_of: date | None = None,
+    unannotated_limit: int = 10,
+    lag_since: date = LAG_SINCE,
+    lag_after_days: int = LAG_AFTER_DAYS,
+) -> Sweep:
     """Assemble the month's review. Reads three files, writes nothing."""
     graph = recall.build(root, as_of=as_of)
     findings = [n for n in graph.nodes if n.kind == recall.FINDING]
@@ -93,6 +147,7 @@ def sweep(root: Path, as_of: date | None = None, unannotated_limit: int = 10) ->
         if record.outcome.get("outcome") != "completed"
     ]
     calls = usage.stats(usage.read(root, since=since))
+    lag, lag_missing = uncovered(root, lag_since)
     return Sweep(
         today=(as_of or knowledge.today()).isoformat(),
         days_since_review=knowledge.days_since_review(root, as_of),
@@ -105,6 +160,9 @@ def sweep(root: Path, as_of: date | None = None, unannotated_limit: int = 10) ->
         cells=graph.cells,
         usage=calls,
         unanswered=list(calls["unanswered"].items())[:8],
+        lag=lag,
+        lag_missing=lag_missing,
+        lag_after_days=lag_after_days,
     )
 
 
@@ -220,6 +278,8 @@ def render(state: Sweep) -> str:
         add("    watermill annotate <project> <task-id> <root-cause>")
         add("")
 
+    lines.extend(render_lag(state, heading=True))
+
     if state.usage.get("searches") or state.unanswered:
         rate = state.usage.get("hit_rate")
         add("## The tool itself")
@@ -250,8 +310,52 @@ def render(state: Sweep) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_lag(state: Sweep, heading: bool = False) -> list[str]:
+    """'Landed without a finding', as lines. Empty when there is nothing to say."""
+    lines: list[str] = []
+    if state.lag:
+        late = len(state.lagging)
+        if heading:
+            lines += [f"## Landed without a finding -- {len(state.lag)} bead(s)", ""]
+        lines += [
+            "The mill landed these and the graph has not heard of them"
+            + (f"; {late} past the {state.lag_after_days}-day grace." if late else "."),
+            "",
+        ]
+        for item in state.lag:
+            when = item.landed_on or "on an unknown date (no `## Tailrace (date)`)"
+            lines.append(f"- {item.bead} [{item.project}] landed {when}: {item.path}")
+        lines += [
+            "",
+            "    watermill remember <cell> lesson \"...\" --task <bead>",
+            "    # or, in the handoff:  **Findings:** none -- <why nothing was learned>",
+            "",
+        ]
+    if state.lag_missing and (state.lag or not heading):
+        lines += ["Checkout not found, so not checked: " + ", ".join(state.lag_missing), ""]
+    return lines
+
+
 def check_line(state: Sweep) -> tuple[str, int]:
-    """The heartbeat, for cron: one line and an exit code.
+    """The heartbeat, for cron: an exit code and what it is about.
+
+    Two absences are watched: the sweep itself, and a landed bead that never
+    produced a finding. Either fails the check; both are reported.
+    """
+    line, code = _sweep_line(state)
+    late = state.lagging
+    if late:
+        beads = ", ".join(item.bead for item in late)
+        lag = (
+            f"{len(late)} bead(s) landed more than {state.lag_after_days} days "
+            f"ago with no finding: {beads}"
+        )
+        return (f"{line}\n{lag}" if code else f"{lag}\n{line}"), 1
+    return line, code
+
+
+def _sweep_line(state: Sweep) -> tuple[str, int]:
+    """The sweep half of the heartbeat: one line and an exit code.
 
     The three cases are genuinely different and the first version of this
     printed "last run None days ago" for the third, which reads as a bug in
