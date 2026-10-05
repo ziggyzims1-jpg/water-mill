@@ -9,6 +9,10 @@
 # Fast-forward only, and only when it is safe: on main, clean tree, not
 # mid-merge. Anything else is left exactly as it is.
 #
+# After the fast-forward it also prints `watermill review --lag` (landed beads
+# with no finding) to stderr, so a stale graph is visible at session start. If
+# the flag does not exist yet the command fails and nothing is printed.
+#
 # This runs inside a SessionStart hook, so it must NEVER fail and NEVER print to
 # stdout: `bd prime --hook-json` runs after it and its JSON must be the whole of
 # stdout. Every exit is 0, stdout is discarded, and the one line it may write
@@ -36,8 +40,15 @@ main() {
   [ "$before" = "$after" ] || echo "sync-factory: water-mill ${before:0:7} -> ${after:0:7}" >&2
 }
 
+lag() {
+  [ -x "$DIR/bin/watermill" ] || return 0
+  local out
+  out="$("$DIR/bin/watermill" review --lag 2>&1)" || return 0
+  [ -z "$out" ] || printf '%s\n' "$out" >&2
+}
+
 # bash has no portable `timeout` (macOS lacks it), so bound main with a watchdog.
-main >/dev/null &
+{ main; lag; } >/dev/null &
 worker=$!
 ( sleep "$LIMIT"; kill "$worker" 2>/dev/null ) >/dev/null 2>&1 &
 watchdog=$!
