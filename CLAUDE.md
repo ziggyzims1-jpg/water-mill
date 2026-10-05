@@ -48,7 +48,8 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 | `watermill/knowledge.py` | Findings: what was learned, when it was observed, and what superseded it |
 | `watermill/recall.py` | The context graph over all three logs, and the one budgeted way to query it |
 | `watermill/mcp.py` | The graph as a tool the agent calls mid-task. The only seam that runs *during* a task |
-| `watermill/review.py` | The monthly sweep, and the check that notices the sweep stopped happening |
+| `watermill/review.py` | The monthly sweep, and the check that notices the sweep stopped happening or a landed bead went unrecorded |
+| `watermill/landed.py` | Beads the mill landed, read from `**LANDED**` handoffs in registered checkouts. A reader |
 | `watermill/usage.py` | What agents asked the graph and what it could not answer. Never readable by an agent |
 | `watermill/land.py` | The pull request: create, verify, merge. Never part of a run |
 | `watermill/shipper.py` | Ships both to Loki. A reader, never part of a run |

@@ -200,3 +200,103 @@ def test_a_tool_nobody_called_adds_no_section(tmp_path: Path):
     _finding(tmp_path, "A finding.")
     knowledge.record_review(tmp_path, on="2026-08-20")
     assert "## The tool itself" not in review.render(review.sweep(tmp_path, as_of=TODAY))
+
+
+# -- landed without a finding ---------------------------------------------------
+
+
+def _checkout(root: Path, name: str = "proj") -> Path:
+    """A registered sibling under tmp_path, with a handoff directory."""
+    (root / "projects.yaml").write_text(
+        f"version: 1\nprojects:\n  - name: {name}\n    path: ../{name}-checkout\n",
+        encoding="utf-8",
+    )
+    handoffs = root.parent / f"{name}-checkout" / "brain" / "handoffs" / "mill"
+    handoffs.mkdir(parents=True, exist_ok=True)
+    return handoffs
+
+
+def _landed(handoffs: Path, slug: str, on: str, extra: str = "", title_id: str | None = None):
+    title = title_id or f"Proj {slug}"
+    (handoffs / f"{slug}.md").write_text(
+        f"# Handoff — {title}\n\n**LANDED** (PR #1)\n\n## Millstone (2026-10-01)\n\n"
+        f"- done\n{extra}\n## Tailrace ({on})\n\n**LANDED** merged.\n",
+        encoding="utf-8",
+    )
+
+
+LAG_TODAY = date(2026, 10, 10)
+
+
+def _root(tmp_path: Path) -> tuple[Path, Path]:
+    root = tmp_path / "mill"
+    root.mkdir()
+    return root, _checkout(root)
+
+
+def test_a_landed_bead_with_no_finding_is_lag(tmp_path: Path):
+    root, handoffs = _root(tmp_path)
+    _landed(handoffs, "abc", "2026-10-06")
+    state = review.sweep(root, as_of=LAG_TODAY)
+    assert [item.bead for item in state.lag] == ["proj-abc"]
+    out = review.render(state)
+    assert "## Landed without a finding -- 1 bead(s)" in out
+    assert "proj-abc [proj] landed 2026-10-06" in out
+    assert str(handoffs / "abc.md") in out
+
+
+def test_a_finding_citing_the_bead_covers_it_whatever_the_spelling(tmp_path: Path):
+    root, handoffs = _root(tmp_path)
+    _landed(handoffs, "abc", "2026-10-06", title_id="Proj Name-abc")
+    _landed(handoffs, "def", "2026-10-06", title_id="proj-def")
+    _finding(root, "x", refs={"tasks": ["proj-name-abc"]})
+    _finding(root, "y", refs={"tasks": ["Proj-Def"]})
+    assert review.sweep(root, as_of=LAG_TODAY).lag == []
+
+
+def test_a_none_marker_with_a_reason_covers_it_and_without_does_not(tmp_path: Path):
+    root, handoffs = _root(tmp_path)
+    _landed(handoffs, "ok", "2026-10-06", "\n**Findings:** none -- pure refactor\n")
+    _landed(handoffs, "bare", "2026-10-06", "\n**Findings:** none\n")
+    assert [i.bead for i in review.sweep(root, as_of=LAG_TODAY).lag] == ["proj-bare"]
+
+
+def test_beads_landed_before_the_cutoff_do_not_count(tmp_path: Path):
+    root, handoffs = _root(tmp_path)
+    _landed(handoffs, "old", "2026-10-04")
+    _landed(handoffs, "new", "2026-10-05")
+    assert [i.bead for i in review.sweep(root, as_of=LAG_TODAY).lag] == ["proj-new"]
+    custom = review.sweep(root, as_of=LAG_TODAY, lag_since=date(2026, 10, 1))
+    assert len(custom.lag) == 2
+
+
+def test_an_unlanded_handoff_is_not_lag(tmp_path: Path):
+    root, handoffs = _root(tmp_path)
+    (handoffs / "wip.md").write_text("# Handoff — proj-wip\n\n## Millstone (2026-10-06)\n")
+    assert review.sweep(root, as_of=LAG_TODAY).lag == []
+
+
+def test_a_missing_checkout_is_reported_not_an_error(tmp_path: Path):
+    root, _ = _root(tmp_path)
+    (root / "projects.yaml").write_text(
+        "version: 1\nprojects:\n  - name: gone\n    path: ../nowhere\n", encoding="utf-8"
+    )
+    state = review.sweep(root, as_of=LAG_TODAY)
+    assert state.lag == [] and state.lag_missing == ["gone"]
+    assert "Checkout not found, so not checked: gone" in "\n".join(review.render_lag(state))
+    assert review.check_line(state)[1] == 0
+
+
+def test_check_fails_only_on_lag_past_the_grace_period(tmp_path: Path):
+    root, handoffs = _root(tmp_path)
+    _landed(handoffs, "abc", "2026-10-09")  # one day ago: inside the grace
+    state = review.sweep(root, as_of=LAG_TODAY)
+    assert state.lag and not state.lagging
+    assert review.check_line(state)[1] == 0
+
+    _landed(handoffs, "abc", "2026-10-07")  # three days ago
+    state = review.sweep(root, as_of=LAG_TODAY)
+    line, code = review.check_line(state)
+    assert code == 1 and "proj-abc" in line
+
+    assert review.check_line(review.sweep(root, as_of=LAG_TODAY, lag_after_days=5))[1] == 0

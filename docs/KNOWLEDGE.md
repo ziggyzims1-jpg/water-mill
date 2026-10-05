@@ -130,7 +130,8 @@ agent cannot file a finding against a project it is not working on.
 ```bash
 watermill review            # what needs a decision
 watermill review --record   # say the sweep happened
-watermill review --check    # exit 1 if the sweep itself is overdue
+watermill review --check    # exit 1 if the sweep is overdue, or a landed bead has no finding
+watermill review --lag      # just the beads landed without a finding
 ```
 
 Knowledge rots in a way code does not. A failing test announces itself; a
@@ -138,7 +139,7 @@ finding that quietly stopped being true keeps being returned, carries the same
 confident date it always had, and is read by an agent as current. Nothing in the
 system can notice that on its own -- the world changed, not the file.
 
-The sweep is five lists, and every one of them is a decision a person has to
+The sweep is six lists, and every one of them is a decision a person has to
 make:
 
 1. **Stale** -- 90+ days unconfirmed. `confirm` it or supersede it.
@@ -149,12 +150,22 @@ make:
 4. **Still only advice** -- lessons that never became a gate check or a fence
    path. Advice is a request; a gate is not.
 5. **No root cause yet** -- discarded tasks nobody has annotated.
+6. **Landed without a finding** -- beads whose handoff is marked `**LANDED**` in
+   a registered checkout (`brain/handoffs/mill/*.md`, dated by the last
+   `## Tailrace (date)` heading) that no active finding cites in `refs.tasks`.
+   Ids are normalised, so `Zimmy Life Tracker-092` and `zimmy-life-tracker-092`
+   are one bead. A handoff that says `**Findings:** none -- <why>` is covered:
+   deciding nothing was learned is a decision, silence is not. Only beads landed
+   on or after 2026-10-05 count (`--lag-since`); earlier ones were caught up by
+   hand. A checkout that is not on this machine is reported, not an error.
 
 Nothing in it is automatic. Confirming a finding because the sweep suggested it
 would be a clock resetting itself, which makes the whole staleness signal
 meaningless.
 
-**`--check` is the half that watches for absence.** A monthly job that silently
+**`--check` is the half that watches for absence.** It fails when the sweep is
+overdue *and* when a bead landed more than 2 days ago (`--lag-days`) with no
+finding, so the graph cannot fall behind the mill unnoticed. A monthly job that silently
 stopped looks exactly like a month with nothing to review: both produce no
 output. Same rule as the first project's backup-drill heartbeat and the Loki
 `count_over_time(...[24h])` alert.
