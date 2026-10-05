@@ -103,17 +103,20 @@ quietly improved.
 
 `remember` and the agent's `propose` tool refuse a finding with no root cause
 (`tasklog.ROOT_CAUSES`; `none` is an explicit answer, blank is not) or no tag.
-`pending` is the other accepted answer: it means "the owner has not judged
-this". `gate-hole`, `none` and `agent-error` are `tasklog.HUMAN_ONLY` -- only a
-person may call them -- so an agent (a crew member running `remember`, or the
-`propose` tool) uses `pending` rather than guessing. `remember` does not block
-the HUMAN_ONLY causes, because the owner uses the same CLI; that is enforced by
-instruction in the crew files, and the sweep surfaces it. Findings with cause
-`pending` (or blank, for old lines) land in "Missing structure" until the owner
-runs `annotate-finding`, which replaces it (a later real cause wins).
-
 An untagged finding with no cause can be found only by its words, which is the
 one way the graph is not supposed to be reached.
+
+**`pending` means "owner to judge."** It is accepted wherever a finding's cause
+is (`remember`, `propose`, `annotate-finding`) and is deliberately *not* a root
+cause: it is not in `tasklog.ROOT_CAUSES`, `watermill annotate` (the task log)
+refuses it, and a finding whose merged cause is `pending` is listed under
+**Missing structure** until the owner annotates it. Three buckets --
+`none`, `gate-hole`, `agent-error` (`tasklog.HUMAN_ONLY`) -- are judgements only
+a person may make, so the agent's `propose` tool refuses them and offers
+`pending` or one of the specification buckets instead. Quarantine does not make
+that safe: a guess in a judgement field is still read later as a judgement.
+`remember` stays permissive because the owner uses it; crew agents that write
+through it use `pending` rather than any `HUMAN_ONLY` bucket.
 
 Findings written before that rule, and any whose cause turned out wrong, are
 fixed by an **annotation line** -- a new `kind_of_line: "annotation"` carrying
@@ -126,10 +129,9 @@ watermill annotate-finding --batch fixes.jsonl --json                     # or '
 ```
 
 A batch is JSONL, one `{"id", "cause", "tags", "destination"}` per line. Every
-row is checked against the store before the first line is written, so one bad
-id refuses the lot instead of leaving it half applied. (The one failure that
-can still land mid-batch is the line cap below, which only an absurd tag list
-reaches.) The command is `annotate-finding` because `annotate` is the task
+row is checked against the store -- and against the line cap below -- before
+the first line is written, so one bad row refuses the lot instead of leaving it
+half applied. The command is `annotate-finding` because `annotate` is the task
 log's verb for a task's root cause.
 
 `read()`, `get()`, `recall` and the sweep see the **merged** finding: the latest
@@ -187,9 +189,9 @@ make:
    orchestrator's doctrine.
 4. **Still only advice** -- lessons that never became a gate check or a fence
    path. Advice is a request; a gate is not.
-5. **Missing structure** -- active findings that still lack a person-judged root cause
-   (blank or `pending`) or a
-   tag after annotations are merged. Fix with `annotate-finding`.
+5. **Missing structure** -- active findings that still lack a root cause (or
+   whose cause is still `pending`) or a tag after annotations are merged. Fix
+   with `annotate-finding`.
 6. **No root cause yet** -- discarded tasks nobody has annotated.
 
 Nothing in it is automatic. Confirming a finding because the sweep suggested it

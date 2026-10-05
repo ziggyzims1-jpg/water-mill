@@ -72,7 +72,7 @@ def test_a_file_path_is_a_usable_query(tmp_path: Path):
 def test_an_agent_proposal_is_never_returned_by_search(tmp_path: Path):
     """The quarantine is enforced here, in the one place every reader goes
     through, rather than in each caller that might forget."""
-    knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="A guess about migrations.", root_cause="none", tags=("t",))
+    knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="A guess about migrations.", root_cause="pending", tags=("t",))
     graph = recall.build(tmp_path)
     assert recall.search(graph, "migrations").hits == []
     assert len(recall.proposals(graph)) == 1
@@ -80,7 +80,7 @@ def test_an_agent_proposal_is_never_returned_by_search(tmp_path: Path):
 
 
 def test_a_promoted_proposal_becomes_visible(tmp_path: Path):
-    line = knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="About migrations.", root_cause="none", tags=("t",))
+    line = knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="About migrations.", root_cause="pending", tags=("t",))
     knowledge.decide(tmp_path, line["id"], promote=True)
     assert recall.search(recall.build(tmp_path), "migrations").hits
 
@@ -96,7 +96,7 @@ def test_a_rejected_proposal_stays_invisible(tmp_path: Path):
     """
     line = knowledge.propose(
         tmp_path, cell="zimmy", kind="lesson", text="The gate is safe to skip on Fridays.",
-        root_cause="none", tags=("t",),
+        root_cause="pending", tags=("t",),
     )
     knowledge.decide(tmp_path, line["id"], promote=False, why="wrong and dangerous")
     graph = recall.build(tmp_path)

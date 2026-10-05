@@ -43,7 +43,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import knowledge, recall, tasklog, usage
+from . import knowledge, recall, usage
 
 #: The protocol version spoken when a client does not name one.
 DEFAULT_PROTOCOL = "2024-11-05"
@@ -117,9 +117,8 @@ TOOLS = [
                 "detail": {"type": "string", "description": "Optional, a short paragraph."},
                 "root_cause": {
                     "type": "string",
-                    "enum": [*sorted(tasklog.ROOT_CAUSES), knowledge.PENDING_CAUSE],
-                    "description": "Why it happened. Use 'pending' if you are not "
-                    "sure; the owner decides.",
+                    "enum": sorted(knowledge.AGENT_CAUSES),
+                    "description": "Why it happened; 'pending' if you cannot tell.",
                 },
                 "tags": {
                     "type": "array",

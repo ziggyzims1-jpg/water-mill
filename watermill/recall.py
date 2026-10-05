@@ -501,16 +501,14 @@ def unmechanised(graph: Graph) -> list[Node]:
 
 
 def missing_structure(graph: Graph) -> list[Node]:
-    """Active findings still lacking a root cause or a tag after annotations merge."""
+    """Active findings still lacking a judged root cause or a tag after annotations
+    merge. A `pending` cause is listed: it is the owner's judgement still owed."""
     return [
         n for n in graph.nodes
         if n.kind == FINDING
         and n.provenance == JUDGED
         and not n.meta.get("superseded_by")
-        and not (
-            n.meta.get("root_cause") not in ("", None, knowledge.PENDING_CAUSE)
-            and n.meta.get("tags")
-        )
+        and (n.meta.get("root_cause") in ("", knowledge.PENDING) or not n.meta.get("tags"))
     ]
 
 

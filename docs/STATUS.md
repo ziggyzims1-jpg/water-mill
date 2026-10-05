@@ -190,7 +190,7 @@ Anything that judgement teaches which is worth carrying to the *next* task goes
 into the context graph in the same sitting, while it is still fresh:
 
 ```bash
-./bin/watermill remember zimmy-life-tracker lesson "..." --cause <root-cause|none> --tag <tag> \
+./bin/watermill remember zimmy-life-tracker lesson "..." --cause <root-cause|none|pending> --tag <tag> \
     --path <file> --task <id>
 ```
 

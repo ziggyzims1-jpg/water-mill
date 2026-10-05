@@ -83,7 +83,7 @@ def test_a_proposal_is_stamped_with_the_provenance_the_engine_supplied(tmp_path:
     file a finding against a project it is not working on."""
     server = _server(tmp_path)
     text, is_error = server.call(
-        "propose", {"root_cause": "none", "tags": ["t"], "text": "The spec assumed a migration that does not exist.",
+        "propose", {"root_cause": "pending", "tags": ["t"], "text": "The spec assumed a migration that does not exist.",
                     "cell": "some-other-cell", "author": "human"}
     )
     assert not is_error
@@ -99,7 +99,7 @@ def test_a_proposal_is_not_readable_by_the_next_recall(tmp_path: Path):
     """The point of the quarantine, asserted through the tool rather than the
     library: an agent must not be able to read its own guess back as agreed."""
     server = _server(tmp_path)
-    server.call("propose", {"root_cause": "none", "tags": ["t"], "text": "Something about migrations."})
+    server.call("propose", {"root_cause": "pending", "tags": ["t"], "text": "Something about migrations."})
     answer, _ = server.call("recall", {"query": "migrations"})
     assert "Something about migrations" not in answer
     # And the quarantine does not leak its own existence either: the count of
@@ -115,7 +115,7 @@ def test_a_read_only_session_cannot_record_anything(tmp_path: Path):
 
 
 def test_an_empty_proposal_is_refused_rather_than_stored(tmp_path: Path):
-    text, is_error = _server(tmp_path).call("propose", {"root_cause": "none", "tags": ["t"], "text": "   "})
+    text, is_error = _server(tmp_path).call("propose", {"root_cause": "pending", "tags": ["t"], "text": "   "})
     assert is_error
     assert knowledge.read(tmp_path) == []
 
@@ -123,7 +123,7 @@ def test_an_empty_proposal_is_refused_rather_than_stored(tmp_path: Path):
 def test_an_unknown_kind_falls_back_to_lesson_rather_than_failing(tmp_path: Path):
     """A refusal here costs the agent a turn to no purpose: the text is what
     matters and the bucket is a detail a person can fix in the sweep."""
-    _server(tmp_path).call("propose", {"root_cause": "none", "tags": ["t"], "text": "Something.", "kind": "musing"})
+    _server(tmp_path).call("propose", {"root_cause": "pending", "tags": ["t"], "text": "Something.", "kind": "musing"})
     assert knowledge.read(tmp_path)[0].kind == "lesson"
 
 
@@ -181,3 +181,19 @@ def test_recall_through_the_tool_is_the_same_read_the_cli_makes(tmp_path: Path):
     through_tool, _ = _server(tmp_path).call("recall", {"query": "gate"})
     direct = recall.search(recall.build(tmp_path), "gate", cell="zimmy").render()
     assert through_tool == direct
+
+
+def test_propose_refuses_a_cause_only_a_person_may_assign(tmp_path: Path):
+    """The schema offers 'pending' and the specification buckets, and the server
+    refuses a HUMAN_ONLY cause even when a client ignores the schema."""
+    from watermill import tasklog
+
+    schema = next(t for t in mcp.TOOLS if t["name"] == "propose")["inputSchema"]
+    offered = set(schema["properties"]["root_cause"]["enum"])
+    assert knowledge.PENDING in offered and offered.isdisjoint(tasklog.HUMAN_ONLY)
+    server = _server(tmp_path)
+    for cause in sorted(tasklog.HUMAN_ONLY):
+        text, is_error = server.call("propose", {"root_cause": cause, "tags": ["t"],
+                                                 "text": "A guess."})
+        assert is_error and "pending" in text
+    assert knowledge.read(tmp_path, include_superseded=True) == []

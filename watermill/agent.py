@@ -135,9 +135,9 @@ project this factory drives. Call it when a gate fails for a reason you do not
 recognise, before changing a file whose conventions you are guessing at, or
 when the spec seems to assume something. It answers in a few lines; `detail`
 opens one of them. If this task teaches you something the next agent would
-want, `propose` it in one sentence, with a root_cause (`none` if it is not a
-failure) and at least one tag -- a person reviews it before anyone reads
-it, so an uncertain finding is worth filing rather than worth suppressing.
+want, `propose` it in one sentence, with a root_cause (`pending` if unsure)
+and a tag -- a person reviews it before anyone reads it, so an uncertain
+finding is worth filing rather than worth suppressing.
 """
 
 

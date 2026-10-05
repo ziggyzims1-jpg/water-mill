@@ -56,7 +56,7 @@ def test_the_hit_rate_counts_searches_and_not_the_other_tools(tmp_path: Path):
     server = _server(tmp_path)
     server.call("recall", {"query": "gate"})
     server.call("recall", {"query": "nothing at all like it"})
-    server.call("propose", {"root_cause": "none", "tags": ["t"], "text": "Something learned."})
+    server.call("propose", {"root_cause": "pending", "tags": ["t"], "text": "Something learned."})
 
     stats = usage.stats(usage.read(tmp_path))
     assert (stats["searches"], stats["proposed"]) == (2, 1)

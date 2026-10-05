@@ -44,7 +44,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from .tasklog import ROOT_CAUSES
+from .tasklog import HUMAN_ONLY, ROOT_CAUSES
 
 KNOWLEDGE_FILENAME = "knowledge/findings.jsonl"
 
@@ -82,16 +82,21 @@ SUPERSEDE = "supersede"
 PROMOTE = "promote"
 REJECT = "reject"
 REVIEW = "review"
-#: A stand-in cause that means "the owner has not judged this yet". Some causes
-#: (`tasklog.HUMAN_ONLY`: gate-hole, none, agent-error) are judgements only a
-#: person may make, so an agent recording a finding must not be forced into one.
-#: It is accepted by `record` and surfaces in the sweep's "Missing structure"
-#: list until a person replaces it with `annotate`.
-PENDING_CAUSE = "pending"
-
 #: Structure added to an existing finding after the fact. Named for what it
 #: does rather than `annotate`, which is the task log's verb for a root cause.
 ANNOTATION = "annotation"
+
+#: "Owner to judge." Not a root cause and deliberately not in
+#: `tasklog.ROOT_CAUSES`: it is the honest answer for whoever may not make the
+#: judgement -- an agent may never claim `none`, `gate-hole` or `agent-error`
+#: (`tasklog.HUMAN_ONLY`), and a guess in a judgement field counts as one. A
+#: finding whose cause is still pending is listed under 'Missing structure'.
+PENDING = "pending"
+
+#: What a finding's cause field accepts: the task log's buckets plus `PENDING`.
+FINDING_CAUSES = frozenset(ROOT_CAUSES) | {PENDING}
+#: What an agent's `propose` accepts: never a `tasklog.HUMAN_ONLY` judgement.
+AGENT_CAUSES = (frozenset(ROOT_CAUSES) - HUMAN_ONLY) | {PENDING}
 
 #: How long a finding stands before somebody should look at it again. Ninety
 #: days is a quarter: long enough that the sweep is not busywork, short enough
@@ -200,8 +205,8 @@ class Record:
 
     @property
     def structured(self) -> bool:
-        """True when a person-judged root cause and at least one tag are present."""
-        return self.root_cause not in ("", PENDING_CAUSE) and bool(self.tags)
+        """True when the finding has a judged root cause and at least one tag."""
+        return self.root_cause not in ("", PENDING) and bool(self.tags)
 
     def _latest(self, key: str) -> str:
         for source in (*reversed(self.annotations), self.finding):
@@ -358,8 +363,18 @@ def propose(root: Path, cell: str, kind: str, text: str, **kwargs) -> dict:
     lives somewhere else is a proposal nobody reads, and the quarantine that
     matters is enforced where it can actually be tested -- in the query layer,
     which never returns a proposal to an agent.
+
+    An agent may not assign a `tasklog.HUMAN_ONLY` cause, quarantine or not:
+    a guess in a judgement field is still a guess somebody later reads as a
+    judgement. `pending` is the answer when it cannot tell.
     """
     kwargs.pop("author", None)
+    if kwargs.get("root_cause") in HUMAN_ONLY:
+        raise KnowledgeError(
+            f"root cause {kwargs['root_cause']!r} is a judgement only a person may "
+            f"make. Use {PENDING!r} (owner to judge) or one of: "
+            f"{', '.join(sorted(AGENT_CAUSES))}"
+        )
     return record(root, cell, kind, text, author=AGENT, **kwargs)
 
 
@@ -424,22 +439,18 @@ def annotate(
     file. At least one field is required: an annotation that says nothing is
     noise the sweep would have to read past.
     """
-    check_annotation(root_cause, tags, destination)
-    clean = _clean_tags(tags)
-    line: dict = {"kind_of_line": ANNOTATION, "id": finding_id, "by": by,
-                  "recorded_at": _now()}
-    if root_cause:
-        line["root_cause"] = root_cause
-    if clean:
-        line["tags"] = clean
-    if destination:
-        line["destination"] = destination
+    line = check_annotation(root_cause, tags, destination, finding_id=finding_id, by=by)
     _append(root, line)
     return line
 
 
-def check_annotation(root_cause: str, tags, destination: str) -> None:
-    """Refuse what `annotate` would refuse, without writing. For batch callers."""
+def check_annotation(root_cause: str, tags, destination: str, *,
+                     finding_id: str = "", by: str = "") -> dict:
+    """Refuse what `annotate` would refuse, without writing. For batch callers.
+
+    Returns the line `annotate` would write, already held to the line cap, so a
+    batch validated up front cannot be stopped half way by an oversized row.
+    """
     if not (root_cause or _clean_tags(tags) or destination):
         raise KnowledgeError("an annotation needs a cause, a tag or a destination")
     _check_cause(root_cause, required=False)
@@ -447,6 +458,16 @@ def check_annotation(root_cause: str, tags, destination: str) -> None:
         raise KnowledgeError(
             f"unknown destination {destination!r}. One of: {', '.join(sorted(DESTINATIONS))}"
         )
+    line: dict = {"kind_of_line": ANNOTATION, "id": finding_id, "by": by,
+                  "recorded_at": _now()}
+    if root_cause:
+        line["root_cause"] = root_cause
+    if _clean_tags(tags):
+        line["tags"] = _clean_tags(tags)
+    if destination:
+        line["destination"] = destination
+    _payload(line)
+    return line
 
 
 def record_review(root: Path, *, on: str = "", by: str = "", note: str = "") -> dict:
@@ -546,16 +567,22 @@ def _append(root: Path, line: dict) -> None:
     silently dropping the end of somebody's finding is worse than making them
     shorten it, and the message says the limit.
     """
+    payload = _payload(line)
+    path = Path(root) / KNOWLEDGE_FILENAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(payload)
+
+
+def _payload(line: dict) -> str:
+    """The serialised line, refused if it would break the atomic-append bound."""
     payload = json.dumps(line, sort_keys=True) + "\n"
     if len(payload.encode("utf-8")) > MAX_LINE_BYTES:
         raise KnowledgeError(
             f"that line is longer than {MAX_LINE_BYTES} bytes, which is the "
             "bound that keeps concurrent appends atomic. Shorten it."
         )
-    path = Path(root) / KNOWLEDGE_FILENAME
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(payload)
+    return payload
 
 
 def _lines(root: Path) -> list[dict]:
@@ -577,26 +604,18 @@ def _lines(root: Path) -> list[dict]:
 
 
 def _check_cause(root_cause: str, *, required: bool) -> None:
-    """`none` is an answer; blank is not. Same taxonomy as the task log."""
+    """`none` is an answer and `pending` defers it; blank is neither."""
     if not root_cause:
         if required:
             raise KnowledgeError(
                 "a finding needs a root cause (--cause). One of: "
-                f"{', '.join(sorted(ROOT_CAUSES))}. 'none' is an explicit answer; "
-                f"blank is not. Use '{PENDING_CAUSE}' if only the owner can judge it."
+                f"{', '.join(sorted(FINDING_CAUSES))}. 'none' is an explicit answer "
+                "and 'pending' leaves it to the owner; blank is neither."
             )
         return
-    if root_cause == PENDING_CAUSE:
-        if not required:
-            raise KnowledgeError(
-                f"{PENDING_CAUSE!r} is a placeholder for a new finding; an annotation "
-                "must give the real cause"
-            )
-        return
-    if root_cause not in ROOT_CAUSES:
+    if root_cause not in FINDING_CAUSES:
         raise KnowledgeError(
-            f"unknown root cause {root_cause!r}. One of: "
-            f"{', '.join(sorted(ROOT_CAUSES))}, {PENDING_CAUSE}"
+            f"unknown root cause {root_cause!r}. One of: {', '.join(sorted(FINDING_CAUSES))}"
         )
 
 

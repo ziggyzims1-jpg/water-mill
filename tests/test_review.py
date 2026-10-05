@@ -83,7 +83,7 @@ def test_a_superseded_finding_is_not_swept_again(tmp_path: Path):
 
 
 def test_proposals_awaiting_a_person_are_named(tmp_path: Path):
-    knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="An agent's guess.", root_cause="none", tags=("t",))
+    knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="An agent's guess.", root_cause="pending", tags=("t",))
     state = review.sweep(tmp_path, as_of=TODAY)
     assert len(state.proposals) == 1
     assert "quarantine" in review.render(state)
@@ -152,7 +152,7 @@ def test_what_needs_a_decision_leads(tmp_path: Path):
     """Same rule as the morning report: the only section that is work goes
     first, so a month of accumulating debt is visible rather than buried."""
     _finding(tmp_path, "An old finding.", observed_at="2026-01-01")
-    knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="A guess.", root_cause="none", tags=("t",))
+    knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="A guess.", root_cause="pending", tags=("t",))
     knowledge.record_review(tmp_path, on="2026-08-20")
     text = review.render(review.sweep(tmp_path, as_of=TODAY))
     assert text.index("## Stale") < text.index("## Proposed")
@@ -218,7 +218,7 @@ def test_missing_structure_lists_findings_until_annotated(tmp_path: Path):
 
     text = review.render(review.sweep(tmp_path, as_of=TODAY))
     assert "Missing structure -- 1 finding(s)" in text
-    assert "f-old" in text and "no cause or tags" in text
+    assert "f-old" in text and "no cause, no tags" in text
     assert "A structured one" not in text.split("Missing structure")[1]
 
     knowledge.annotate(tmp_path, "f-old", root_cause="none")
@@ -227,9 +227,10 @@ def test_missing_structure_lists_findings_until_annotated(tmp_path: Path):
     assert "Missing structure" not in review.render(review.sweep(tmp_path, as_of=TODAY))
 
 
-def test_pending_cause_is_listed_as_missing_structure_until_judged(tmp_path: Path):
-    line = _finding(tmp_path, "An agent could not judge this.", root_cause="pending")
+def test_a_pending_cause_is_listed_as_missing_structure_until_judged(tmp_path: Path):
+    _finding(tmp_path, "Owner to judge this one.", root_cause=knowledge.PENDING)
     text = review.render(review.sweep(tmp_path, as_of=TODAY))
-    assert "Missing structure -- 1 finding(s)" in text and line["id"] in text
-    knowledge.annotate(tmp_path, line["id"], root_cause="none")
+    assert "Missing structure -- 1 finding(s)" in text and "cause pending" in text
+    fid = knowledge.read(tmp_path)[0].id
+    knowledge.annotate(tmp_path, fid, root_cause="weak-scope")
     assert "Missing structure" not in review.render(review.sweep(tmp_path, as_of=TODAY))

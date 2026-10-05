@@ -694,7 +694,8 @@ def cmd_annotate_finding(args) -> int:
             print(f"refused: no finding {row['id']}; nothing was written")
             return 1
         try:
-            knowledge.check_annotation(row["cause"], row["tags"], row["destination"])
+            knowledge.check_annotation(row["cause"], row["tags"], row["destination"],
+                                       finding_id=row["id"], by=args.by or "")
         except knowledge.KnowledgeError as exc:
             print(f"refused: {row['id']}: {exc}; nothing was written")
             return 2
@@ -978,7 +979,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--on", metavar="YYYY-MM-DD",
                    help="when it was observed, if not today")
     p.add_argument("--cause", help="REQUIRED, one of: "
-                   + ", ".join(sorted(tasklog.ROOT_CAUSES)) + ", or 'pending' (owner to judge)")
+                   + ", ".join(sorted(knowledge.FINDING_CAUSES))
+                   + " ('none' is an answer; 'pending' leaves it to the owner)")
     p.add_argument("--destination", choices=sorted(knowledge.DESTINATIONS),
                    help="where this lesson was mechanised")
     p.add_argument("--supersedes", metavar="ID", help="the finding this replaces")
@@ -993,7 +995,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("annotate-finding",
                        help="add a cause, tags or destination to existing findings")
     p.add_argument("finding_ids", nargs="*", metavar="id")
-    p.add_argument("--cause", help="one of: " + ", ".join(sorted(tasklog.ROOT_CAUSES)))
+    p.add_argument("--cause", help="one of: " + ", ".join(sorted(knowledge.FINDING_CAUSES)))
     p.add_argument("--tag", action="append", help="repeatable; added to existing tags")
     p.add_argument("--destination", choices=sorted(knowledge.DESTINATIONS))
     p.add_argument("--batch", metavar="FILE",

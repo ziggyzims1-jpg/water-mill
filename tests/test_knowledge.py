@@ -121,7 +121,7 @@ def test_a_finding_cannot_supersede_itself(tmp_path: Path):
 
 
 def test_an_agent_proposal_is_quarantined_until_a_person_decides(tmp_path: Path):
-    line = knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="Something I noticed.", root_cause="none", tags=("t",))
+    line = knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="Something I noticed.", root_cause="pending", tags=("t",))
     record = knowledge.get(tmp_path, line["id"])
     assert record.author == knowledge.AGENT
     assert record.status == knowledge.PROPOSED
@@ -131,7 +131,7 @@ def test_an_agent_proposal_is_quarantined_until_a_person_decides(tmp_path: Path)
 
 
 def test_a_rejected_proposal_stays_rejected_and_stays_in_the_file(tmp_path: Path):
-    line = knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="A guess.", root_cause="none", tags=("t",))
+    line = knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="A guess.", root_cause="pending", tags=("t",))
     knowledge.decide(tmp_path, line["id"], promote=False, why="not true")
     record = knowledge.get(tmp_path, line["id"])
     assert record.status == knowledge.REJECTED
@@ -143,7 +143,7 @@ def test_an_agent_cannot_file_a_proposal_as_a_human(tmp_path: Path):
     the one thing the writer does not get to choose."""
     line = knowledge.propose(
         tmp_path, cell="zimmy", kind="lesson", text="x", author=knowledge.HUMAN,
-        root_cause="none", tags=("t",),
+        root_cause="pending", tags=("t",),
     )
     assert line["author"] == knowledge.AGENT
 
@@ -239,7 +239,7 @@ for step in range(20):
     knowledge.propose(
         Path(sys.argv[2]), cell=f"cell-{index % 3}", kind="lesson",
         text=f"Concurrent finding {index}/{step}.", detail="x" * 400,
-        root_cause="none", tags=("t",),
+        root_cause="pending", tags=("t",),
     )
 '''.replace("REPO_ROOT", str(Path(__file__).resolve().parent.parent))
 
@@ -290,7 +290,7 @@ def test_a_proposal_needs_the_same_structure(tmp_path: Path):
     with pytest.raises(knowledge.KnowledgeError):
         knowledge.propose(tmp_path, cell="z", kind="lesson", text="x", tags=("t",))
     with pytest.raises(knowledge.KnowledgeError):
-        knowledge.propose(tmp_path, cell="z", kind="lesson", text="x", root_cause="none")
+        knowledge.propose(tmp_path, cell="z", kind="lesson", text="x", root_cause="pending")
     assert knowledge.read(tmp_path) == []
 
 
@@ -361,12 +361,37 @@ for step in range(20):
     assert len(knowledge.get(tmp_path, "f-old").tags) == 200
 
 
-def test_pending_is_an_accepted_placeholder_that_annotation_replaces(tmp_path: Path):
-    line = _record(tmp_path, root_cause=knowledge.PENDING_CAUSE)
+def test_pending_is_a_finding_cause_but_not_a_root_cause(tmp_path: Path):
+    """'Owner to judge' is accepted wherever a finding's cause is, and is never
+    counted as a judgement: the task log refuses it and the finding is not
+    structured until somebody replaces it."""
+    from watermill import tasklog
+
+    assert knowledge.PENDING not in tasklog.ROOT_CAUSES
+    with pytest.raises(ValueError):
+        tasklog.annotate(tmp_path, "zimmy", "t-1", knowledge.PENDING)
+    line = _record(tmp_path, root_cause=knowledge.PENDING)
     record = knowledge.get(tmp_path, line["id"])
-    assert record.root_cause == "pending" and not record.structured
-    with pytest.raises(knowledge.KnowledgeError):
-        knowledge.annotate(tmp_path, line["id"], root_cause="pending")
-    knowledge.annotate(tmp_path, line["id"], root_cause="gate-hole")
+    assert record.root_cause == knowledge.PENDING
+    assert not record.structured
+    knowledge.annotate(tmp_path, line["id"], root_cause="missing-context")
     assert knowledge.get(tmp_path, line["id"]).structured
-    assert _record(tmp_path, root_cause="gate-hole")["root_cause"] == "gate-hole"
+    knowledge.annotate(tmp_path, line["id"], root_cause=knowledge.PENDING)
+    assert not knowledge.get(tmp_path, line["id"]).structured, "re-opened for the owner"
+
+
+def test_an_agent_may_not_make_a_human_only_judgement(tmp_path: Path):
+    """Quarantine does not make a guess in a judgement field safe."""
+    from watermill import tasklog
+
+    for cause in sorted(tasklog.HUMAN_ONLY):
+        with pytest.raises(knowledge.KnowledgeError, match="pending"):
+            knowledge.propose(tmp_path, cell="z", kind="lesson", text="x",
+                              root_cause=cause, tags=("t",))
+    assert knowledge.read(tmp_path, include_superseded=True) == []
+    for cause in (knowledge.PENDING, "missing-context"):
+        knowledge.propose(tmp_path, cell="z", kind="lesson", text=f"about {cause}",
+                          root_cause=cause, tags=("t",))
+    assert knowledge.AGENT_CAUSES.isdisjoint(tasklog.HUMAN_ONLY)
+    # A person writing through `record` may still answer 'none'.
+    assert _record(tmp_path, root_cause="none")["root_cause"] == "none"
