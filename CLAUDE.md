@@ -26,6 +26,12 @@ crew agents fail without it. The SessionStart hook in `.claude/settings.json`
 runs it ahead of `bd prime`, in one command, because hooks for one event may
 run in parallel.
 
+`scripts/sync-factory.sh` fast-forwards this checkout (`pull --ff-only`, only on
+a clean `main`, bounded by a timeout) so the context graph and the crew
+definitions other repos read through their sibling `../water-mill` are never
+days behind. It always exits 0 and prints nothing to stdout, so a SessionStart
+hook can run it ahead of `bd prime --hook-json`.
+
 `make verify` is the gate and CI runs exactly that command, so a check that
 passes locally cannot fail in CI for a reason spelled out in a YAML file.
 
