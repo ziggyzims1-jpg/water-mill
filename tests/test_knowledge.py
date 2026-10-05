@@ -359,3 +359,14 @@ for step in range(20):
     assert [p.wait() for p in processes] == [0] * 10
     assert len((tmp_path / knowledge.KNOWLEDGE_FILENAME).read_text().splitlines()) == 201
     assert len(knowledge.get(tmp_path, "f-old").tags) == 200
+
+
+def test_pending_is_an_accepted_placeholder_that_annotation_replaces(tmp_path: Path):
+    line = _record(tmp_path, root_cause=knowledge.PENDING_CAUSE)
+    record = knowledge.get(tmp_path, line["id"])
+    assert record.root_cause == "pending" and not record.structured
+    with pytest.raises(knowledge.KnowledgeError):
+        knowledge.annotate(tmp_path, line["id"], root_cause="pending")
+    knowledge.annotate(tmp_path, line["id"], root_cause="gate-hole")
+    assert knowledge.get(tmp_path, line["id"]).structured
+    assert _record(tmp_path, root_cause="gate-hole")["root_cause"] == "gate-hole"

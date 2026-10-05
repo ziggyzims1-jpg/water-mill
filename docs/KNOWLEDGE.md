@@ -103,6 +103,15 @@ quietly improved.
 
 `remember` and the agent's `propose` tool refuse a finding with no root cause
 (`tasklog.ROOT_CAUSES`; `none` is an explicit answer, blank is not) or no tag.
+`pending` is the other accepted answer: it means "the owner has not judged
+this". `gate-hole`, `none` and `agent-error` are `tasklog.HUMAN_ONLY` -- only a
+person may call them -- so an agent (a crew member running `remember`, or the
+`propose` tool) uses `pending` rather than guessing. `remember` does not block
+the HUMAN_ONLY causes, because the owner uses the same CLI; that is enforced by
+instruction in the crew files, and the sweep surfaces it. Findings with cause
+`pending` (or blank, for old lines) land in "Missing structure" until the owner
+runs `annotate-finding`, which replaces it (a later real cause wins).
+
 An untagged finding with no cause can be found only by its words, which is the
 one way the graph is not supposed to be reached.
 
@@ -178,7 +187,8 @@ make:
    orchestrator's doctrine.
 4. **Still only advice** -- lessons that never became a gate check or a fence
    path. Advice is a request; a gate is not.
-5. **Missing structure** -- active findings that still lack a root cause or a
+5. **Missing structure** -- active findings that still lack a person-judged root cause
+   (blank or `pending`) or a
    tag after annotations are merged. Fix with `annotate-finding`.
 6. **No root cause yet** -- discarded tasks nobody has annotated.
 

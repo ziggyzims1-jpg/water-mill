@@ -82,6 +82,13 @@ SUPERSEDE = "supersede"
 PROMOTE = "promote"
 REJECT = "reject"
 REVIEW = "review"
+#: A stand-in cause that means "the owner has not judged this yet". Some causes
+#: (`tasklog.HUMAN_ONLY`: gate-hole, none, agent-error) are judgements only a
+#: person may make, so an agent recording a finding must not be forced into one.
+#: It is accepted by `record` and surfaces in the sweep's "Missing structure"
+#: list until a person replaces it with `annotate`.
+PENDING_CAUSE = "pending"
+
 #: Structure added to an existing finding after the fact. Named for what it
 #: does rather than `annotate`, which is the task log's verb for a root cause.
 ANNOTATION = "annotation"
@@ -193,8 +200,8 @@ class Record:
 
     @property
     def structured(self) -> bool:
-        """True when the finding has a root cause and at least one tag."""
-        return bool(self.root_cause) and bool(self.tags)
+        """True when a person-judged root cause and at least one tag are present."""
+        return self.root_cause not in ("", PENDING_CAUSE) and bool(self.tags)
 
     def _latest(self, key: str) -> str:
         for source in (*reversed(self.annotations), self.finding):
@@ -576,12 +583,20 @@ def _check_cause(root_cause: str, *, required: bool) -> None:
             raise KnowledgeError(
                 "a finding needs a root cause (--cause). One of: "
                 f"{', '.join(sorted(ROOT_CAUSES))}. 'none' is an explicit answer; "
-                "blank is not."
+                f"blank is not. Use '{PENDING_CAUSE}' if only the owner can judge it."
+            )
+        return
+    if root_cause == PENDING_CAUSE:
+        if not required:
+            raise KnowledgeError(
+                f"{PENDING_CAUSE!r} is a placeholder for a new finding; an annotation "
+                "must give the real cause"
             )
         return
     if root_cause not in ROOT_CAUSES:
         raise KnowledgeError(
-            f"unknown root cause {root_cause!r}. One of: {', '.join(sorted(ROOT_CAUSES))}"
+            f"unknown root cause {root_cause!r}. One of: "
+            f"{', '.join(sorted(ROOT_CAUSES))}, {PENDING_CAUSE}"
         )
 
 

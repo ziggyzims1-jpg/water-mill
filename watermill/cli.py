@@ -978,7 +978,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--on", metavar="YYYY-MM-DD",
                    help="when it was observed, if not today")
     p.add_argument("--cause", help="REQUIRED, one of: "
-                   + ", ".join(sorted(tasklog.ROOT_CAUSES)) + " ('none' is an answer)")
+                   + ", ".join(sorted(tasklog.ROOT_CAUSES)) + ", or 'pending' (owner to judge)")
     p.add_argument("--destination", choices=sorted(knowledge.DESTINATIONS),
                    help="where this lesson was mechanised")
     p.add_argument("--supersedes", metavar="ID", help="the finding this replaces")

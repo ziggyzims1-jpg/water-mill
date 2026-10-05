@@ -507,7 +507,10 @@ def missing_structure(graph: Graph) -> list[Node]:
         if n.kind == FINDING
         and n.provenance == JUDGED
         and not n.meta.get("superseded_by")
-        and not (n.meta.get("root_cause") and n.meta.get("tags"))
+        and not (
+            n.meta.get("root_cause") not in ("", None, knowledge.PENDING_CAUSE)
+            and n.meta.get("tags")
+        )
     ]
 
 

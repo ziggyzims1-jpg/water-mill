@@ -225,3 +225,11 @@ def test_missing_structure_lists_findings_until_annotated(tmp_path: Path):
     assert "no tags" in review.render(review.sweep(tmp_path, as_of=TODAY))
     knowledge.annotate(tmp_path, "f-old", tags=["x"])
     assert "Missing structure" not in review.render(review.sweep(tmp_path, as_of=TODAY))
+
+
+def test_pending_cause_is_listed_as_missing_structure_until_judged(tmp_path: Path):
+    line = _finding(tmp_path, "An agent could not judge this.", root_cause="pending")
+    text = review.render(review.sweep(tmp_path, as_of=TODAY))
+    assert "Missing structure -- 1 finding(s)" in text and line["id"] in text
+    knowledge.annotate(tmp_path, line["id"], root_cause="none")
+    assert "Missing structure" not in review.render(review.sweep(tmp_path, as_of=TODAY))

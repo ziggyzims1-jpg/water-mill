@@ -117,8 +117,9 @@ TOOLS = [
                 "detail": {"type": "string", "description": "Optional, a short paragraph."},
                 "root_cause": {
                     "type": "string",
-                    "enum": sorted(tasklog.ROOT_CAUSES),
-                    "description": "Why it happened; 'none' if it is not a failure.",
+                    "enum": [*sorted(tasklog.ROOT_CAUSES), knowledge.PENDING_CAUSE],
+                    "description": "Why it happened. Use 'pending' if you are not "
+                    "sure; the owner decides.",
                 },
                 "tags": {
                     "type": "array",

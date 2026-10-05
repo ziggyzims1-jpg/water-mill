@@ -262,14 +262,15 @@ def _render_missing_structure(state: Sweep) -> list[str]:
     out = [
         f"## Missing structure -- {len(state.unstructured)} finding(s)",
         "",
-        "Each lacks a root cause or a tag, so the graph can reach it only by its "
-        "words. Add what is missing; it is a new line and edits nothing.",
+        "Each lacks a person-judged root cause (blank or `pending`) or a tag, so "
+        "the graph can reach it only by its words. Add what is missing; it is a new line and edits nothing.",
         "",
     ]
     for node in state.unstructured:
+        has_cause = node.meta.get("root_cause") not in ("", None, knowledge.PENDING_CAUSE)
         missing = [
             label for label, present in (
-                ("cause", node.meta.get("root_cause")), ("tags", node.meta.get("tags")),
+                ("cause", has_cause), ("tags", node.meta.get("tags")),
             ) if not present
         ]
         out.append(f"- `{node.id}` [{node.cell or 'factory'}] no {' or '.join(missing)}: "
