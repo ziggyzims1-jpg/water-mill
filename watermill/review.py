@@ -43,6 +43,7 @@ class Sweep:
     proposals: list[recall.Node] = field(default_factory=list)
     unmechanised: list[recall.Node] = field(default_factory=list)
     promotable: list[tuple[str, list[recall.Node]]] = field(default_factory=list)
+    unstructured: list[recall.Node] = field(default_factory=list)
     unannotated: list[dict] = field(default_factory=list)
     findings: int = 0
     cells: list[str] = field(default_factory=list)
@@ -72,6 +73,7 @@ class Sweep:
             + len(self.proposals)
             + len(self.unmechanised)
             + len(self.promotable)
+            + len(self.unstructured)
             + len(self.unannotated)
             + len(self.unanswered)
         )
@@ -100,6 +102,7 @@ def sweep(root: Path, as_of: date | None = None, unannotated_limit: int = 10) ->
         proposals=recall.proposals(graph),
         unmechanised=recall.unmechanised(graph),
         promotable=recall.promotable(graph),
+        unstructured=recall.missing_structure(graph),
         unannotated=pending[-unannotated_limit:],
         findings=len(findings),
         cells=graph.cells,
@@ -208,6 +211,8 @@ def render(state: Sweep) -> str:
             add(f"- `{node.id}` [{node.cell or 'factory'}]: {_clip(node.text)}")
         add("")
 
+    lines.extend(_render_missing_structure(state))
+
     if state.unannotated:
         add(f"## No root cause yet -- {len(state.unannotated)} task(s)")
         add("")
@@ -248,6 +253,29 @@ def render(state: Sweep) -> str:
     add("")
     add("    watermill review --record")
     return "\n".join(lines) + "\n"
+
+
+def _render_missing_structure(state: Sweep) -> list[str]:
+    """The 'Missing structure' section: findings with no cause or no tags."""
+    if not state.unstructured:
+        return []
+    out = [
+        f"## Missing structure -- {len(state.unstructured)} finding(s)",
+        "",
+        "Each lacks a root cause or a tag, so the graph can reach it only by its "
+        "words. Add what is missing; it is a new line and edits nothing.",
+        "",
+    ]
+    for node in state.unstructured:
+        missing = [
+            label for label, present in (
+                ("cause", node.meta.get("root_cause")), ("tags", node.meta.get("tags")),
+            ) if not present
+        ]
+        out.append(f"- `{node.id}` [{node.cell or 'factory'}] no {' or '.join(missing)}: "
+                   f"{_clip(node.text)}")
+    out += ["", "    watermill annotate-finding <id> --cause <root-cause> --tag <tag>", ""]
+    return out
 
 
 def check_line(state: Sweep) -> tuple[str, int]:

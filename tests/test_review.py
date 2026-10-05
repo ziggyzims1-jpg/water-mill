@@ -17,6 +17,8 @@ TODAY = date(2026, 8, 28)
 
 def _finding(root: Path, text: str, cell: str = "zimmy", **kw) -> dict:
     kw.setdefault("observed_at", "2026-08-20")
+    kw.setdefault("root_cause", "none")
+    kw.setdefault("tags", ("t",))
     return knowledge.record(root, cell=cell, kind=kw.pop("kind", "lesson"), text=text, **kw)
 
 
@@ -81,7 +83,7 @@ def test_a_superseded_finding_is_not_swept_again(tmp_path: Path):
 
 
 def test_proposals_awaiting_a_person_are_named(tmp_path: Path):
-    knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="An agent's guess.")
+    knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="An agent's guess.", root_cause="none", tags=("t",))
     state = review.sweep(tmp_path, as_of=TODAY)
     assert len(state.proposals) == 1
     assert "quarantine" in review.render(state)
@@ -150,7 +152,7 @@ def test_what_needs_a_decision_leads(tmp_path: Path):
     """Same rule as the morning report: the only section that is work goes
     first, so a month of accumulating debt is visible rather than buried."""
     _finding(tmp_path, "An old finding.", observed_at="2026-01-01")
-    knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="A guess.")
+    knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="A guess.", root_cause="none", tags=("t",))
     knowledge.record_review(tmp_path, on="2026-08-20")
     text = review.render(review.sweep(tmp_path, as_of=TODAY))
     assert text.index("## Stale") < text.index("## Proposed")
@@ -200,3 +202,26 @@ def test_a_tool_nobody_called_adds_no_section(tmp_path: Path):
     _finding(tmp_path, "A finding.")
     knowledge.record_review(tmp_path, on="2026-08-20")
     assert "## The tool itself" not in review.render(review.sweep(tmp_path, as_of=TODAY))
+
+
+def test_missing_structure_lists_findings_until_annotated(tmp_path: Path):
+    import json
+
+    path = tmp_path / knowledge.KNOWLEDGE_FILENAME
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({
+        "kind_of_line": "finding", "id": "f-old", "cell": "zimmy", "kind": "lesson",
+        "text": "An old finding with no structure.", "observed_at": "2026-08-20",
+        "author": "human",
+    }) + "\n")
+    _finding(tmp_path, "A structured one.")
+
+    text = review.render(review.sweep(tmp_path, as_of=TODAY))
+    assert "Missing structure -- 1 finding(s)" in text
+    assert "f-old" in text and "no cause or tags" in text
+    assert "A structured one" not in text.split("Missing structure")[1]
+
+    knowledge.annotate(tmp_path, "f-old", root_cause="none")
+    assert "no tags" in review.render(review.sweep(tmp_path, as_of=TODAY))
+    knowledge.annotate(tmp_path, "f-old", tags=["x"])
+    assert "Missing structure" not in review.render(review.sweep(tmp_path, as_of=TODAY))

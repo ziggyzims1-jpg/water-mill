@@ -18,6 +18,8 @@ TODAY = date(2026, 8, 28)
 
 def _finding(root: Path, text: str, cell: str = "zimmy", **kw) -> dict:
     kw.setdefault("observed_at", "2026-08-20")
+    kw.setdefault("root_cause", "none")
+    kw.setdefault("tags", ("t",))
     return knowledge.record(root, cell=cell, kind=kw.pop("kind", "lesson"), text=text, **kw)
 
 
@@ -70,7 +72,7 @@ def test_a_file_path_is_a_usable_query(tmp_path: Path):
 def test_an_agent_proposal_is_never_returned_by_search(tmp_path: Path):
     """The quarantine is enforced here, in the one place every reader goes
     through, rather than in each caller that might forget."""
-    knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="A guess about migrations.")
+    knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="A guess about migrations.", root_cause="none", tags=("t",))
     graph = recall.build(tmp_path)
     assert recall.search(graph, "migrations").hits == []
     assert len(recall.proposals(graph)) == 1
@@ -78,7 +80,7 @@ def test_an_agent_proposal_is_never_returned_by_search(tmp_path: Path):
 
 
 def test_a_promoted_proposal_becomes_visible(tmp_path: Path):
-    line = knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="About migrations.")
+    line = knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="About migrations.", root_cause="none", tags=("t",))
     knowledge.decide(tmp_path, line["id"], promote=True)
     assert recall.search(recall.build(tmp_path), "migrations").hits
 
@@ -93,7 +95,8 @@ def test_a_rejected_proposal_stays_invisible(tmp_path: Path):
     one that released it.
     """
     line = knowledge.propose(
-        tmp_path, cell="zimmy", kind="lesson", text="The gate is safe to skip on Fridays."
+        tmp_path, cell="zimmy", kind="lesson", text="The gate is safe to skip on Fridays.",
+        root_cause="none", tags=("t",),
     )
     knowledge.decide(tmp_path, line["id"], promote=False, why="wrong and dangerous")
     graph = recall.build(tmp_path)
@@ -257,3 +260,24 @@ def test_detail_returns_the_body_that_search_deliberately_does_not(tmp_path: Pat
 
 def test_detail_on_an_unknown_id_says_so(tmp_path: Path):
     assert "No such id" in recall.detail(recall.build(tmp_path), "f-nope")
+
+
+def test_annotations_reach_the_graph_and_cause_filter_but_not_the_rendered_hit(tmp_path: Path):
+    import json
+
+    path = tmp_path / knowledge.KNOWLEDGE_FILENAME
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({
+        "kind_of_line": "finding", "id": "f-old", "cell": "zimmy", "kind": "lesson",
+        "text": "Migrations must be idempotent.", "observed_at": "2026-08-20",
+        "author": "human",
+    }) + "\n")
+    before = recall.search(recall.build(tmp_path), "migrations idempotent", cell="zimmy").render()
+    assert not recall.search(recall.build(tmp_path), "migrations", cause="gate-hole").hits
+
+    knowledge.annotate(tmp_path, "f-old", root_cause="gate-hole", tags=["db"])
+    graph = recall.build(tmp_path)
+    assert recall.search(graph, "migrations", cause="gate-hole").hits
+    assert recall.missing_structure(graph) == []
+    # Structure is metadata: the budgeted text an agent reads is unchanged.
+    assert recall.search(graph, "migrations idempotent", cell="zimmy").render() == before

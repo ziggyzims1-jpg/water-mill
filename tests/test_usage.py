@@ -26,7 +26,7 @@ def test_an_absent_log_is_no_calls_not_an_error(tmp_path: Path):
 
 
 def test_every_tool_call_is_recorded_with_the_task_that_made_it(tmp_path: Path):
-    knowledge.record(tmp_path, cell="zimmy", kind="lesson", text="A finding about the gate.")
+    knowledge.record(tmp_path, cell="zimmy", kind="lesson", text="A finding about the gate.", root_cause="none", tags=("t",))
     server = _server(tmp_path)
     server.call("recall", {"query": "gate"})
 
@@ -40,7 +40,7 @@ def test_every_tool_call_is_recorded_with_the_task_that_made_it(tmp_path: Path):
 def test_a_question_that_came_back_empty_is_recorded_as_such(tmp_path: Path):
     """The point of the whole file: an unanswered question is the factory
     telling you which finding to write next, in the agent's own words."""
-    knowledge.record(tmp_path, cell="zimmy", kind="lesson", text="Something unrelated.")
+    knowledge.record(tmp_path, cell="zimmy", kind="lesson", text="Something unrelated.", root_cause="none", tags=("t",))
     server = _server(tmp_path)
     server.call("recall", {"query": "rate limits on the upstream API"})
     server.call("recall", {"query": "rate limits on the upstream API"})
@@ -52,11 +52,11 @@ def test_a_question_that_came_back_empty_is_recorded_as_such(tmp_path: Path):
 
 
 def test_the_hit_rate_counts_searches_and_not_the_other_tools(tmp_path: Path):
-    knowledge.record(tmp_path, cell="zimmy", kind="lesson", text="A finding about the gate.")
+    knowledge.record(tmp_path, cell="zimmy", kind="lesson", text="A finding about the gate.", root_cause="none", tags=("t",))
     server = _server(tmp_path)
     server.call("recall", {"query": "gate"})
     server.call("recall", {"query": "nothing at all like it"})
-    server.call("propose", {"text": "Something learned."})
+    server.call("propose", {"root_cause": "none", "tags": ["t"], "text": "Something learned."})
 
     stats = usage.stats(usage.read(tmp_path))
     assert (stats["searches"], stats["proposed"]) == (2, 1)

@@ -651,6 +651,72 @@ def cmd_remember(args) -> int:
     return 0
 
 
+def cmd_annotate_finding(args) -> int:
+    """Add a cause, tags or a destination to existing findings, append-only.
+
+    Scriptable two ways: several ids share one set of flags, or `--batch FILE`
+    (`-` for stdin) reads JSONL, one `{"id", "cause", "tags", "destination"}`
+    per line. Every row is validated against the store before anything is
+    written, so a bad row in a batch of a hundred refuses the lot rather than
+    leaving it half applied.
+    """
+    root = factory_root(args.root)
+    rows: list[dict] = []
+    if args.batch:
+        text = (sys.stdin.read() if args.batch == "-"
+                else Path(args.batch).read_text(encoding="utf-8"))
+        for number, raw in enumerate(text.splitlines(), 1):
+            if not raw.strip():
+                continue
+            try:
+                row = json.loads(raw)
+            except ValueError:
+                row = None
+            if not isinstance(row, dict) or not row.get("id"):
+                print(f"refused: batch line {number} is not a JSON object with an id")
+                return 2
+            tags = row.get("tags") or []
+            rows.append({
+                "id": str(row["id"]), "cause": str(row.get("cause") or ""),
+                "tags": [tags] if isinstance(tags, str) else list(tags),
+                "destination": str(row.get("destination") or ""),
+            })
+    for finding_id in args.finding_ids:
+        rows.append({"id": finding_id, "cause": args.cause or "",
+                     "tags": list(args.tag or ()), "destination": args.destination or ""})
+    if not rows:
+        print("refused: name a finding id, or pass --batch")
+        return 2
+
+    known = {r.id for r in knowledge.read(root, include_superseded=True)}
+    for row in rows:
+        if row["id"] not in known:
+            print(f"refused: no finding {row['id']}; nothing was written")
+            return 1
+        try:
+            knowledge.check_annotation(row["cause"], row["tags"], row["destination"])
+        except knowledge.KnowledgeError as exc:
+            print(f"refused: {row['id']}: {exc}; nothing was written")
+            return 2
+
+    written = []
+    for row in rows:
+        try:
+            written.append(knowledge.annotate(
+                root, row["id"], root_cause=row["cause"], tags=row["tags"],
+                destination=row["destination"], by=args.by or "",
+            ))
+        except knowledge.KnowledgeError as exc:
+            print(f"refused: {row['id']}: {exc}")
+            return 2
+    if args.json:
+        print(json.dumps(written, sort_keys=True))
+    else:
+        for line in written:
+            print(f"{line['id']} annotated")
+    return 0
+
+
 def cmd_confirm(args) -> int:
     """Say a finding still holds. Resets its clock without editing it."""
     root = factory_root(args.root)
@@ -911,7 +977,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--detail", help="a paragraph, returned only by --detail")
     p.add_argument("--on", metavar="YYYY-MM-DD",
                    help="when it was observed, if not today")
-    p.add_argument("--cause", help="a root cause bucket, if it maps to one")
+    p.add_argument("--cause", help="REQUIRED, one of: "
+                   + ", ".join(sorted(tasklog.ROOT_CAUSES)) + " ('none' is an answer)")
     p.add_argument("--destination", choices=sorted(knowledge.DESTINATIONS),
                    help="where this lesson was mechanised")
     p.add_argument("--supersedes", metavar="ID", help="the finding this replaces")
@@ -920,8 +987,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--run", action="append", help="repeatable")
     p.add_argument("--path", action="append", help="repeatable")
     p.add_argument("--also-in", action="append", metavar="CELL", help="repeatable")
-    p.add_argument("--tag", action="append", help="repeatable")
+    p.add_argument("--tag", action="append", help="REQUIRED, at least one; repeatable")
     p.set_defaults(func=cmd_remember)
+
+    p = sub.add_parser("annotate-finding",
+                       help="add a cause, tags or destination to existing findings")
+    p.add_argument("finding_ids", nargs="*", metavar="id")
+    p.add_argument("--cause", help="one of: " + ", ".join(sorted(tasklog.ROOT_CAUSES)))
+    p.add_argument("--tag", action="append", help="repeatable; added to existing tags")
+    p.add_argument("--destination", choices=sorted(knowledge.DESTINATIONS))
+    p.add_argument("--batch", metavar="FILE",
+                   help="JSONL of {id, cause, tags, destination}; '-' reads stdin")
+    p.add_argument("--by")
+    p.add_argument("--json", action="store_true", help="print the lines written")
+    p.set_defaults(func=cmd_annotate_finding)
 
     p = sub.add_parser("confirm", help="say a finding still holds")
     p.add_argument("finding_id")

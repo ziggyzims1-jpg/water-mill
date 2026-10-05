@@ -43,7 +43,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import knowledge, recall, usage
+from . import knowledge, recall, tasklog, usage
 
 #: The protocol version spoken when a client does not name one.
 DEFAULT_PROTOCOL = "2024-11-05"
@@ -115,11 +115,29 @@ TOOLS = [
                     "description": "Files this is about, if any.",
                 },
                 "detail": {"type": "string", "description": "Optional, a short paragraph."},
+                "root_cause": {
+                    "type": "string",
+                    "enum": sorted(tasklog.ROOT_CAUSES),
+                    "description": "Why it happened; 'none' if it is not a failure.",
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                    "description": "At least one short topic tag.",
+                },
             },
-            "required": ["text"],
+            "required": ["text", "root_cause", "tags"],
         },
     },
 ]
+
+
+def _as_tags(raw) -> tuple[str, ...]:
+    """A tag list, tolerating the bare string a model sometimes sends instead."""
+    if isinstance(raw, str):
+        raw = [raw]
+    return tuple(str(t) for t in raw or [])
 
 
 @dataclass
@@ -211,6 +229,8 @@ class Server:
                 kind=kind,
                 text=text,
                 detail=str(arguments.get("detail", "")),
+                root_cause=str(arguments.get("root_cause") or ""),
+                tags=_as_tags(arguments.get("tags")),
                 refs={"paths": paths, "tasks": [self.task_id] if self.task_id else [],
                       "runs": [self.run_id] if self.run_id else []},
                 source_run=self.run_id,

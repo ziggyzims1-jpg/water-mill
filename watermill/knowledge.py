@@ -44,6 +44,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
+from .tasklog import ROOT_CAUSES
+
 KNOWLEDGE_FILENAME = "knowledge/findings.jsonl"
 
 #: What a finding *is*. Deliberately four, and deliberately not the eight
@@ -80,6 +82,9 @@ SUPERSEDE = "supersede"
 PROMOTE = "promote"
 REJECT = "reject"
 REVIEW = "review"
+#: Structure added to an existing finding after the fact. Named for what it
+#: does rather than `annotate`, which is the task log's verb for a root cause.
+ANNOTATION = "annotation"
 
 #: How long a finding stands before somebody should look at it again. Ninety
 #: days is a quarter: long enough that the sweep is not busywork, short enough
@@ -138,6 +143,7 @@ class Record:
     confirmations: list[dict] = field(default_factory=list)
     supersessions: list[dict] = field(default_factory=list)
     decisions: list[dict] = field(default_factory=list)
+    annotations: list[dict] = field(default_factory=list)
 
     @property
     def id(self) -> str:
@@ -165,7 +171,37 @@ class Record:
 
     @property
     def destination(self) -> str:
-        return str(self.finding.get("destination", ""))
+        """The latest annotation's destination, else the one it was written with."""
+        return self._latest("destination")
+
+    @property
+    def root_cause(self) -> str:
+        """The latest annotation's cause, else the one it was written with."""
+        return self._latest("root_cause")
+
+    @property
+    def tags(self) -> list[str]:
+        """The tags it was written with plus every annotation's, in first-seen order."""
+        merged: list[str] = []
+        for source in (self.finding, *self.annotations):
+            raw = source.get("tags")
+            for tag in raw if isinstance(raw, list) else []:
+                tag = str(tag).strip()
+                if tag and tag not in merged:
+                    merged.append(tag)
+        return merged
+
+    @property
+    def structured(self) -> bool:
+        """True when the finding has a root cause and at least one tag."""
+        return bool(self.root_cause) and bool(self.tags)
+
+    def _latest(self, key: str) -> str:
+        for source in (*reversed(self.annotations), self.finding):
+            value = str(source.get(key) or "")
+            if value:
+                return value
+        return ""
 
     @property
     def refs(self) -> dict:
@@ -218,6 +254,9 @@ class Record:
     def to_dict(self, as_of: date | None = None) -> dict:
         return {
             **self.finding,
+            "root_cause": self.root_cause,
+            "destination": self.destination,
+            "tags": self.tags,
             "status": self.status,
             "superseded_by": self.superseded_by,
             "confirmed_at": self.confirmed_at,
@@ -262,6 +301,12 @@ def record(
         raise KnowledgeError(
             f"unknown destination {destination!r}. One of: {', '.join(sorted(DESTINATIONS))}"
         )
+    _check_cause(root_cause, required=True)
+    if not _clean_tags(tags):
+        raise KnowledgeError(
+            "a finding needs at least one tag (--tag), so the graph can reach it "
+            "by something other than its words."
+        )
     if not text.strip():
         raise KnowledgeError("a finding with no text is not a finding")
     if len(text.strip()) > MAX_TEXT_CHARS:
@@ -290,7 +335,7 @@ def record(
         "author": author,
         "root_cause": root_cause,
         "destination": destination,
-        "tags": list(tags),
+        "tags": _clean_tags(tags),
         "refs": _clean_refs(refs),
         "source_run": source_run,
         "source_task": source_task,
@@ -355,6 +400,48 @@ def decide(root: Path, finding_id: str, *, promote: bool, why: str = "") -> dict
     return line
 
 
+def annotate(
+    root: Path,
+    finding_id: str,
+    *,
+    root_cause: str = "",
+    tags: tuple[str, ...] | list[str] = (),
+    destination: str = "",
+    by: str = "",
+) -> dict:
+    """Add structure to a finding that already exists, without touching it.
+
+    Same rule as `confirm` and `supersede`: a new line, never an edit. `read()`
+    folds it on -- the latest cause and destination win, tags accumulate -- so
+    a belief about *why* can be revised and the earlier answer is still in the
+    file. At least one field is required: an annotation that says nothing is
+    noise the sweep would have to read past.
+    """
+    check_annotation(root_cause, tags, destination)
+    clean = _clean_tags(tags)
+    line: dict = {"kind_of_line": ANNOTATION, "id": finding_id, "by": by,
+                  "recorded_at": _now()}
+    if root_cause:
+        line["root_cause"] = root_cause
+    if clean:
+        line["tags"] = clean
+    if destination:
+        line["destination"] = destination
+    _append(root, line)
+    return line
+
+
+def check_annotation(root_cause: str, tags, destination: str) -> None:
+    """Refuse what `annotate` would refuse, without writing. For batch callers."""
+    if not (root_cause or _clean_tags(tags) or destination):
+        raise KnowledgeError("an annotation needs a cause, a tag or a destination")
+    _check_cause(root_cause, required=False)
+    if destination and destination not in DESTINATIONS:
+        raise KnowledgeError(
+            f"unknown destination {destination!r}. One of: {', '.join(sorted(DESTINATIONS))}"
+        )
+
+
 def record_review(root: Path, *, on: str = "", by: str = "", note: str = "") -> dict:
     """Record that the monthly sweep actually happened.
 
@@ -391,7 +478,7 @@ def read(root: Path, cell: str | None = None, include_superseded: bool = False) 
             records.append(record_)
             index[str(row.get("id", ""))] = record_
             continue
-        if line_kind in (CONFIRM, SUPERSEDE, PROMOTE, REJECT):
+        if line_kind in (CONFIRM, SUPERSEDE, PROMOTE, REJECT, ANNOTATION):
             pending.append(row)
 
     # Applied in a second pass so an annotation may name a finding recorded
@@ -406,6 +493,8 @@ def read(root: Path, cell: str | None = None, include_superseded: bool = False) 
             target.confirmations.append(row)
         elif line_kind == SUPERSEDE:
             target.supersessions.append(row)
+        elif line_kind == ANNOTATION:
+            target.annotations.append(row)
         else:
             target.decisions.append({**row, "kind": line_kind})
 
@@ -478,6 +567,31 @@ def _lines(root: Path) -> list[dict]:
         if isinstance(row, dict):
             rows.append(row)
     return rows
+
+
+def _check_cause(root_cause: str, *, required: bool) -> None:
+    """`none` is an answer; blank is not. Same taxonomy as the task log."""
+    if not root_cause:
+        if required:
+            raise KnowledgeError(
+                "a finding needs a root cause (--cause). One of: "
+                f"{', '.join(sorted(ROOT_CAUSES))}. 'none' is an explicit answer; "
+                "blank is not."
+            )
+        return
+    if root_cause not in ROOT_CAUSES:
+        raise KnowledgeError(
+            f"unknown root cause {root_cause!r}. One of: {', '.join(sorted(ROOT_CAUSES))}"
+        )
+
+
+def _clean_tags(tags) -> list[str]:
+    out: list[str] = []
+    for tag in tags or ():
+        tag = str(tag).strip()
+        if tag and tag not in out:
+            out.append(tag)
+    return out
 
 
 def _clean_refs(refs: dict | None) -> dict:

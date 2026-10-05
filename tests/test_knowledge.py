@@ -16,6 +16,8 @@ def _record(root: Path, **overrides) -> dict:
     payload = {
         "cell": "zimmy",
         "kind": "lesson",
+        "root_cause": "none",
+        "tags": ("migrations",),
         "text": "An index over a new column belongs in MIGRATIONS, never in SCHEMA.",
     }
     payload.update(overrides)
@@ -119,7 +121,7 @@ def test_a_finding_cannot_supersede_itself(tmp_path: Path):
 
 
 def test_an_agent_proposal_is_quarantined_until_a_person_decides(tmp_path: Path):
-    line = knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="Something I noticed.")
+    line = knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="Something I noticed.", root_cause="none", tags=("t",))
     record = knowledge.get(tmp_path, line["id"])
     assert record.author == knowledge.AGENT
     assert record.status == knowledge.PROPOSED
@@ -129,7 +131,7 @@ def test_an_agent_proposal_is_quarantined_until_a_person_decides(tmp_path: Path)
 
 
 def test_a_rejected_proposal_stays_rejected_and_stays_in_the_file(tmp_path: Path):
-    line = knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="A guess.")
+    line = knowledge.propose(tmp_path, cell="zimmy", kind="lesson", text="A guess.", root_cause="none", tags=("t",))
     knowledge.decide(tmp_path, line["id"], promote=False, why="not true")
     record = knowledge.get(tmp_path, line["id"])
     assert record.status == knowledge.REJECTED
@@ -140,7 +142,8 @@ def test_an_agent_cannot_file_a_proposal_as_a_human(tmp_path: Path):
     """`propose` drops any author the caller supplied. The provenance tier is
     the one thing the writer does not get to choose."""
     line = knowledge.propose(
-        tmp_path, cell="zimmy", kind="lesson", text="x", author=knowledge.HUMAN
+        tmp_path, cell="zimmy", kind="lesson", text="x", author=knowledge.HUMAN,
+        root_cause="none", tags=("t",),
     )
     assert line["author"] == knowledge.AGENT
 
@@ -236,6 +239,7 @@ for step in range(20):
     knowledge.propose(
         Path(sys.argv[2]), cell=f"cell-{index % 3}", kind="lesson",
         text=f"Concurrent finding {index}/{step}.", detail="x" * 400,
+        root_cause="none", tags=("t",),
     )
 '''.replace("REPO_ROOT", str(Path(__file__).resolve().parent.parent))
 
@@ -250,3 +254,108 @@ for step in range(20):
     assert len(raw) == 200, "every write landed"
     assert len(records) == 200, "and every line still parses"
     assert len({r.id for r in records}) == 200, "no id collided"
+
+
+# -- structure: required at write time, added later by annotation ------------
+
+
+def _raw_finding(root: Path, fid: str = "f-old", **extra) -> None:
+    """A pre-structure finding, as the 118 on disk were written."""
+    import json
+
+    path = root / knowledge.KNOWLEDGE_FILENAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    row = {"kind_of_line": "finding", "id": fid, "cell": "z", "kind": "lesson",
+           "text": "old", "observed_at": "2026-01-01", "author": "human", **extra}
+    with path.open("a") as handle:
+        handle.write(json.dumps(row) + "\n")
+
+
+def test_a_finding_without_a_root_cause_is_refused(tmp_path: Path):
+    with pytest.raises(knowledge.KnowledgeError, match="root cause"):
+        _record(tmp_path, root_cause="")
+    with pytest.raises(knowledge.KnowledgeError, match="unknown root cause"):
+        _record(tmp_path, root_cause="bad-luck")
+    assert _record(tmp_path, root_cause="none")["root_cause"] == "none"
+
+
+def test_a_finding_without_a_tag_is_refused(tmp_path: Path):
+    with pytest.raises(knowledge.KnowledgeError, match="tag"):
+        _record(tmp_path, tags=())
+    with pytest.raises(knowledge.KnowledgeError, match="tag"):
+        _record(tmp_path, tags=("  ",))
+
+
+def test_a_proposal_needs_the_same_structure(tmp_path: Path):
+    with pytest.raises(knowledge.KnowledgeError):
+        knowledge.propose(tmp_path, cell="z", kind="lesson", text="x", tags=("t",))
+    with pytest.raises(knowledge.KnowledgeError):
+        knowledge.propose(tmp_path, cell="z", kind="lesson", text="x", root_cause="none")
+    assert knowledge.read(tmp_path) == []
+
+
+def test_an_old_unstructured_finding_still_loads(tmp_path: Path):
+    _raw_finding(tmp_path)
+    record = knowledge.read(tmp_path)[0]
+    assert (record.root_cause, record.tags, record.destination) == ("", [], "")
+    assert not record.structured
+
+
+def test_annotation_is_append_only_and_merges_latest_per_field(tmp_path: Path):
+    _raw_finding(tmp_path, tags=["a"], destination="note")
+    path = tmp_path / knowledge.KNOWLEDGE_FILENAME
+    before = path.read_bytes()
+
+    knowledge.annotate(tmp_path, "f-old", root_cause="missing-context", tags=["b", "a"])
+    knowledge.annotate(tmp_path, "f-old", root_cause="gate-hole", tags=["c"], destination="gate")
+    knowledge.annotate(tmp_path, "f-old", tags=["d"])  # no cause: must not blank the cause
+
+    after = path.read_bytes()
+    assert after.startswith(before), "the file only grew; no stored line was touched"
+    record = knowledge.get(tmp_path, "f-old")
+    assert record.root_cause == "gate-hole", "latest wins per field"
+    assert record.destination == "gate"
+    assert record.tags == ["a", "b", "c", "d"], "tags union, first-seen order"
+    assert record.structured
+    assert record.to_dict()["root_cause"] == "gate-hole"
+    assert knowledge.read(tmp_path)[0].root_cause == "gate-hole"
+
+
+def test_an_annotation_is_validated_and_must_say_something(tmp_path: Path):
+    _raw_finding(tmp_path)
+    for kwargs in ({}, {"root_cause": "x"}, {"destination": "x"}, {"tags": [" "]}):
+        with pytest.raises(knowledge.KnowledgeError):
+            knowledge.annotate(tmp_path, "f-old", **kwargs)
+    assert len((tmp_path / knowledge.KNOWLEDGE_FILENAME).read_text().splitlines()) == 1
+
+
+def test_the_line_cap_covers_annotations(tmp_path: Path):
+    _raw_finding(tmp_path)
+    with pytest.raises(knowledge.KnowledgeError):
+        knowledge.annotate(tmp_path, "f-old", tags=[f"{i}" + "x" * 50 for i in range(100)])
+    assert knowledge.get(tmp_path, "f-old").tags == []
+
+
+def test_concurrent_annotators_do_not_lose_or_corrupt_a_line(tmp_path: Path):
+    import subprocess
+    import sys
+
+    _raw_finding(tmp_path)
+    script = '''
+import sys
+sys.path.insert(0, "REPO_ROOT")
+from pathlib import Path
+from watermill import knowledge
+
+index = int(sys.argv[1])
+for step in range(20):
+    knowledge.annotate(Path(sys.argv[2]), "f-old", tags=[f"t{index}-{step}"],
+                       root_cause="none", by="x" * 300)
+'''.replace("REPO_ROOT", str(Path(__file__).resolve().parent.parent))
+    processes = [
+        subprocess.Popen([sys.executable, "-c", script, str(i), str(tmp_path)])
+        for i in range(10)
+    ]
+    assert [p.wait() for p in processes] == [0] * 10
+    assert len((tmp_path / knowledge.KNOWLEDGE_FILENAME).read_text().splitlines()) == 201
+    assert len(knowledge.get(tmp_path, "f-old").tags) == 200
