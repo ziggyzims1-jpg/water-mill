@@ -35,7 +35,7 @@ main() {
   [ ! -e "$DIR/.git/MERGE_HEAD" ] && [ ! -d "$DIR/.git/rebase-merge" ] \
     && [ ! -d "$DIR/.git/rebase-apply" ] || return 0
   before="$(git -C "$DIR" rev-parse HEAD)" || return 0
-  git -C "$DIR" pull --ff-only --quiet origin main || return 0
+  git -C "$DIR" pull --ff-only --quiet origin main 2>/dev/null || return 0
   after="$(git -C "$DIR" rev-parse HEAD)" || return 0
   [ "$before" = "$after" ] || echo "sync-factory: water-mill ${before:0:7} -> ${after:0:7}" >&2
 }
@@ -48,10 +48,21 @@ lag() {
 }
 
 # bash has no portable `timeout` (macOS lacks it), so bound main with a watchdog.
-{ main; lag; } >/dev/null &
+# The worker runs in its own process group (set -m) so the watchdog kills git and
+# its ssh/credential helpers with it; killing only the subshell orphans them. Its
+# stderr goes to a file, not the hook's pipe, because an orphan holding that pipe
+# open keeps the hook waiting however early this script exits.
+log="$(mktemp "${TMPDIR:-/tmp}/sync-factory.XXXXXX" 2>/dev/null)" || log=/dev/null
+set -m
+{ main; lag; } </dev/null >/dev/null 2>"$log" &
 worker=$!
-( sleep "$LIMIT"; kill "$worker" 2>/dev/null ) >/dev/null 2>&1 &
+( sleep "$LIMIT"; kill -TERM -- "-$worker" ) </dev/null >/dev/null 2>&1 &
 watchdog=$!
+set +m
 wait "$worker" >/dev/null 2>&1
-kill "$watchdog" >/dev/null 2>&1
+{ kill -TERM -- "-$watchdog"; wait "$watchdog"; } >/dev/null 2>&1
+if [ "$log" != /dev/null ]; then
+  cat "$log" >&2 2>/dev/null
+  rm -f "$log"
+fi
 exit 0
