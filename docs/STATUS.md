@@ -141,6 +141,21 @@ outside.
   engine do the same job. Both files now say which is which; deleting the bash
   one is an open decision.
 
+- **The third registered project is `hillel-programming` (2026-10-06).** Hillel
+  Program Tracker, stamped from the cell template and built in one session
+  by the mill crew: seven beads, seven pull requests, each one millstone ->
+  sluice -> tailrace, every PR `approve_after_fixes`, every landing on a
+  green `verify`. Sluice found real bugs on every PR by mutation testing
+  (an uncapped unit-less duration, an N/A pattern that dropped shopping
+  lines, an out-of-order save that unchecked a box, an integer-overflow id
+  answering HTML 500, shopping links exported twice) and 45 findings now
+  name the cell. Two sightings worth promoting: `gh` was unavailable in the
+  cloud container and the crew ran the forge through the GitHub MCP tools
+  instead, and the auto-mode classifier denied chained `bd close; git ...`
+  lines twice, so the crew now runs each as its own command. Still a
+  supervised cell: no `backup_check`, no unattended night, integration branch
+  not yet cut to `main`.
+
 ## Counters
 
 Every number that should be climbing and is currently zero.
@@ -156,7 +171,7 @@ Every number that should be climbing and is currently zero.
 | Cells sold | **0** |
 | Tasks with a recorded root cause | **0** -- the gap that matters |
 | Contract notes carried into a prompt | **0** |
-| Findings in the context graph | **0** |
+| Findings in the context graph | **259** |
 | Recall calls made by a real agent | **1** (run `20260830-090740`) |
 | Monthly knowledge sweeps recorded | **0** |
 | Tier-1 tasks queued and ready | **48** |
