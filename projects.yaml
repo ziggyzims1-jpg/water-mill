@@ -15,3 +15,5 @@ projects:
     contract: projects/zimmy-life-tracker.yaml
   - name: zim-dashboard-demo-cell-1b
     path: ../zim-dashboard-demo-cell-1b
+  - name: hillel-programming
+    path: ../Hillel-Programming
