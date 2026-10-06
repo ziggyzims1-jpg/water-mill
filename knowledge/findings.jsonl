@@ -127,3 +127,71 @@
 {"author": "human", "cell": "", "destination": "", "detail": "", "id": "f-20261005-b7137d", "kind": "lesson", "kind_of_line": "finding", "observed_at": "2026-10-05", "recorded_at": "2026-10-05T21:42:48+00:00", "refs": {"paths": ["Makefile"], "tasks": ["water-mill-4t3"]}, "root_cause": "pending", "source_run": "", "source_task": "", "tags": ["mill", "ci"], "text": "In an agent's shell, 'make verify | tail -N && git push' pushes even when verify fails, because without pipefail the pipe reports tail's exit status; run make verify unpiped (or set -o pipefail) and push only on its own exit code."}
 {"author": "human", "cell": "", "destination": "", "detail": "", "id": "f-20261005-06e13b", "kind": "lesson", "kind_of_line": "finding", "observed_at": "2026-10-05", "recorded_at": "2026-10-05T21:49:50+00:00", "refs": {"paths": ["watermill/landed.py"], "tasks": ["water-mill-brx"]}, "root_cause": "pending", "source_run": "", "source_task": "", "tags": ["regex", "tests", "findings"], "text": "A one-line marker regex built with \\s can match across a newline: brx's '**Findings:** none -- why' pattern accepted a bare 'none' followed by a bullet line, and its test only passed because the fixture's next line was a heading; anchor such markers to one line ([ \\t] not \\s) and test with a bullet as the next line."}
 {"author": "human", "cell": "", "destination": "", "detail": "", "id": "f-20261005-d1a6d9", "kind": "lesson", "kind_of_line": "finding", "observed_at": "2026-10-05", "recorded_at": "2026-10-05T21:49:50+00:00", "refs": {"tasks": ["water-mill-gwv"]}, "root_cause": "pending", "source_run": "", "source_task": "", "tags": ["mill", "landing", "orchestrator"], "text": "Never send a reviewer more changes for a PR set while tailrace is landing it: on gwv the orchestrator asked sluice for an extra commit mid-landing, three PRs squash-merged at the older head, and sluice's push recreated their deleted branches -- queue follow-ups as new PRs from main after the lander reports."}
+{"by": "", "id": "f-20260830-73ca13", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "missing-context"}
+{"by": "", "id": "f-20260925-fe41bc", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["clock", "today", "timezone"]}
+{"by": "", "id": "f-20260925-ddc0f2", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "missing-context", "tags": ["api", "frontend", "today"]}
+{"by": "", "id": "f-20260925-5af803", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["frontend", "tooling"]}
+{"by": "", "id": "f-20260925-90cd37", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["frontend", "parallel", "coordination"]}
+{"by": "", "id": "f-20260925-3edca7", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["frontend", "today"]}
+{"by": "", "id": "f-20260925-f421cd", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "missing-context", "tags": ["frontend", "docs"]}
+{"by": "", "id": "f-20260925-d5f9de", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["tests", "frontend", "vitest"]}
+{"by": "", "id": "f-20260925-9d2f93", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["frontend", "state", "migration"]}
+{"by": "", "id": "f-20260925-437c6a", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["frontend", "tooling"]}
+{"by": "", "id": "f-20260925-ab22d0", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["frontend", "react", "tooling"]}
+{"by": "", "id": "f-20260925-60d07c", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["tests", "frontend"]}
+{"by": "", "id": "f-20260925-d14bcb", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["api", "today", "frontend"]}
+{"by": "", "id": "f-20260925-32902f", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["beads", "mill"]}
+{"by": "", "id": "f-20260925-3b05d4", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["beads", "mill", "tooling"]}
+{"by": "", "id": "f-20260925-fd3817", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "missing-context", "tags": ["api", "tests", "mutation"]}
+{"by": "", "id": "f-20260925-ae66d6", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "missing-context", "tags": ["frontend", "money"]}
+{"by": "", "id": "f-20260925-e4859a", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "missing-context", "tags": ["api", "today", "frontend"]}
+{"by": "", "id": "f-20260925-b608a7", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["tests", "vitest", "frontend"]}
+{"by": "", "id": "f-20260925-0fc20d", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["tests", "mutation", "frontend"]}
+{"by": "", "id": "f-20260925-dec893", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["tests", "mutation", "frontend"]}
+{"by": "", "id": "f-20260925-e1ec72", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "missing-context", "tags": ["auth", "viewer", "frontend"]}
+{"by": "", "id": "f-20260925-c04a9d", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["tests", "mutation", "frontend"]}
+{"by": "", "id": "f-20260925-f21fc3", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["frontend", "product"]}
+{"by": "", "id": "f-20260925-cf295c", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["tests", "frontend", "review"]}
+{"by": "", "id": "f-20260925-ab2bdd", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["tests", "mutation", "review"]}
+{"by": "", "id": "f-20260925-527810", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["beads", "frontend"]}
+{"by": "", "id": "f-20260925-b4a943", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["api", "today", "tests"]}
+{"by": "", "id": "f-20260925-0d6c8e", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["git", "landing", "tests"]}
+{"by": "", "id": "f-20260925-06b8e9", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["tests", "frontend", "parallel"]}
+{"by": "", "id": "f-20260925-3e6efb", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["landing", "ci", "git"]}
+{"by": "", "id": "f-20260925-a26c72", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["git", "landing", "tests"]}
+{"by": "", "id": "f-20260925-27d461", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["git", "landing", "frontend"]}
+{"by": "", "id": "f-20260925-077f00", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "vague-goal"}
+{"by": "", "id": "f-20260925-1ab61c", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "missing-context", "tags": ["git", "process"]}
+{"by": "", "destination": "gate", "id": "f-20260925-d368d0", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["clock", "timezone", "docs"]}
+{"by": "", "id": "f-20260925-e79a36", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["windows", "tests", "today"]}
+{"by": "", "id": "f-20260925-7424fc", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "missing-context", "tags": ["git", "process", "today"]}
+{"by": "", "id": "f-20260925-332139", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["screenshots", "windows"]}
+{"by": "", "id": "f-20260925-176ded", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "vague-goal", "tags": ["product", "frontend"]}
+{"by": "", "id": "f-20260925-60b57a", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "missing-context", "tags": ["tests", "clock", "habits"]}
+{"by": "", "id": "f-20260925-7ed4de", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "missing-context", "tags": ["api", "today", "sessions"]}
+{"by": "", "id": "f-20260925-aad44a", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["mutation", "worktree", "review"]}
+{"by": "", "id": "f-20260925-213960", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["timezone", "docs", "today"]}
+{"by": "", "destination": "gate", "id": "f-20260925-d12b5d", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["timezone", "clock", "today"]}
+{"by": "", "id": "f-20260925-ae2bac", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["api", "frontend", "tests"]}
+{"by": "", "id": "f-20260925-a2bf92", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["api", "frontend", "today"]}
+{"by": "", "id": "f-20260925-d4c74b", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["tests", "mutation", "frontend"]}
+{"by": "", "id": "f-20260925-641410", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["api", "frontend", "docs"]}
+{"by": "", "id": "f-20260925-46c355", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "vague-goal", "tags": ["product", "process"]}
+{"by": "", "id": "f-20260925-b704b3", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["landing", "git", "tests"]}
+{"by": "", "id": "f-20260925-c7eafc", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "missing-context", "tags": ["sessions", "api", "today"]}
+{"by": "", "id": "f-20260925-501e19", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["tests", "frontend", "react"]}
+{"by": "", "id": "f-20260925-b5ee7f", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["clock", "timezone"]}
+{"by": "", "id": "f-20260925-df6e7d", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["clock", "timezone", "api"]}
+{"by": "", "id": "f-20260925-5bb357", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["tests", "timezone", "windows"]}
+{"by": "", "id": "f-20260925-004068", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "missing-context", "tags": ["auth", "viewer", "api"]}
+{"by": "", "id": "f-20260925-420ad3", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "root_cause": "missing-context", "tags": ["sessions", "api", "sql"]}
+{"by": "", "id": "f-20260925-6745cf", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["sql", "api", "today"]}
+{"by": "", "destination": "gate", "id": "f-20260925-fb9157", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["sql", "timezone", "clock"]}
+{"by": "", "destination": "gate", "id": "f-20260925-f36b23", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["tests", "timezone", "sql"]}
+{"by": "", "destination": "gate", "id": "f-20260925-bc40f0", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["tests", "windows", "mutation"]}
+{"by": "", "id": "f-20260925-13a678", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["docs", "clock", "timezone"]}
+{"by": "", "id": "f-20260925-85f558", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["tooling", "tailrace", "windows"]}
+{"by": "", "id": "f-20260925-68af82", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00", "tags": ["landing", "git", "docs"]}
+{"by": "", "destination": "gate", "id": "f-20261005-25070f", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00"}
+{"by": "", "destination": "gate", "id": "f-20261005-c66c69", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00"}
+{"by": "", "destination": "gate", "id": "f-20261005-06e13b", "kind_of_line": "annotation", "recorded_at": "2026-10-05T21:53:16+00:00"}
