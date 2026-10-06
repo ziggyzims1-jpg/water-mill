@@ -1,10 +1,10 @@
 {"id": "f-20260830-73ca13", "cause": "missing-context"}
 {"id": "f-20260925-fe41bc", "tags": ["clock", "today", "timezone"]}
-{"id": "f-20260925-ddc0f2", "cause": "missing-context", "tags": ["api", "frontend", "today"]}
+{"id": "f-20260925-ddc0f2", "tags": ["api", "frontend", "today"]}
 {"id": "f-20260925-5af803", "tags": ["frontend", "tooling"]}
 {"id": "f-20260925-90cd37", "tags": ["frontend", "parallel", "coordination"]}
 {"id": "f-20260925-3edca7", "tags": ["frontend", "today"]}
-{"id": "f-20260925-f421cd", "cause": "missing-context", "tags": ["frontend", "docs"]}
+{"id": "f-20260925-f421cd", "tags": ["frontend", "docs"]}
 {"id": "f-20260925-d5f9de", "tags": ["tests", "frontend", "vitest"]}
 {"id": "f-20260925-9d2f93", "tags": ["frontend", "state", "migration"]}
 {"id": "f-20260925-437c6a", "tags": ["frontend", "tooling"]}
@@ -13,13 +13,13 @@
 {"id": "f-20260925-d14bcb", "tags": ["api", "today", "frontend"]}
 {"id": "f-20260925-32902f", "tags": ["beads", "mill"]}
 {"id": "f-20260925-3b05d4", "tags": ["beads", "mill", "tooling"]}
-{"id": "f-20260925-fd3817", "cause": "missing-context", "tags": ["api", "tests", "mutation"]}
-{"id": "f-20260925-ae66d6", "cause": "missing-context", "tags": ["frontend", "money"]}
-{"id": "f-20260925-e4859a", "cause": "missing-context", "tags": ["api", "today", "frontend"]}
+{"id": "f-20260925-fd3817", "tags": ["api", "tests", "mutation"]}
+{"id": "f-20260925-ae66d6", "tags": ["frontend", "money"]}
+{"id": "f-20260925-e4859a", "tags": ["api", "today", "frontend"]}
 {"id": "f-20260925-b608a7", "tags": ["tests", "vitest", "frontend"]}
 {"id": "f-20260925-0fc20d", "tags": ["tests", "mutation", "frontend"]}
 {"id": "f-20260925-dec893", "tags": ["tests", "mutation", "frontend"]}
-{"id": "f-20260925-e1ec72", "cause": "missing-context", "tags": ["auth", "viewer", "frontend"]}
+{"id": "f-20260925-e1ec72", "tags": ["auth", "viewer", "frontend"]}
 {"id": "f-20260925-c04a9d", "tags": ["tests", "mutation", "frontend"]}
 {"id": "f-20260925-f21fc3", "tags": ["frontend", "product"]}
 {"id": "f-20260925-cf295c", "tags": ["tests", "frontend", "review"]}
@@ -32,14 +32,14 @@
 {"id": "f-20260925-a26c72", "tags": ["git", "landing", "tests"]}
 {"id": "f-20260925-27d461", "tags": ["git", "landing", "frontend"]}
 {"id": "f-20260925-077f00", "cause": "vague-goal"}
-{"id": "f-20260925-1ab61c", "cause": "missing-context", "tags": ["git", "process"]}
+{"id": "f-20260925-1ab61c", "tags": ["git", "process"]}
 {"id": "f-20260925-d368d0", "tags": ["clock", "timezone", "docs"], "destination": "gate"}
 {"id": "f-20260925-e79a36", "tags": ["windows", "tests", "today"]}
-{"id": "f-20260925-7424fc", "cause": "missing-context", "tags": ["git", "process", "today"]}
+{"id": "f-20260925-7424fc", "tags": ["git", "process", "today"]}
 {"id": "f-20260925-332139", "tags": ["screenshots", "windows"]}
 {"id": "f-20260925-176ded", "cause": "vague-goal", "tags": ["product", "frontend"]}
-{"id": "f-20260925-60b57a", "cause": "missing-context", "tags": ["tests", "clock", "habits"]}
-{"id": "f-20260925-7ed4de", "cause": "missing-context", "tags": ["api", "today", "sessions"]}
+{"id": "f-20260925-60b57a", "tags": ["tests", "clock", "habits"]}
+{"id": "f-20260925-7ed4de", "tags": ["api", "today", "sessions"]}
 {"id": "f-20260925-aad44a", "tags": ["mutation", "worktree", "review"]}
 {"id": "f-20260925-213960", "tags": ["timezone", "docs", "today"]}
 {"id": "f-20260925-d12b5d", "tags": ["timezone", "clock", "today"], "destination": "gate"}
@@ -49,13 +49,13 @@
 {"id": "f-20260925-641410", "tags": ["api", "frontend", "docs"]}
 {"id": "f-20260925-46c355", "cause": "vague-goal", "tags": ["product", "process"]}
 {"id": "f-20260925-b704b3", "tags": ["landing", "git", "tests"]}
-{"id": "f-20260925-c7eafc", "cause": "missing-context", "tags": ["sessions", "api", "today"]}
+{"id": "f-20260925-c7eafc", "tags": ["sessions", "api", "today"]}
 {"id": "f-20260925-501e19", "tags": ["tests", "frontend", "react"]}
 {"id": "f-20260925-b5ee7f", "tags": ["clock", "timezone"]}
 {"id": "f-20260925-df6e7d", "tags": ["clock", "timezone", "api"]}
 {"id": "f-20260925-5bb357", "tags": ["tests", "timezone", "windows"]}
-{"id": "f-20260925-004068", "cause": "missing-context", "tags": ["auth", "viewer", "api"]}
-{"id": "f-20260925-420ad3", "cause": "missing-context", "tags": ["sessions", "api", "sql"]}
+{"id": "f-20260925-004068", "tags": ["auth", "viewer", "api"]}
+{"id": "f-20260925-420ad3", "tags": ["sessions", "api", "sql"]}
 {"id": "f-20260925-6745cf", "tags": ["sql", "api", "today"]}
 {"id": "f-20260925-fb9157", "tags": ["sql", "timezone", "clock"], "destination": "gate"}
 {"id": "f-20260925-f36b23", "tags": ["tests", "timezone", "sql"], "destination": "gate"}
