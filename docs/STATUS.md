@@ -156,6 +156,20 @@ outside.
   supervised cell: no `backup_check`, no unattended night, integration branch
   not yet cut to `main`.
 
+- **`hillel-programming` v2 (2026-10-07).** The owner's second ask -- the
+  form hosted in the site and public, logins with three roles, every event
+  as an expandable row with a per-team checklist -- went through the same
+  crew in six beads and six pull requests, every one `approve_after_fixes`
+  and every landing on green CI. Sluice closed a real authorization hole
+  (an account with an unknown role could read every login-only route) and
+  added a test that fails when a route is born ungated; it found a lost
+  tick under concurrent checklist writes and a locked-database 500 on the
+  public form under concurrent submissions. 93 findings now name the cell.
+  The auto-mode classifier denied two of the lander's git commands
+  (`pull --ff-only`, `pull --no-rebase`) as "CI Bypass"/"Blind Apply"; the
+  crew now uses `pull --rebase` only and reports a denial instead of
+  routing around it. Still supervised; four follow-up beads filed.
+
 ## Counters
 
 Every number that should be climbing and is currently zero.
@@ -171,7 +185,7 @@ Every number that should be climbing and is currently zero.
 | Cells sold | **0** |
 | Tasks with a recorded root cause | **0** -- the gap that matters |
 | Contract notes carried into a prompt | **0** |
-| Findings in the context graph | **259** |
+| Findings in the context graph | **307** |
 | Recall calls made by a real agent | **1** (run `20260830-090740`) |
 | Monthly knowledge sweeps recorded | **0** |
 | Tier-1 tasks queued and ready | **48** |
