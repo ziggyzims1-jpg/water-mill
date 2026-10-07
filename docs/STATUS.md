@@ -209,6 +209,25 @@ outside.
   The smallest round so far, and the first where every PR merged without a
   conflict. 156 findings now name the cell.
 
+- **`hillel-programming` round six (2026-10-07).** Seven beads, seven pull
+  requests, one deferred for a human. Email notifications on every form
+  submission and a no-code form editor. Email is the first third party this
+  cell has touched, and the cell's own rule held: the crew built the outbox,
+  the settings, the delivery job, the admin page and the SMTP transport
+  module, every message is held visibly until a human sets the server's
+  variables and proves it with the test button, and that proof plus the
+  wiring record is the deferred bead (`hpt-6ef.5`). The editor changes
+  wording, which optional questions are asked, two staff lists and adds
+  extra questions, and the 25-question contract stays fixed, which is why
+  the database and both views needed no rework. Sluice earned its keep
+  again: saved settings that silently vanished over a size cap, deep JSON
+  nesting and lone surrogates answering 500, control characters reaching an
+  SMTP envelope, a cap that could be dodged with whitespace, removed keys
+  reused for a different question. Two beads came out of the reviews rather
+  than being noted, and one wart (a claim time stored in the sent-at
+  column) was turned into a column before merge instead of after. 184
+  findings now name the cell.
+
 ## Counters
 
 Every number that should be climbing and is currently zero.
