@@ -182,6 +182,22 @@ outside.
   sharing one checkout interleaved a rebase once; nothing was lost, and the
   lesson is on the graph.
 
+- **`hillel-programming` round four (2026-10-07).** Six beads, six pull
+  requests, five millstones at once on disjoint files, landings serial. The
+  owner's three asks: one Sun/Moon theme button in place of three (the rule
+  that keeps "follow the system" alive without a third button is on the
+  graph and in the cell's contract); every occurrence of a repeating event
+  is its own checklist, keyed by date rather than position; a Metrics page
+  with the semester, school-year, year-to-date and all-time periods over an
+  admin-set school-year start. Two frontend halves were written in parallel
+  against a contract committed before any bead opened and merged cleanly
+  with their backends, which is the pattern worth keeping. Sluice found the
+  one real bug of the round in a landed PR's neighbour (every occurrence's
+  calendar line named the first session's date) and it became a sixth bead
+  rather than a note. The owner's contract contradicted itself once
+  (`days_until_next` on the first day of a year) and was amended rather than
+  coded around. 152 findings now name the cell.
+
 ## Counters
 
 Every number that should be climbing and is currently zero.
