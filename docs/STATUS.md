@@ -170,6 +170,18 @@ outside.
   crew now uses `pull --rebase` only and reports a denial instead of
   routing around it. Still supervised; four follow-up beads filed.
 
+- **`hillel-programming` round three (2026-10-07).** Nine beads, nine pull
+  requests, up to seven millstones grinding at once on disjoint files and
+  landings strictly serial. Three beads turned out to be already landed by
+  another session and the millstones stopped as no-ops, which is the first
+  time the crew met a base it did not build on. Sluice again found what
+  the gate could not: an eviction attack on the rate limiter that unlocked
+  a locked username, a flash of light on reload that the bead's own spec
+  had caused, POST-only routes answering 404 to a GET, a cookie forged with
+  a higher session version. 132 findings now name the cell. Two landers
+  sharing one checkout interleaved a rebase once; nothing was lost, and the
+  lesson is on the graph.
+
 ## Counters
 
 Every number that should be climbing and is currently zero.
@@ -185,7 +197,7 @@ Every number that should be climbing and is currently zero.
 | Cells sold | **0** |
 | Tasks with a recorded root cause | **0** -- the gap that matters |
 | Contract notes carried into a prompt | **0** |
-| Findings in the context graph | **307** |
+| Findings in the context graph | **347** |
 | Recall calls made by a real agent | **1** (run `20260830-090740`) |
 | Monthly knowledge sweeps recorded | **0** |
 | Tier-1 tasks queued and ready | **48** |
