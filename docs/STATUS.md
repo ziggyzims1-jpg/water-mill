@@ -198,6 +198,17 @@ outside.
   (`days_until_next` on the first day of a year) and was amended rather than
   coded around. 152 findings now name the cell.
 
+- **`hillel-programming` round five (2026-10-07).** Two beads, two pull
+  requests, both millstones at once (one backend, one frontend), landings
+  serial. The owner trimmed Marketing's checklist to the text code, put the
+  calendar and Evant lines above the budget, and asked for the form in
+  steps with the Repeating step shown only when the event repeats. The
+  stepper sends the byte-identical payload to the one-page form, which
+  sluice pinned with a test, and sluice caught the one real bug before
+  merge: a double-click on Next fell through to Submit on the last step.
+  The smallest round so far, and the first where every PR merged without a
+  conflict. 156 findings now name the cell.
+
 ## Counters
 
 Every number that should be climbing and is currently zero.
