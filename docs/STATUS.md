@@ -283,6 +283,18 @@ outside.
   recorded the recipe. One contract wording was amended by the reviewer
   rather than coded around. 225 findings now name the cell.
 
+- **`hillel-programming` round ten (2026-10-08).** Two beads, two pull
+  requests, both millstones at once. The Form editor grew from a 52rem card
+  at the left to a centred column of up to 76rem that the Settings page's
+  panels share, measured centred to the pixel at three widths; the admin's
+  Settings tab left the strip for a header link, a gated route like login,
+  so the strip shows six tabs. Small round, two lessons worth keeping: a
+  pull request that conflicts with its base runs no CI at all, so a
+  reviewer who needs the gate of record has to merge the base first; and a
+  bead that names one clause of a long doc row leaves the other clauses to
+  go stale (the "Settings tab" wording survived the move until the reviewer
+  caught it). 229 findings now name the cell.
+
 ## Counters
 
 Every number that should be climbing and is currently zero.
@@ -298,7 +310,7 @@ Every number that should be climbing and is currently zero.
 | Cells sold | **0** |
 | Tasks with a recorded root cause | **0** -- the gap that matters |
 | Contract notes carried into a prompt | **0** |
-| Findings in the context graph | **440** |
+| Findings in the context graph | **444** |
 | Recall calls made by a real agent | **1** (run `20260830-090740`) |
 | Monthly knowledge sweeps recorded | **0** |
 | Tier-1 tasks queued and ready | **48** |
