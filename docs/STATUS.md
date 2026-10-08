@@ -248,6 +248,23 @@ outside.
   in a fresh checkout knew nothing; `main` is now fast-forwarded. 190 findings
   now name the cell.
 
+- **`hillel-programming` round eight (2026-10-08).** Three beads, three pull
+  requests, all three millstones at once (backend; tabs and a calendar page;
+  the Form editor), landings serial. The owner wanted a Monthly Calendar tab
+  that a logged-out visitor and an `interns` user see and nothing else, an
+  admin-only upload of the calendar as an image or PDF, the form moved behind
+  `gboard`/`admin`, and the Form editor collapsed to one line per question.
+  The upload is the first file this cell stores outside SQLite, and the
+  reviews earned their keep on exactly that: the file response lacked the
+  header that stops a browser sniffing a PDF-headed polyglot into HTML, a
+  tampered stored name could reach a neighbouring file or crash a delete, a
+  file removed between lookup and send answered 500, and the Upload button
+  read "Uploading" during a removal. Every one was fixed before merge. The
+  three PRs edited the same one-line `frontend/` row of CLAUDE.md; the lander
+  spliced both frontend edits into one line by anchored substring and
+  asserted nothing was lost, which is now a finding. 201 findings name the
+  cell.
+
 ## Counters
 
 Every number that should be climbing and is currently zero.
@@ -263,7 +280,7 @@ Every number that should be climbing and is currently zero.
 | Cells sold | **0** |
 | Tasks with a recorded root cause | **0** -- the gap that matters |
 | Contract notes carried into a prompt | **0** |
-| Findings in the context graph | **405** |
+| Findings in the context graph | **416** |
 | Recall calls made by a real agent | **1** (run `20260830-090740`) |
 | Monthly knowledge sweeps recorded | **0** |
 | Tier-1 tasks queued and ready | **48** |
