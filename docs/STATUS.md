@@ -265,6 +265,24 @@ outside.
   asserted nothing was lost, which is now a finding. 201 findings name the
   cell.
 
+- **`hillel-programming` round nine (2026-10-08).** Eight beads, eight pull
+  requests: five new (a section switcher and a prettier Form editor; custom
+  sections, server then editor; a drag-and-drop calendar box with the
+  calendar centred; deletable CSV imports that undo what the import wrote)
+  and the three follow-ups of rounds seven and eight run in the same wave.
+  Seven millstones at once on a four-core box, and the first lesson was the
+  machine's: unrelated Vitest tests timed out at 10 s under a load average
+  past 20 and passed alone, so the per-test timeout is now 30 s (a fenced
+  file, the orchestrator's edit). The reviews earned their keep again: the
+  import undo promoted the highest row id where the importer's own rule is
+  the latest submission time, a drop during an upload could navigate the
+  browser away because `inert` elements are not hit-tested, a sticky save
+  bar hid keyboard focus, and a save count missed extras removed with their
+  section. The one-line `frontend/` row of CLAUDE.md conflicted on four of
+  eight landings and was spliced each time with nothing dropped; the lander
+  recorded the recipe. One contract wording was amended by the reviewer
+  rather than coded around. 225 findings now name the cell.
+
 ## Counters
 
 Every number that should be climbing and is currently zero.
@@ -280,7 +298,7 @@ Every number that should be climbing and is currently zero.
 | Cells sold | **0** |
 | Tasks with a recorded root cause | **0** -- the gap that matters |
 | Contract notes carried into a prompt | **0** |
-| Findings in the context graph | **416** |
+| Findings in the context graph | **440** |
 | Recall calls made by a real agent | **1** (run `20260830-090740`) |
 | Monthly knowledge sweeps recorded | **0** |
 | Tier-1 tasks queued and ready | **48** |
