@@ -228,6 +228,26 @@ outside.
   column) was turned into a column before merge instead of after. 184
   findings now name the cell.
 
+- **`hillel-programming` round seven (2026-10-08).** Two beads, two pull
+  requests, both millstones at once (backend, frontend), landings serial. The
+  owner asked for accounts made from invite codes in a `.env` file, two new
+  roles (`interns`, who may log in and see nothing gated yet; `gboard`, the
+  public form only), the login page as the first thing a visitor sees, and
+  port 5789. The crew's model for the flow, the owner's ChemE Solver project,
+  was not readable from the session, so the contract was written from this
+  cell's own auth conventions and both halves built to it in parallel: the
+  client's tests were green against the contract before the route existed,
+  and sluice's live check ran against a throwaway merge of the two branches.
+  Two fenced files took directed edits (`config.py` for the `.env` loader, the
+  port and the code table; the `Makefile` to copy `.env.example` into place),
+  and the orchestrator made the third fenced change itself (the Vite dev proxy
+  port). Sluice found a UTF-16 length check that disagreed with the server's
+  character count, and a gate hole where an unknown audience was never walked
+  as the new roles. One process lesson: the previous session's 185 findings
+  for this cell were on a session branch and never reached `main`, so recall
+  in a fresh checkout knew nothing; `main` is now fast-forwarded. 190 findings
+  now name the cell.
+
 ## Counters
 
 Every number that should be climbing and is currently zero.
@@ -243,7 +263,7 @@ Every number that should be climbing and is currently zero.
 | Cells sold | **0** |
 | Tasks with a recorded root cause | **0** -- the gap that matters |
 | Contract notes carried into a prompt | **0** |
-| Findings in the context graph | **347** |
+| Findings in the context graph | **405** |
 | Recall calls made by a real agent | **1** (run `20260830-090740`) |
 | Monthly knowledge sweeps recorded | **0** |
 | Tier-1 tasks queued and ready | **48** |
