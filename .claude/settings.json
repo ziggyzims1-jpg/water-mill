@@ -12,5 +12,11 @@
         "matcher": ""
       }
     ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(/Users/andrewzimmerman/Documents/code/water-mill/bin/watermill remember:*)",
+      "Bash(bin/watermill remember:*)"
+    ]
   }
 }
