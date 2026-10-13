@@ -39,6 +39,7 @@ class Project:
     contract_path: Path | None
     enabled: bool
     root: Path
+    crew_exempt: str = ""  # reason the crew-file drift check only reports
 
     @property
     def exists(self) -> bool:
@@ -116,7 +117,8 @@ class Registry:
         for index, entry in enumerate(entries):
             if not isinstance(entry, dict):
                 raise RegistryError(f"{path}: projects[{index}] must be a mapping")
-            entry_unknown = sorted(set(entry) - {"name", "path", "contract", "enabled"})
+            allowed = {"name", "path", "contract", "enabled", "crew_exempt"}
+            entry_unknown = sorted(set(entry) - allowed)
             if entry_unknown:
                 raise RegistryError(
                     f"{path}: projects[{index}] unknown key(s) {', '.join(entry_unknown)}"
@@ -142,6 +144,7 @@ class Registry:
                     path=project_path,
                     contract_path=contract_path,
                     enabled=bool(entry.get("enabled", True)),
+                    crew_exempt=str(entry.get("crew_exempt") or "").strip(),
                     root=root,
                 )
             )
