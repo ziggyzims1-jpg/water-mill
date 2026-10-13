@@ -175,3 +175,45 @@ def test_corrupt_lines_are_skipped(tmp_path, junk):
     p.mkdir()
     (p / "agents.jsonl").write_text(junk + "\n")
     assert agentlog.read(tmp_path) == []
+
+
+@pytest.mark.parametrize("line", [
+    "Not **LANDED** yet: CI is red.",
+    "It will be **LANDED** once CI settles.",
+    "The lander marks the file `**LANDED**`.",
+])
+def test_landed_mentioned_in_prose_is_not_a_landing(tmp_path, line):
+    note = UNLANDED_NOTE + "\n" + line + "\n"
+    rec = _records(_factory(tmp_path, {"abc.md": note}))["crew:zimmy-life-tracker-abc"]
+    assert rec["outcome"] == "unlanded"
+
+
+def _sluice_only(body: str) -> str:
+    return UNLANDED_NOTE + "\n## Sluice (2026-10-04)\n\n" + body + "\n"
+
+
+@pytest.mark.parametrize("body, verdict, pushed", [
+    ("**Verdict: approve.** Nothing found to fix, nothing pushed.", "approve", False),
+    ("- **Verdict: approve** (no fixes pushed).", "approve", False),
+    # The verdict outranks prose: here "pushed" is about the implementer.
+    ("**Verdict: approve.** Millstone pushed a docs commit before review.", "approve", False),
+    ("### Verdict: approve_after_fixes\n\nCommit `83f2c31` pushed.", "approve_after_fixes", True),
+    ("**Verdict still approve_after_fixes on all four**", "approve_after_fixes", True),
+    ("**Verdict: do_not_merge.** I pushed one fix; the race remains.", "do_not_merge", True),
+    ("**Verdict: do_not_merge.** Nothing was pushed.", "do_not_merge", False),
+    ("No verdict line. I pushed no fix.", None, False),
+])
+def test_sluice_verdict_and_pushed_fixes(tmp_path, body, verdict, pushed):
+    rec = _records(_factory(tmp_path, {"abc.md": _sluice_only(body)}))[
+        "crew:zimmy-life-tracker-abc"
+    ]
+    assert rec["detail"]["sluice_verdict"] == verdict
+    assert rec["detail"]["sluice_pushed_fixes"] is pushed
+    assert "detail.sluice_pushed_fixes" in rec["fields_inferred"]
+
+
+def test_a_title_with_a_role_prefix_still_finds_its_bead(tmp_path):
+    note = LANDED_NOTE.replace("# Handoff — Zimmy Life Tracker-qyz",
+                               "# Handoff — Millstone, Zimmy Life Tracker-qyz")
+    recs = _records(_factory(tmp_path, {"qyz-1.md": note}, [BEAD]))
+    assert recs["crew:zimmy-life-tracker-qyz"]["title"] == "Fix the thing"

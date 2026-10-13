@@ -45,9 +45,13 @@ Envelope, present on every record whatever the agent kind:
     pr_number             int|null  first "PR #n" in the note          (inferred)
     landed_at             str|null  date of the last "## Tailrace (date)"
     sluice_rounds         int       count of "## Sluice" sections
-    sluice_verdict        str|null  last "**Verdict: x**" in a Sluice section (inferred)
-    sluice_pushed_fixes   bool|null null when there was no Sluice section;
-                                    else whether the note says it pushed  (inferred)
+    sluice_verdict        str|null  last verdict word (approve, approve_after_fixes,
+                                    do_not_merge, reject) after "Verdict" in a
+                                    Sluice section                        (inferred)
+    sluice_pushed_fixes   bool|null null when there was no Sluice section; else
+                                    true for any approve_after_fixes verdict, false
+                                    for approve, otherwise an un-negated "pushed"
+                                    in a Sluice section                   (inferred)
     findings_count        int       distinct finding ids (f-YYYYMMDD-xxxxxx) cited (inferred)
     findings_waived       bool      the note carries "**Findings:** none -- why"
     bead_created_at       str|null  from the repo's .beads/issues.jsonl, never the bd DB

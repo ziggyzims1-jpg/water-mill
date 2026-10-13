@@ -31,8 +31,17 @@ _LANDED = re.compile(r"^[ \t]*(?:[-*][ \t]+)?\*\*LANDED\b", re.MULTILINE)
 _SLUICE = re.compile(r"^##[ \t]+Sluice\b(?![ \t]+scrutiny)[^\n]*$", re.MULTILINE)
 _HEADING = re.compile(r"^##[ \t]+\S", re.MULTILINE)
 _PR = re.compile(r"\bPR[ \t]*#(\d+)")
-_VERDICT = re.compile(r"\*\*Verdict:?[ \t]*\**[ \t]*([A-Za-z_][A-Za-z_ -]*?)[.*\s]", re.IGNORECASE)
-_PUSHED = re.compile(r"\bpushed\b|approve_after_fixes|approve after fixes", re.IGNORECASE)
+# The verdict is one word of a fixed vocabulary somewhere after "Verdict" on the
+# same line: `**Verdict: approve.**`, `### Verdict: approve_after_fixes`,
+# `**Verdict still approve_after_fixes on all four**`.
+_VERDICT = re.compile(
+    r"\bVerdict\b[^\n]{0,40}?\b(approve[ _]after[ _]fixes|do[ _]not[ _]merge|approve|reject)\b",
+    re.IGNORECASE,
+)
+# "pushed" not negated earlier in the same clause: "nothing pushed", "no fixes
+# pushed", "pushed no fix" and "not pushed" are the common way to say the opposite.
+_PUSHED = re.compile(r"\bpushed\b(?![ \t]+no\b)", re.IGNORECASE)
+_NEGATION = re.compile(r"\b(?:no|not|nothing|never|without)\b[^.;:\n]*$", re.IGNORECASE)
 _FINDING_ID = re.compile(r"\bf-\d{8}-[0-9a-f]{6}\b")
 _COST = re.compile(r"\bcost\b[^\n$]{0,30}\$(\d+(?:\.\d+)?)", re.IGNORECASE)
 
@@ -46,6 +55,37 @@ def _sluice_text(text: str) -> tuple[int, str]:
         later = [h for h in headings if h > m.start()]
         bodies.append(text[m.start(): later[0] if later else len(text)])
     return len(starts), "\n".join(bodies)
+
+
+def _pushed_fixes(sluice: str, verdicts: list[str]) -> bool:
+    """Whether a Sluice round pushed a fix. The verdict decides when it can.
+
+    The sluice procedure defines `approve_after_fixes` as "you fixed issues and
+    pushed" and `approve` as "mergeable as-is", so a verdict is the structured
+    answer; prose is read only for `do_not_merge` or a note with no verdict,
+    and a "pushed" that the same clause negates does not count.
+    """
+    if "approve_after_fixes" in verdicts:
+        return True
+    if "approve" in verdicts:
+        return False
+    for m in _PUSHED.finditer(sluice):
+        if not _NEGATION.search(sluice[max(0, m.start() - 60): m.start()]):
+            return True
+    return False
+
+
+def _known_bead(bead: str, beads: dict[str, dict]) -> str:
+    """The bead id inside a title like `Millstone, Zimmy Life Tracker-9i7.1`.
+
+    Normalising that title gives `millstone-zimmy-life-tracker-9i7.1`, which
+    matches no bead; when the repo's JSONL holds an id the title ends with,
+    that id is the subject.
+    """
+    if bead in beads:
+        return bead
+    tails = [k for k in beads if bead.endswith("-" + k)]
+    return max(tails, key=len) if tails else bead
 
 
 def _beads(checkout: Path) -> dict[str, dict]:
@@ -81,6 +121,7 @@ def parse_record(
         return None
     title = landed._TITLE.search(text)
     bead = landed.normalise(title.group(1)) if title else landed.normalise(f"{project}-{path.stem}")
+    bead = _known_bead(bead, beads)
     is_landed = bool(_LANDED.search(text))
     dates = landed._TAILRACE.findall(text)
     landed_at = dates[-1] if dates and is_landed else None
@@ -88,10 +129,11 @@ def parse_record(
     inferred: list[str] = []
     rounds, sluice = _sluice_text(text)
     verdicts = _VERDICT.findall(sluice)
-    verdict = verdicts[-1].strip().lower().replace(" ", "_") if verdicts else None
+    verdicts = [v.lower().replace(" ", "_") for v in verdicts]
+    verdict = verdicts[-1] if verdicts else None
     if verdict:
         inferred.append("detail.sluice_verdict")
-    pushed = bool(_PUSHED.search(sluice)) if rounds else None
+    pushed = _pushed_fixes(sluice, verdicts) if rounds else None
     if rounds:
         inferred.append("detail.sluice_pushed_fixes")
     pr = _PR.search(text)
