@@ -16,6 +16,8 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import os
+import subprocess
 import sys
 from collections import Counter
 from datetime import date, datetime
@@ -27,10 +29,12 @@ from . import (
     crewlog,
     knowledge,
     land,
+    landed,
     ledger,
     mcp,
     publish,
     recall,
+    recorded,
     report,
     review,
     sessionlog,
@@ -875,6 +879,11 @@ def cmd_agents(args) -> int:
     or changed, so it is safe to cron. A checkout that is not on this machine
     is reported, never an error.
     """
+    if args.action == "whoami":
+        print(sessionlog.new_tag())
+        return 0
+    if args.action == "record":
+        return _record(args)
     root = factory_root(args.root)
     if args.action == "compare":
         return _compare(root, args)
@@ -891,9 +900,84 @@ def cmd_agents(args) -> int:
               f"{'would append' if args.dry_run else 'appended'}")
     for name in missing:
         print(f"{name:<28} checkout or handoff directory not found, skipped")
+    total += _sweep_recorded(root, args)
     if not args.no_sessions:
         total += _sweep_sessions(root, args, records)
     print(f"{'dry run -- nothing written; ' if args.dry_run else ''}{total} record(s) new")
+    return 0
+
+
+def _sweep_recorded(root: Path, args) -> int:
+    """Lines agents committed to knowledge/agent-runs/ (laptop or cloud) into the log."""
+    total = 0
+    for project, found in sorted(recorded.collect(root).items()):
+        fresh = agentlog.unseen(root, found) if args.dry_run else agentlog.append_new(root, found)
+        total += len(fresh)
+        print(f"{project + ' (recorded)':<28} {len(found):>4} read  {len(fresh):>4} "
+              f"{'would append' if args.dry_run else 'appended'}")
+    return total
+
+
+def _git_out(cwd: Path, *argv: str) -> str:
+    try:
+        done = subprocess.run(["git", "-C", str(cwd), *argv], capture_output=True,
+                              text=True, timeout=10, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def _record(args) -> int:
+    """`agents record`: this agent's own run facts, metadata only, into the repo."""
+    cwd = Path.cwd()
+    toplevel = Path(_git_out(cwd, "rev-parse", "--show-toplevel") or cwd)
+    remote = _git_out(toplevel, "remote", "get-url", "origin")
+    project = args.project or landed.normalise(
+        Path(remote.removesuffix(".git").rstrip("/")).name if remote else toplevel.name)
+    base_dir = Path(args.sessions_dir).expanduser()
+    source = None
+    located = False
+    if args.transcript:
+        try:
+            if args.transcript == "auto":
+                path = sessionlog.locate_own(
+                    base_dir, session_id=os.environ.get("CLAUDE_CODE_SESSION_ID"),
+                    role=args.role, tag=args.run_tag)
+            else:
+                path = Path(args.transcript).expanduser()
+            base_for_path = base_dir if base_dir in path.parents else path.parent.parent
+            source = sessionlog.record_for(path, base_for_path)
+            located = source is not None
+            if source is None:
+                print(f"warning: {path} has no readable transcript lines; recording "
+                      "the flags only", file=sys.stderr)
+        except sessionlog.LocateError as exc:
+            if args.transcript == "auto" and args.run_tag is None and "pass --" in str(exc):
+                print(f"error: {exc}", file=sys.stderr)
+                return 2
+            print(f"warning: transcript not located ({exc}); recording the flags only",
+                  file=sys.stderr)
+    try:
+        record = recorded.build(
+            source, role=args.role, project=project, bead=args.bead, pr=args.pr,
+            verdict=args.verdict, sluice_rounds=args.sluice_rounds, arm=args.arm,
+            outcome=args.outcome, tag=args.run_tag, transcript_located=located)
+    except recorded.RecordError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    directory = Path(args.out_dir) if args.out_dir else toplevel / recorded.RECORDED_DIR
+    path = recorded.write(directory, record)
+    d = record["detail"]
+    print(f"recorded {record['key']} -> {path}")
+    print("  " + " ".join(
+        f"{k}={v}" for k, v in (
+            ("role", d["role"]), ("bead", d.get("bead")), ("pr", d.get("pr_number")),
+            ("verdict", d.get("verdict")), ("rounds", d.get("sluice_rounds")),
+            ("arm", d.get("arm")), ("tokens_total", d.get("tokens_total")),
+            ("tool_calls", d.get("tool_call_count")),
+            ("duration_s", record.get("duration_seconds")),
+            ("transcript_located", located)) if v is not None))
+    print("  commit that file with your other sign-off work (it is tracked, not runs/).")
     return 0
 
 
@@ -1142,9 +1226,28 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_publish)
 
     p = sub.add_parser("agents", help="agent performance log (runs/agents.jsonl)")
-    p.add_argument("action", choices=["sweep", "compare"],
-                   help="sweep: backfill mill crew history from handoffs and bead JSONL; "
-                        "compare: crew vs other agents with honest statistics")
+    p.add_argument("action", choices=["sweep", "compare", "record", "whoami"],
+                   help="sweep: backfill mill crew history from handoffs and bead JSONL, "
+                        "the recorded lines in knowledge/agent-runs/ and transcripts; "
+                        "compare: crew vs other agents with honest statistics; "
+                        "record: write THIS agent's run facts to knowledge/agent-runs/; "
+                        "whoami: print a tag that lets `record` find this agent's transcript")
+    p.add_argument("--role", choices=recorded.ROLES, default="solo",
+                   help="record: millstone|sluice|tailrace|solo (a plain Claude session)")
+    p.add_argument("--bead", help="record: the bead id as bd prints it")
+    p.add_argument("--pr", type=int, help="record: pull request number")
+    p.add_argument("--verdict", choices=recorded.VERDICTS, help="record: the role's verdict")
+    p.add_argument("--sluice-rounds", type=int, help="record: review rounds the bead took")
+    p.add_argument("--arm", choices=recorded.ARMS, help="record: trial arm label")
+    p.add_argument("--outcome", choices=recorded.OUTCOMES, help="record: how the work ended")
+    p.add_argument("--transcript", metavar="auto|PATH",
+                   help="record: read this agent's OWN transcript (whitelisted metadata "
+                        "only); 'auto' finds it from CLAUDE_CODE_SESSION_ID")
+    p.add_argument("--run-tag", help="record: the tag `agents whoami` printed earlier in "
+                                     "this run; makes 'auto' exact")
+    p.add_argument("--project", help="record: project name (default: from git origin)")
+    p.add_argument("--out-dir", help="record: directory for the line "
+                                     "(default <repo>/knowledge/agent-runs)")
     p.add_argument("--since", metavar="DATE", help="compare: only work ended on/after YYYY-MM-DD")
     p.add_argument("--kind", help="compare: group A: crew, crew:<role>, subagent, session or an "
                                   "exact agent_kind (default: crew vs subagent, crew vs session)")

@@ -295,6 +295,73 @@ def _record(
     )
 
 
+def _session_record(transcript: Path, base: Path, stats: dict,
+                    known: dict[str, Path] | None) -> dict:
+    sid = transcript.stem
+    repo = repo_name(stats["cwd"], known)
+    subs = sorted((transcript.parent / sid / "subagents").glob("agent-*.jsonl"))
+    return _record(
+        transcript, base, key=f"session:{sid}", agent_kind="session",
+        project=repo or transcript.parent.name, stats=stats, title=None,
+        subject=None, duration=None, cost=stats["cost"], inferred=[],
+        detail={"session_id": sid, "role": None, "cwd_repo": repo,
+                "subagent_count": len(subs)},
+    )
+
+
+def _subagent_record(agent: Path, base: Path, stats: dict, crew: list[dict],
+                     known: dict[str, Path] | None) -> dict:
+    sid = agent.parent.parent.name
+    meta = _meta(agent.with_suffix(".meta.json"))
+    agent_type = _clip(meta.get("agentType")) or "unknown"
+    role = _role(agent_type)
+    repo = repo_name(stats["cwd"], known)
+    inferred: list[str] = []
+    subject = None
+    detail = {"session_id": sid, "role": role, "cwd_repo": repo,
+              "agent_id": agent.stem.removeprefix("agent-"),
+              "agent_type": agent_type, "stopped_by_user": bool(meta.get("stoppedByUser"))}
+    kind = f"subagent:{agent_type.lower()}"
+    if role:
+        kind = "mill-crew"
+        hint = _bead_hint(agent_type, meta.get("description"))
+        linked = _link(hint, repo, crew, meta.get("description"),
+                       anchored=_anchored(stats["cwd"], known))
+        detail["bead_hint"] = hint
+        detail["crew_key"] = linked["key"] if linked else None
+        if linked:
+            subject = linked["subject"]
+            repo = linked.get("project") or repo  # cwd is often just ~/code
+            inferred += ["subject", "detail.crew_key"]
+        elif hint:
+            inferred.append("detail.bead_hint")
+    stats["interrupted"] = stats["interrupted"] or detail["stopped_by_user"]
+    return _record(
+        agent, base, key=f"session:{sid}:{agent.stem}", agent_kind=kind,
+        project=repo or agent.parents[2].name, stats=stats,
+        title=_clip(meta.get("description"), TITLE_CAP) if role else None,
+        subject=subject,
+        duration=_seconds(stats["first"], stats["last"]), cost=None,
+        inferred=inferred, detail=detail,
+    )
+
+
+def record_for(path: Path, base: Path, crew: list[dict] | None = None,
+               known: dict[str, Path] | None = None) -> dict | None:
+    """The transcript record of ONE transcript (a session or a subagent run).
+
+    The same whitelist as `collect`; `agents record` calls it on the running
+    agent's own transcript.
+    """
+    path = Path(path)
+    stats = _extract(path)
+    if stats is None:
+        return None
+    if path.parent.name == "subagents":
+        return _subagent_record(path, base, stats, crew or [], known)
+    return _session_record(path, base, stats, known)
+
+
 def collect(
     sessions_dir: Path, crew: list[dict] | None = None,
     known: dict[str, Path] | None = None, settle_seconds: float = 0,
@@ -309,57 +376,111 @@ def collect(
     now = time.time() if now is None else now
     out: list[dict] = []
     for transcript in sorted(base.glob("*/*.jsonl")):
-        sid = transcript.stem
         stats = _extract(transcript)
         if stats is None or _unsettled(transcript, settle_seconds, now):
             continue
-        repo = repo_name(stats["cwd"], known)
-        subs = sorted((transcript.parent / sid / "subagents").glob("agent-*.jsonl"))
-        out.append(_record(
-            transcript, base, key=f"session:{sid}", agent_kind="session",
-            project=repo or transcript.parent.name, stats=stats, title=None,
-            subject=None, duration=None, cost=stats["cost"], inferred=[],
-            detail={"session_id": sid, "role": None, "cwd_repo": repo,
-                    "subagent_count": len(subs)},
-        ))
+        out.append(_session_record(transcript, base, stats, known))
     for agent in sorted(base.glob("*/*/subagents/agent-*.jsonl")):
         stats = _extract(agent)
         if stats is None or _unsettled(agent, settle_seconds, now):
             continue
-        sid = agent.parent.parent.name
-        meta = _meta(agent.with_suffix(".meta.json"))
-        agent_type = _clip(meta.get("agentType")) or "unknown"
-        role = _role(agent_type)
-        repo = repo_name(stats["cwd"], known)
-        inferred: list[str] = []
-        subject = None
-        detail = {"session_id": sid, "role": role, "cwd_repo": repo,
-                  "agent_id": agent.stem.removeprefix("agent-"),
-                  "agent_type": agent_type, "stopped_by_user": bool(meta.get("stoppedByUser"))}
-        kind = f"subagent:{agent_type.lower()}"
-        if role:
-            kind = "mill-crew"
-            hint = _bead_hint(agent_type, meta.get("description"))
-            linked = _link(hint, repo, crew, meta.get("description"),
-                           anchored=_anchored(stats["cwd"], known))
-            detail["bead_hint"] = hint
-            detail["crew_key"] = linked["key"] if linked else None
-            if linked:
-                subject = linked["subject"]
-                repo = linked.get("project") or repo  # cwd is often just ~/code
-                inferred += ["subject", "detail.crew_key"]
-            elif hint:
-                inferred.append("detail.bead_hint")
-        stats["interrupted"] = stats["interrupted"] or detail["stopped_by_user"]
-        out.append(_record(
-            agent, base, key=f"session:{sid}:{agent.stem}", agent_kind=kind,
-            project=repo or agent.parents[2].name, stats=stats,
-            title=_clip(meta.get("description"), TITLE_CAP) if role else None,
-            subject=subject,
-            duration=_seconds(stats["first"], stats["last"]), cost=None,
-            inferred=inferred, detail=detail,
-        ))
+        out.append(_subagent_record(agent, base, stats, crew, known))
     return out
+
+
+# -- finding the running agent's own transcript -----------------------------
+#
+# Proven empirically (2026-10-13, from inside a millstone subagent):
+#   * CLAUDE_CODE_SESSION_ID holds the TOP-LEVEL session's id even inside a
+#     subagent, so it locates the session, never the subagent.
+#   * A subagent writes to <projects>/<dir>/<session>/subagents/agent-<id>.jsonl;
+#     no environment variable names that <id>.
+#   * A tool call is flushed to the transcript only AFTER it returns, so a
+#     command cannot find itself by its own arguments -- but an EARLIER call can
+#     be found. Hence `agents whoami` prints a random tag (it lands in this
+#     agent's transcript as that call's output), and `agents record --run-tag`
+#     finds the one transcript containing it. The search returns a path and
+#     keeps nothing it read.
+# Without a tag: a solo run is the session's top-level file; a crew role is the
+# one live (recently written) subagent file whose meta agentType matches.
+# Anything ambiguous is refused, never guessed.
+
+FRESH_SECONDS = 90
+TAG_PREFIX = "wm-run-"
+
+
+class LocateError(Exception):
+    """The running agent's transcript could not be pinned down."""
+
+
+def new_tag() -> str:
+    import secrets
+    return TAG_PREFIX + secrets.token_hex(6)
+
+
+def _session_files(base: Path, session_id: str) -> list[Path]:
+    files = sorted(base.glob(f"*/{session_id}.jsonl"))
+    files += sorted(base.glob(f"*/{session_id}/subagents/agent-*.jsonl"))
+    return files
+
+
+def _contains(path: Path, needle: str) -> bool:
+    try:
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            return any(needle in line for line in handle)
+    except OSError:
+        return False
+
+
+def locate_own(
+    sessions_dir: Path, *, session_id: str | None, role: str | None = None,
+    tag: str | None = None, now: float | None = None,
+    fresh_seconds: float = FRESH_SECONDS,
+) -> Path:
+    """The transcript file of the agent calling this, or LocateError."""
+    import time
+    base = Path(sessions_dir).expanduser()
+    now = time.time() if now is None else now
+    if not base.is_dir():
+        raise LocateError(f"no transcript directory at {base}")
+    if session_id:
+        pool = _session_files(base, session_id)
+        if not pool:
+            raise LocateError(f"session {session_id} has no transcript under {base}")
+    else:
+        pool = sorted(base.glob("*/*.jsonl")) + sorted(base.glob("*/*/subagents/agent-*.jsonl"))
+
+    def live(p: Path) -> bool:
+        try:
+            return now - p.stat().st_mtime <= fresh_seconds
+        except OSError:
+            return False
+
+    if tag:
+        hits = [p for p in pool if _contains(p, tag)]
+        if len(hits) == 1:
+            return hits[0]
+        raise LocateError(
+            f"tag {tag} found in {len(hits)} transcripts (run `agents whoami` as an "
+            "earlier, separate tool call in this same agent, then pass its output)")
+    top = [p for p in pool if p.parent.name != "subagents"]
+    subs = [p for p in pool if p.parent.name == "subagents"]
+    if role == "solo":
+        if len(top) == 1:
+            return top[0]
+        raise LocateError("cannot tell which top-level session is this one")
+    if role in CREW_ROLES:
+        mine = [p for p in subs if live(p)
+                and _role(_meta(p.with_suffix(".meta.json")).get("agentType")) == role]
+        if len(mine) == 1:
+            return mine[0]
+        raise LocateError(
+            f"{len(mine)} live {role} transcripts; pass --run-tag from `agents whoami` "
+            "to say which is yours")
+    cands = [p for p in pool if live(p)]
+    if len(cands) == 1:
+        return cands[0]
+    raise LocateError(f"{len(cands)} live transcripts; pass --role or --run-tag")
 
 
 def _anchored(cwd: str | None, known: dict[str, Path] | None) -> bool:
