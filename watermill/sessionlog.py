@@ -48,6 +48,24 @@ and writes are excluded, they are reported on their own),
 `cost_usd_est` and `tokens_total_incl_cache` are NOT stored here: `agentlog.read`
 derives them from these counters (see pricing).
 
+* **`output_tokens` is only trustworthy for a message that has a line with a
+  `stop_reason`** (water-mill-658, measured on 16 sessions / 201 subagent runs,
+  counts only). A top-level session writes the final `usage` on every line of a
+  message, so max-per-id is the true total (within 0-6% of the session's
+  `cost-state` outputTokens, which also counts side calls). A subagent
+  transcript is written live: the lines of a message grow 1 -> N, and 63% of
+  its messages never get a line with `stop_reason` or the final `usage` at all
+  (no later line, result, summary or sidecar carries the total: a subagent
+  transcript holds only user/attachment/assistant lines). Those messages carry
+  the first chunk (tens of tokens for thousands of characters of content), so a
+  subagent's `output_tokens` is a FLOOR. `detail.output_messages_final` /
+  `output_messages_partial` count the two kinds, `detail.output_tokens_floor` is
+  true when more than PARTIAL_SHARE of the messages are partial, and then
+  `detail.output_tokens` and `detail.tokens_total` are listed in
+  `fields_inferred` (so `agents compare` excludes them by default; the cost
+  estimate's output term is a floor too). Only the presence of `stop_reason` is
+  read, never its value.
+
 Crew subagents *link, they do not double-count*: the handoff-derived record
 `crew:<bead>` stays the one record of the bead's outcome; the transcript record
 for a role's run carries `detail.crew_key` pointing at it. Both have
@@ -76,6 +94,13 @@ TITLE_CAP = 60
 SHORT_CAP = 80
 DEFAULT_DIR = Path("~/.claude/projects")
 CREW_ROLES = ("millstone", "sluice", "tailrace")
+# A message whose every streamed line lacks `stop_reason` never had its final
+# usage written, so its output_tokens is the first chunk (see the docstring). A
+# run is a FLOOR when more than this share of its messages are like that; a
+# session's last message may be cut off mid-stream, which is not a bias.
+PARTIAL_SHARE = 0.05
+# What a floor run lists in fields_inferred (recorded.build keeps these too).
+FLOOR_FIELDS = ("detail.output_tokens", "detail.tokens_total")
 _BEAD_TOKEN = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9.]+)+$")
 _USAGE_FIELDS = (
     ("input_tokens", "input_tokens"),
@@ -109,6 +134,7 @@ def _seconds(start: str | None, end: str | None) -> float | None:
 def _extract(path: Path) -> dict | None:
     """Counters and timestamps from one transcript; never any content."""
     messages: dict[str, dict[str, int]] = {}
+    finished: set[str] = set()  # message ids with a line that carries a stop_reason
     models: Counter = Counter()
     tools: set[str] = set()
     times: list[str] = []
@@ -159,6 +185,8 @@ def _extract(path: Path) -> dict | None:
                 key = msg.get("id") or f"line-{lines}"
                 usage = msg.get("usage") or {}
                 best = messages.setdefault(key, {})
+                if msg.get("stop_reason"):  # presence only; the value is never kept
+                    finished.add(key)
                 for src, dst in _USAGE_FIELDS:
                     n = usage.get(src)
                     if isinstance(n, int) and not isinstance(n, bool):
@@ -178,8 +206,12 @@ def _extract(path: Path) -> dict | None:
     for _, dst in _WRITE_SPLIT:  # null, not 0, when no message carried the split
         seen = [m[dst] for m in messages.values() if dst in m]
         totals[dst] = sum(seen) if seen else None
+    partial = len(messages) - len(finished)
     return {
         **totals,
+        "output_messages_final": len(finished),
+        "output_messages_partial": partial,
+        "output_tokens_floor": bool(messages) and partial / len(messages) > PARTIAL_SHARE,
         "tokens_total": totals["input_tokens"] + totals["output_tokens"],
         "message_count": len(messages),
         "tool_call_count": len(tools),
@@ -290,6 +322,8 @@ def _record(
     stats: dict, title: str | None, subject: str | None,
     duration: float | None, cost: float | None, inferred: list[str], detail: dict,
 ) -> dict:
+    if stats["output_tokens_floor"]:  # compare excludes these unless --include-inferred
+        inferred = [*inferred, *FLOOR_FIELDS]
     return agentlog.make_record(
         key=key, agent_kind=agent_kind, source=SOURCE, project=project,
         subject=subject, title=title, outcome=None,
@@ -307,6 +341,9 @@ def _record(
             "cache_creation_5m_tokens": stats["cache_creation_5m_tokens"],
             "cache_creation_1h_tokens": stats["cache_creation_1h_tokens"],
             "message_count": stats["message_count"],
+            "output_messages_final": stats["output_messages_final"],
+            "output_messages_partial": stats["output_messages_partial"],
+            "output_tokens_floor": stats["output_tokens_floor"],
             "tool_call_count": stats["tool_call_count"],
             "error_count": stats["error_count"],
             "interrupted": stats["interrupted"],

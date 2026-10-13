@@ -175,3 +175,35 @@ def test_repo_name_follows_worktrees_and_registered_checkouts():
     assert sessionlog.repo_name("/Users/x/code/cheme-solver/.claude/worktrees/agent-1") \
         == "cheme-solver"
     assert sessionlog.repo_name(None) is None
+
+
+def test_output_tokens_is_a_floor_when_messages_never_got_their_final_usage():
+    records = _collect()
+    s = records[f"session:{SESSION}"]
+    assert s["detail"]["output_messages_final"] == 2  # a stop_reason line, whatever its value
+    assert s["detail"]["output_messages_partial"] == 0
+    assert s["detail"]["output_tokens_floor"] is False
+    assert "detail.output_tokens" not in s["fields_inferred"]
+    sub = records[f"session:{SESSION}:agent-aexplore1"]  # m1 never finished, m2 did
+    assert (sub["detail"]["output_messages_final"], sub["detail"]["output_messages_partial"]) == (1, 1)
+    assert sub["detail"]["output_tokens_floor"] is True
+    assert {"detail.output_tokens", "detail.tokens_total"} <= set(sub["fields_inferred"])
+
+
+def test_a_run_with_a_few_cut_off_messages_is_not_a_floor(tmp_path):
+    # 1 partial in 40 (a session's last message cut off) is not a measurement bias.
+    t = tmp_path / "-p" / "s1.jsonl"
+    t.parent.mkdir(parents=True)
+    rows = [{"type": "assistant", "timestamp": "2026-10-01T10:00:00Z",
+             "message": {"id": f"m{i}", "model": "claude-opus-5",
+                         "stop_reason": None if i == 0 else "end_turn",
+                         "usage": {"output_tokens": 5}}} for i in range(40)]
+    t.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    d = sessionlog.record_for(t, tmp_path)["detail"]
+    assert (d["output_messages_partial"], d["output_tokens_floor"]) == (1, False)
+
+
+def test_sweep_rejects_json(tmp_path, capsys):
+    assert cli.main(["--root", str(tmp_path), "agents", "sweep", "--json"]) == 2
+    assert "--json" in capsys.readouterr().err
+    assert not (tmp_path / "runs").exists()

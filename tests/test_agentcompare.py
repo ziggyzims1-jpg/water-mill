@@ -247,3 +247,24 @@ def test_handoff_and_transcript_records_never_cross_scopes(tmp_path):
     assert (landed["records"], landed["n"], landed["successes"]) == (10, 10, 10)
     rounds = _find(res, 0, "sluice_rounds")["groups"][0]
     assert (rounds["n"], rounds["median"]) == (10, 2)
+
+
+def test_floor_runs_are_excluded_from_tokens_and_cost_and_the_output_says_why(tmp_path):
+    # water-mill-658: a floor run's output_tokens is the first streamed chunk only
+    floor = [_run(f"a{i}", "mill-crew", 100, 50) for i in range(9)]
+    for r in floor:
+        r["fields_inferred"] = ["detail.output_tokens", "detail.tokens_total"]
+        r["detail"].update(output_tokens_floor=True, input_tokens=10, output_tokens=40,
+                           model="claude-sonnet-5")
+    _seed(tmp_path, floor + [_run(f"b{i}", "session", 100, 900) for i in range(9)])
+    res = agentcompare.compare(tmp_path, [("crew", "session")])
+    tok = _find(res, 0, "tokens_total")
+    assert (tok["groups"][0]["n"], tok["groups"][0]["floor_runs"]) == (0, 9)
+    assert _find(res, 0, "cost_usd_est")["groups"][0]["floor_runs"] == 9
+    assert _find(res, 0, "duration_seconds")["groups"][0]["n"] == 9  # only token fields go
+    text = agentcompare.render(res)
+    assert text.count("output_tokens FLOOR runs: A 9, B 0") == 2  # tokens_total, cost_usd_est
+    assert "excluded here as inferred" in text
+    every = agentcompare.compare(tmp_path, [("crew", "session")], include_inferred=True)
+    assert _find(every, 0, "tokens_total")["groups"][0]["n"] == 9
+    assert "INCLUDED here, so this favours" in agentcompare.render(every)
