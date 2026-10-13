@@ -13,6 +13,7 @@ projects:
   - name: zimmy-life-tracker
     path: ../zimmy-life-tracker
     contract: projects/zimmy-life-tracker.yaml
+    crew_exempt: has no .claude/agents crew copy; uses the workshop copy
   - name: zim-dashboard-demo-cell-1b
     path: ../zim-dashboard-demo-cell-1b
   - name: cheme-solver
@@ -20,3 +21,4 @@ projects:
     contract: projects/cheme-solver.yaml
   - name: hillel-programming
     path: ../Hillel-Programming
+    crew_exempt: water-mill-9tx updates its older crew copy

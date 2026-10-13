@@ -44,7 +44,7 @@ make install                                  # .venv + dependencies
 make verify                                   # the gate: guard, ruff, 373 tests
 
 ./bin/watermill projects                      # what this factory drives
-./bin/watermill validate                      # do the contracts parse
+./bin/watermill validate                      # do the contracts parse; do the crew files match water-mill's? (--crew-path DIR adds a report-only copy)
 ./bin/watermill doctor                        # would a run be allowed to start
 ./bin/watermill doctor --gate                 # ...including the project's gate
 ```
