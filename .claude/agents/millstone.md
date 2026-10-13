@@ -33,6 +33,7 @@ If the permission system or the auto-mode classifier denies a command, **do not 
 
 ## Deliver
 
+4a. **Record your own run** (water-mill-441; metadata only, no message text ever leaves your transcript). Early in your run, as a tool call of its own, run `$WM/bin/watermill agents whoami` and keep the `wm-run-…` tag it prints (shell variables do not survive between calls, so write the tag down). Now run, from inside your worktree, `$WM/bin/watermill agents record --transcript auto --run-tag <tag> --role millstone --bead <bead-id> [--arm A|B if the orchestrator told you the trial arm]`. It writes one line to `knowledge/agent-runs/` in the repo you are in (tracked, unlike `runs/`, so it survives a cloud container). `git add` that one file so it ships in the PR commit below (you do not know the PR number yet; that is fine). If it exits 2 (ambiguous transcript) fix the tag; if it warns that no transcript was found it still recorded your flags, so carry on and say so in your handoff. Never paste transcript content anywhere.
 5. Commit on `bead/<slug>` with a conventional-commit message matching `git log` style, ending with:
    `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`
 6. `git push -u origin bead/<slug>`

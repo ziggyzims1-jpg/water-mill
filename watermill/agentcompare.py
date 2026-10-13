@@ -134,8 +134,11 @@ METRICS = [
 def _collect(records: list[dict], group: str, metric: Metric, since: str | None,
              include_inferred: bool) -> dict:
     source = "transcript" if metric.scope == "run" else "handoff"
+    # a recorded line is a transcript record the agent filed itself (it wins the
+    # fold for its key, so a run is still counted once)
+    accepted = (source, "recorded") if source == "transcript" else (source,)
     pool = [r for r in records
-            if r.get("source") == source and _matches(group, r) and metric.only(r)]
+            if r.get("source") in accepted and _matches(group, r) and metric.only(r)]
     undated = 0
     if since:
         kept = []

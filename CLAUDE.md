@@ -58,6 +58,7 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 | `watermill/landed.py` | Beads the mill landed, read from `**LANDED**` handoffs in registered checkouts. A reader |
 | `watermill/agentlog.py` | `runs/agents.jsonl`: one line per unit of agent work, any agent kind. The schema is its docstring |
 | `watermill/crewlog.py` | Mill crew history recovered from handoffs and bead JSONL, for `watermill agents sweep`. A reader |
+| `watermill/recorded.py` | An agent's own sign-off facts (`agents record`), one tracked line per run in `knowledge/agent-runs/`; the one record that survives a cloud container |
 | `watermill/usage.py` | What agents asked the graph and what it could not answer. Never readable by an agent |
 | `watermill/land.py` | The pull request: create, verify, merge. Never part of a run |
 | `watermill/shipper.py` | Ships both to Loki. A reader, never part of a run |

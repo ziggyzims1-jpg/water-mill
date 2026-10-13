@@ -184,6 +184,70 @@ and field list: the docstring of `watermill/sessionlog.py`.
 - `cost_usd` is set only on sessions, from the transcript's own `cost-state`
   line (it covers the session's subagents too -- do not add the two).
 
+### Recorded records (`source: "recorded"`, bead 441)
+
+Transcripts are read from the laptop's `~/.claude/projects`, and `runs/` is
+gitignored, so a **cloud** session's cost is invisible and a plain Claude session
+(the crew-vs-default trial's arm B) leaves no handoff to parse. So every agent
+records itself at sign-off:
+
+```bash
+TAG=$($WM/bin/watermill agents whoami)          # early in the run, its own tool call
+$WM/bin/watermill agents record --transcript auto --run-tag "$TAG" \
+    --role millstone --bead <id> --pr <n> [--verdict v] [--sluice-rounds n] [--arm A|B]
+```
+
+It writes ONE line (same schema, `source: "recorded"`) to
+`<repo>/knowledge/agent-runs/<role>-<bead>-<agent id>.jsonl` in the repo it is
+run from, **tracked** so the agent commits it with its other sign-off work. One
+file per run, not one shared file, so two PRs never conflict on it.
+`agents sweep` ingests that directory from the factory and every registered
+checkout.
+
+- **No double count.** The key is the transcript's own (`session:<sid>` or
+  `session:<sid>:agent-<id>`), so a recorded line and the laptop sweep of the
+  same run are one record: `agentlog.read` lets a `recorded` line outrank any
+  other source for its key, in either order, and the sweep never appends a
+  transcript line for a key that already has one. Per-run statistics accept
+  `source in (transcript, recorded)`; per-bead ones still read `handoff`.
+- **Privacy.** The transcript half goes through `sessionlog`'s whitelist
+  (`record_for`); the flags are enums, integers or a validated bead id, never
+  free text; `title` is always null. `tests/test_record.py` runs the 61r canary
+  through the record path.
+- **How an agent finds its own transcript** (verified from inside a subagent,
+  2026-10-13): `CLAUDE_CODE_SESSION_ID` is the *top-level* session's id even in
+  a subagent, so it locates the session; a subagent's file is
+  `<projects>/<dir>/<session>/subagents/agent-<id>.jsonl` and nothing in the
+  environment names `<id>`. A tool call reaches the transcript only after it
+  returns, so a command cannot find itself, but an earlier one can: `agents
+  whoami` prints a random tag, which lands in that agent's transcript as a tool
+  result, and `--run-tag` selects the one transcript containing it (a path
+  search; nothing read is kept). Without a tag only `--role solo` is located
+  (the session's top-level file). A crew role is **never** located without a
+  tag: two crew agents of one type run side by side in one session as a matter
+  of course, and a record filed from the wrong transcript corrupts the numbers
+  silently. A missing tag, a tag found in no transcript (`whoami` run in the
+  same call as `record`) or in several is refused: exit 2, nothing written.
+- **`tokens_total` is not a cost proxy.** It is `input + output` with cache
+  excluded, and a crew run lives on the cache: the dogfood millstone run (340 s,
+  30 tool calls) shows `tokens_total` 363 against 2.4 M `cache_read_tokens` and
+  109 k `cache_creation_tokens`. A record taken at sign-off also misses the
+  turns after it, and a live transcript under-counts streamed output (partial
+  `usage`). The cache fields are carried so cost can be estimated later
+  (water-mill-cdi); never rank or price runs by `tokens_total`.
+- **No transcript, still a record.** If `auto` finds nothing (a container
+  without `~/.claude/projects`), the flags are recorded alone
+  (`detail.transcript_located: false`, no token fields) and a warning is printed.
+  **Not tested in a real cloud container**: the path layout and the env var are
+  assumed to match the laptop's there.
+  A flags-only line is keyed `recorded:<project>:<role>:<bead>:<tag>`, not by
+  the transcript, so it cannot fold with a laptop transcript of the same run;
+  that is why a laptop run whose transcript exists but cannot be pinned is
+  refused rather than recorded flags-only.
+- **Not on the dashboard yet.** The per-run Grafana panels filter
+  `source_extracted="transcript"`, so recorded lines (the cloud runs) do not
+  appear there until those panels learn `recorded` too.
+
 ## Shipping agent work to Loki (`source="agent"`)
 
 **Before the first ship after this lands, raise `reject_old_samples_max_age` on
@@ -269,7 +333,8 @@ undated records are dropped and counted. `--min-n` (default 8) and `--seed`
 **Works vs runs -- the output is split in two and never mixes them.**
 `agent_kind == "mill-crew"` alone counts each bead several times, so:
 
-- *per run* (`source == "transcript"`): `duration_seconds`, `tokens_total`,
+- *per run* (`source` in `transcript`, `recorded`; a recorded line wins its
+  key, so a run counts once): `duration_seconds`, `tokens_total`,
   `tool_call_count`, `cost_usd`. Compare crew runs with non-crew subagent runs
   or with sessions. A session is a whole conversation, a crew run is one
   agent's task, so crew-vs-session medians differ in scale by construction;
