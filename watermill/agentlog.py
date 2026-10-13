@@ -37,7 +37,8 @@ Envelope, present on every record whatever the agent kind:
                               landing date)
     cost_usd          float|null   ONLY when stated: a tasks.jsonl line or the
                               note's own words. Never estimated; null otherwise.
-    duration_seconds  float|null   same rule
+    duration_seconds  float|null   same rule (an API-equivalent estimate lives
+                              apart, in detail.cost_usd_est, derived by read())
     fields_inferred   [str]   names of fields parsed from free text rather than
                               read from a structured source. Stats that need
                               hard numbers exclude records listing a field.
@@ -80,6 +81,8 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from . import pricing
+
 AGENTLOG_FILENAME = "runs/agents.jsonl"
 SCHEMA_VERSION = 1
 RECORDED = "recorded"
@@ -120,7 +123,18 @@ def _outranked(new: dict, held: dict) -> bool:
 
 
 def read(root: Path, agent_kind: str | None = None, project: str | None = None) -> list[dict]:
-    """The latest line per key, in first-seen order, optionally filtered."""
+    """The latest line per key, in first-seen order, optionally filtered.
+
+    Each record comes back with the derived fields (`detail.cost_usd_est`,
+    `detail.tokens_total_incl_cache`) computed NOW from its counters by
+    `pricing.annotate`, so every line, old or new, is priced by the current
+    table. They are never stored: writers keep only raw counters.
+    """
+    return [pricing.annotate(r) for r in _latest(root, agent_kind, project)]
+
+
+def _latest(root: Path, agent_kind: str | None = None, project: str | None = None) -> list[dict]:
+    """`read` without the derived fields: the lines exactly as stored."""
     latest: dict[str, dict] = {}
     for row in read_all(root):
         held = latest.get(row["key"])
@@ -162,8 +176,8 @@ def make_record(
 
 
 def unseen(root: Path, records: list[dict]) -> list[dict]:
-    """Which of `records` would change what `read()` returns."""
-    winners = {r["key"]: r for r in read(root)}
+    """Which of `records` would change what is stored (derived fields aside)."""
+    winners = {r["key"]: r for r in _latest(root)}
     latest = {k: _content(r) for k, r in winners.items()}
     out: list[dict] = []
     for record in records:

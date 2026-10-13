@@ -27,7 +27,7 @@ import json
 import re
 from pathlib import Path
 
-from . import agentlog, landed, pricing
+from . import agentlog, landed
 from .registry import Registry, RegistryError
 
 RECORDED_DIR = "knowledge/agent-runs"
@@ -78,7 +78,6 @@ def build(
             agent_kind="mill-crew" if role != "solo" else base["agent_kind"],
             fields_inferred=[])
         record["detail"] = {**base["detail"], **facts}
-        pricing.annotate(record)
     if subject and role != "solo":
         record["detail"]["crew_key"] = f"crew:{subject}"
     return record
