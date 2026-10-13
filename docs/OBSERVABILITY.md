@@ -184,6 +184,59 @@ and field list: the docstring of `watermill/sessionlog.py`.
 - `cost_usd` is set only on sessions, from the transcript's own `cost-state`
   line (it covers the session's subagents too -- do not add the two).
 
+## Shipping agent work to Loki (`source="agent"`)
+
+**Before the first ship after this lands, raise `reject_old_samples_max_age` on
+the Loki side** (`limits_config`, default 1 week; it must exceed the age of the
+oldest record in `runs/agents.jsonl`, months for the crew backfill). Agent lines
+are filed at the work's end, so with the default Loki answers 400 to the
+backfill, the mark does not move, and **every** later `watermill ship` fails on
+the same lines -- runs and tasks included, since they go in the same push. Run
+`watermill ship --dry-run` first to see the oldest timestamp you are about to
+send.
+
+`watermill ship` also sends `runs/agents.jsonl`, and `docs/grafana/agent-performance.json`
+is an importable dashboard over it (Grafana: Dashboards, Import, upload the
+file; the Loki datasource is the dashboard's `datasource` variable, picked from
+the drop-down at the top of the dashboard).
+
+- **Labels.** `job`, `project`, `source="agent"` and `agent_kind`, bucketed to a
+  closed set: `mill-crew`, `session`, `subagent`, `other` (anything unknown). The
+  full kind (`subagent:builder`) stays in the line. `key` and every per-record
+  value are refused as labels, as before. The record's own `source`
+  (`handoff`, `transcript`) collides with the stream label, so after `| json`
+  it is `source_extracted`.
+- **Timestamp is the work's end**: `ended_at`, else `detail.landed_at`, else
+  `started_at`; `recorded_at` (sweep time) only as a last resort. History lands
+  on the day it happened -- except a line older than the newest its stream
+  already holds in Loki (a bead that lands after a newer one, transcript
+  records backfilled into the `mill-crew` stream). That line is filed at the
+  stream's newest instant instead, because Loki refuses it otherwise; its JSON
+  keeps the true `ended_at`. The per-stream newest instant is `newest` in
+  `runs/.shipped.json`.
+- **The mark is per key, not a line count.** `agents.jsonl` re-appends a record
+  whose content changed, so line N is not stable work. The shipper folds with
+  `agentlog.read()` and records shipped keys in `runs/.shipped.json` under
+  `agents`; a key ships once. A `mill-crew` record with `outcome="unlanded"` is
+  held back until it lands, so one bead is never two works (an abandoned bead
+  therefore never reaches Loki). A shipped record that later changes is not
+  re-sent (`--resend` after a rebuild). State files without `agents` ship
+  everything once; the `runs`/`tasks` marks are untouched. The key list grows by
+  one short string per piece of work, forever; `runs/` is not committed.
+- **Works versus runs.** Crew transcript records (one per millstone, sluice or
+  tailrace run) share `agent_kind="mill-crew"` with the per-bead handoff
+  records. Panels that count crew *works* (records per kind, landed per week,
+  Sluice rounds, first-pass rate) filter `| json | source_extracted="handoff"`;
+  panels about *runs* (duration, cost, tokens) filter
+  `source_extracted="transcript"`. Never `| json | source="handoff"`: that is
+  the stream label and is always `agent`. Tokens read `detail.tokens_total`
+  (input + output, cache excluded), which the transcript sweep emits. An empty
+  line is no data, not zero. Each panel's description says what it excludes.
+- **"First-pass approval rate" is not the keep rate.** The keep rate above is
+  completed tasks over all tasks. The crew panel is: landed crew beads with
+  exactly one Sluice round and no Sluice-pushed fixes, over landed crew beads
+  that had a Sluice review. It rests on fields parsed from handoff prose.
+
 ## What this does not cover
 
 It ships the ledger and the task log. It does **not** ship `run.log`, the agent

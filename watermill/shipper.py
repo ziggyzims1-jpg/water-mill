@@ -48,7 +48,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import ledger, tasklog
+from . import agentlog, ledger, tasklog
 
 STATE_FILENAME = "runs/.shipped.json"
 PUSH_PATH = "/loki/api/v1/push"
@@ -58,7 +58,12 @@ DEFAULT_TIMEOUT = 20.0
 #: the log line, which is JSON. This list is short on purpose: every distinct
 #: combination of these values is one Loki stream, and streams are the resource
 #: Loki actually runs out of.
-ALLOWED_LABELS = frozenset({"job", "project", "source", "outcome", "env"})
+ALLOWED_LABELS = frozenset({"job", "project", "source", "outcome", "env", "agent_kind"})
+
+#: The only values `agent_kind` may take as a label. The full kind
+#: ("subagent:builder") stays in the log line; a label per subagent type would
+#: be unbounded, so anything outside the set lands in "other".
+AGENT_KIND_BUCKETS = ("mill-crew", "session", "subagent", "other")
 
 #: Never a label, whatever the caller asks for. Named separately from
 #: ALLOWED_LABELS so the error can say *why* rather than only that it refused.
@@ -95,8 +100,23 @@ def to_nanos(stamp: str) -> str:
     return str(int(moment.timestamp() * 1_000_000_000))
 
 
+def agent_kind_bucket(kind: object) -> str:
+    """Collapse a free-form agent_kind to the closed label set."""
+    text = str(kind or "").strip().lower()
+    if text in ("mill-crew", "session"):
+        return text
+    if text == "subagent" or text.startswith("subagent:"):
+        return "subagent"
+    return "other"
+
+
 def check_labels(labels: dict) -> None:
     """Refuse a label set that would shard Loki into a stream per run."""
+    if "agent_kind" in labels and labels["agent_kind"] not in AGENT_KIND_BUCKETS:
+        raise ShipError(
+            f"agent_kind label {labels['agent_kind']!r} is outside the closed set "
+            f"{', '.join(AGENT_KIND_BUCKETS)}; bucket it with agent_kind_bucket()."
+        )
     for key in labels:
         if key in FORBIDDEN_LABELS:
             raise ShipError(
@@ -112,21 +132,57 @@ def check_labels(labels: dict) -> None:
             )
 
 
-def build_payload(entries: list[tuple[dict, dict]]) -> dict:
+def line_time(labels: dict, row: dict) -> str:
+    """The instant a line is filed under.
+
+    Runs and tasks use `recorded_at`. An agent record is filed at the *work's*
+    end (`ended_at`, else the crew landing date, else its start), not at sweep
+    time, so a backfilled bead lands on the day it happened. `recorded_at` is
+    only the last resort.
+    """
+    if labels.get("source") == "agent":
+        detail = row.get("detail") if isinstance(row.get("detail"), dict) else {}
+        for value in (row.get("ended_at"), detail.get("landed_at"), row.get("started_at")):
+            if value:
+                return str(value)
+    return str(row.get("recorded_at", ""))
+
+
+def stream_id(labels: dict) -> str:
+    """A stable string for one label set, usable as a JSON object key."""
+    return json.dumps(dict(sorted(labels.items())), sort_keys=True, separators=(",", ":"))
+
+
+def build_payload(entries: list[tuple[dict, dict]], floors: dict | None = None) -> dict:
     """Group `(labels, row)` pairs into Loki streams.
 
     Values are sorted ascending within each stream, because Loki rejects a line
     older than the newest it already holds for that stream and the whole push
     fails with it -- one stale row would otherwise discard a good batch.
+
+    `floors` (stream id -> newest nanos already shipped, kept in the state file)
+    covers the same rule *across* pushes. Agent lines are filed at the work's
+    end, so a later sweep can bring a record older than one already shipped to
+    its stream (a bead that lands after a newer one did, transcript records
+    backfilled into a stream the handoff records already filled). Such a line is
+    filed at the floor instead; its JSON still carries the true `ended_at`.
+    Without this the push fails, the mark never moves, and every later ship --
+    runs and tasks included -- fails on the same line forever.
     """
+    floors = floors if isinstance(floors, dict) else {}
     streams: dict[tuple, list] = {}
     for labels, row in entries:
         check_labels(labels)
         key = tuple(sorted(labels.items()))
         line = json.dumps(row, sort_keys=True, separators=(",", ":"))
-        streams.setdefault(key, []).append(
-            [to_nanos(str(row.get("recorded_at", ""))), line]
-        )
+        stamp = to_nanos(line_time(labels, row))
+        try:
+            floor = int(floors.get(stream_id(labels), 0))
+        except (TypeError, ValueError):
+            floor = 0
+        if int(stamp) < floor:
+            stamp = str(floor)
+        streams.setdefault(key, []).append([stamp, line])
     return {
         "streams": [
             {"stream": dict(key), "values": sorted(values, key=lambda v: int(v[0]))}
@@ -164,6 +220,31 @@ def collect(root: Path, state: dict, job: str = "watermill") -> tuple[list, dict
             row,
         ))
     nxt["tasks"] = len(tasks)
+
+    # Agent records are folded (latest line per key) and tracked by key, not by
+    # line count: agents.jsonl re-appends a record whose content changed, so a
+    # line count would ship the same piece of work twice. A key ships once,
+    # when its latest line is settled. An "unlanded" crew record is held back
+    # because the bead may land later and that is the same work, not a second
+    # one; once shipped, a key is never re-sent (use --resend after a rebuild).
+    marked = state.get("agents")
+    shipped = set(marked) if isinstance(marked, list) else set()
+    for row in agentlog.read(root):
+        if row["key"] in shipped:
+            continue
+        if row.get("outcome") == "unlanded":
+            continue
+        entries.append((
+            {
+                "job": job,
+                "project": str(row.get("project") or "unknown"),
+                "source": "agent",
+                "agent_kind": agent_kind_bucket(row.get("agent_kind")),
+            },
+            row,
+        ))
+        shipped.add(row["key"])
+    nxt["agents"] = sorted(shipped)
 
     return entries, nxt
 
@@ -259,7 +340,15 @@ def ship(root: Path, url: str = "", user: str = "", token: str = "",
     if not entries:
         return {"shipped": 0, "streams": 0, "dry_run": dry_run, "state": state}
 
-    payload = build_payload(entries)
+    payload = build_payload(entries, floors=state.get("newest"))
+    newest = dict(state["newest"]) if isinstance(state.get("newest"), dict) else {}
+    for stream in payload["streams"]:
+        sid = stream_id(stream["stream"])
+        top = int(stream["values"][-1][0])
+        with contextlib.suppress(TypeError, ValueError):
+            top = max(top, int(newest.get(sid, 0)))
+        newest[sid] = str(top)
+    nxt["newest"] = newest
     summary = {
         "shipped": len(entries),
         "streams": len(payload["streams"]),
