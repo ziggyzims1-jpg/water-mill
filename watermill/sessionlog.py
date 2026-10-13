@@ -39,7 +39,9 @@ subagent's `duration_seconds` as last minus first timestamp. `agent_kind` is
 `session_id`, `role` (millstone|sluice|tailrace|null), `model`, `models`,
 `input_tokens`, `output_tokens`, `tokens_total` (input + output; cache reads
 and writes are excluded, they are reported on their own),
-`cache_creation_tokens`, `cache_read_tokens`,
+`cache_creation_tokens`, `cache_read_tokens`, `tokens_total_incl_cache` (all four),
+`cost_usd_est` (pricing.py estimate; null for an unknown model; named in
+`fields_inferred` as `detail.cost_usd_est`, never written to `cost_usd`),
 `message_count` (distinct assistant messages), `tool_call_count`, `error_count`
 (API error lines), `interrupted` (bool), `cwd_repo`, `agent_id`, `subagent_count`
 (sessions), `crew_key` / `bead_hint` (mill-crew, see below).
@@ -65,7 +67,7 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-from . import agentlog, landed
+from . import agentlog, landed, pricing
 
 SOURCE = "transcript"
 TITLE_CAP = 60
@@ -272,7 +274,7 @@ def _record(
     stats: dict, title: str | None, subject: str | None,
     duration: float | None, cost: float | None, inferred: list[str], detail: dict,
 ) -> dict:
-    return agentlog.make_record(
+    return pricing.annotate(agentlog.make_record(
         key=key, agent_kind=agent_kind, source=SOURCE, project=project,
         subject=subject, title=title, outcome=None,
         started_at=stats["first"], ended_at=stats["last"],
@@ -292,7 +294,7 @@ def _record(
             "interrupted": stats["interrupted"],
             **detail,
         },
-    )
+    ))
 
 
 def _session_record(transcript: Path, base: Path, stats: dict,

@@ -9,7 +9,7 @@ grouping so nobody has to guess:
   times (its handoff record plus a transcript record per millstone / sluice /
   tailrace dispatch). Per-bead outcome metrics (landed, sluice rounds,
   first-pass approval) use `source == "handoff"` records only; per-run metrics
-  (duration, tokens, tool calls, cost) use `source == "transcript"` records
+  (duration, tokens, tool calls, cost, cost_usd_est) use `source == "transcript"` records
   only. Two groups are always compared inside one section, never a handoff
   record against a transcript record.
 * **Nulls and inferred values are excluded, per metric, and counted.** A value
@@ -120,6 +120,10 @@ METRICS = [
            ("detail.tool_call_count",)),
     Metric("cost_usd", "run", "continuous", lambda r: r.get("cost_usd"),
            ("cost_usd",), "$"),
+    # An estimate from model + tokens (pricing.py): inferred, so excluded unless
+    # --include-inferred. cost_usd above stays the stated cost only.
+    Metric("cost_usd_est", "run", "continuous", _detail("cost_usd_est"),
+           ("detail.cost_usd_est",), "$"),
     Metric("landed_rate", "bead", "proportion",
            lambda r: {"landed": True, "unlanded": False}.get(r.get("outcome")), ("outcome",)),
     Metric("sluice_rounds", "bead", "continuous", _detail("sluice_rounds"),
@@ -319,6 +323,9 @@ def render(result: dict) -> str:
                 lines.append(f"      {tag}  n={g['n']:<4} {stat}"
                              + (f"  {_ci(g, m['unit'], prop)}" if g["n"] else "")
                              + f"   [{g['records']} records; {excl}]")
+            if m["metric"] == "cost_usd_est" and not result["include_inferred"]:
+                lines.append("      (cost_usd_est is an ESTIMATE from model + tokens, so it is "
+                             "inferred and excluded here; pass --include-inferred to compare it)")
             if m["tested"]:
                 d = m["difference"]
                 lo, hi = (_num(v, m["unit"], prop) for v in d["ci95"])

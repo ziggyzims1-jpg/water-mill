@@ -233,8 +233,17 @@ checkout.
   30 tool calls) shows `tokens_total` 363 against 2.4 M `cache_read_tokens` and
   109 k `cache_creation_tokens`. A record taken at sign-off also misses the
   turns after it, and a live transcript under-counts streamed output (partial
-  `usage`). The cache fields are carried so cost can be estimated later
-  (water-mill-cdi); never rank or price runs by `tokens_total`.
+  `usage`). Never rank or price runs by `tokens_total`; use the next two fields.
+- **Estimated cost and the cache-inclusive total** (water-mill-cdi). Every
+  transcript and recorded record with token counts carries
+  `detail.tokens_total_incl_cache` (input + output + cache writes + cache reads)
+  and `detail.cost_usd_est`, from `watermill/pricing.py` (per-model rates, an
+  as-of date and the source cited there). `cost_usd_est` is named in
+  `fields_inferred` as `detail.cost_usd_est`, and `cost_usd` is never touched.
+  It is null for a model not in the table and for a record whose `models` mix
+  rate cards; cache writes are priced at the 5-minute rate. Treat it as an
+  estimate, not a bill. `agents compare` lists it as `cost_usd_est`, excluded as
+  inferred unless `--include-inferred`, and says so in its output.
 - **No transcript, still a record.** If `auto` finds nothing (a container
   without `~/.claude/projects`), the flags are recorded alone
   (`detail.transcript_located: false`, no token fields) and a warning is printed.
