@@ -524,14 +524,14 @@ def locate_own(
         raise LocateError(
             f"tag {tag} found in {len(hits)} transcripts (run `agents whoami` as an "
             "earlier, separate tool call in this same agent, then pass its output)")
-    if role == "solo":
+    if role in ("solo", "orchestrator"):
         top = [p for p in pool if p.parent.name != "subagents"]
         if len(top) == 1:
             return top[0]
         raise LocateError("cannot tell which top-level session is this one; "
                           "pass --run-tag from `agents whoami`")
     raise LocateError(f"role {role or 'unset'} needs --run-tag from `agents whoami` "
-                      "(only --role solo is located without one)")
+                      "(only --role solo|orchestrator is located without one)")
 
 
 def _anchored(cwd: str | None, known: dict[str, Path] | None) -> bool:

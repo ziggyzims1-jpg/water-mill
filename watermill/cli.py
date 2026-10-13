@@ -40,6 +40,7 @@ from . import (
     sessionlog,
     shipper,
     tasklog,
+    trial,
     usage,
 )
 from .caps import Caps
@@ -1068,6 +1069,107 @@ def _sweep_sessions(root: Path, args, crew_by_project: dict[str, list[dict]]) ->
     return len(fresh)
 
 
+def cmd_trial(args) -> int:
+    """The crew-vs-default-Claude trial (docs/TRIAL.md); the logic is `trial.py`."""
+    root = factory_root(args.root)
+    act = args.action
+    if act == "status":
+        result = trial.status(root)
+        print(json.dumps(result, indent=2) if args.json else trial.render_status(result), end="")
+        return 0
+    if act == "brief":
+        registry = Registry.load(root) if args.surface == "laptop" else None
+        print(trial.brief(root, _one(args), surface=args.surface, registry=registry), end="")
+        return 0
+    if act == "start":
+        line = trial.start(root, _one(args), session_id=args.session_id or trial.env_session_id(),
+                           remote=os.environ.get("CLAUDE_CODE_REMOTE") == "true")
+        print(f"recorded: {line['bead']} arm {line['arm']} session {line['session_id']} "
+              f"({line['surface']})")
+        return 0
+    registry = Registry.load(root)
+    if act == "enroll":
+        return _trial_enroll(root, registry, args)
+    if act == "collect":
+        got = trial.collect(
+            root, registry, sessions_dir=Path(args.sessions_dir).expanduser(),
+            prs=_pairs(args.pr, int), manual_cost=_pairs(args.cost_usd, float),
+            dry_run=args.dry_run)
+        for row in got["collected"]:
+            print(f"{'would write' if args.dry_run else 'wrote'}  {row['bead']}  arm {row['arm']}  "
+                  f"landed={row['landed']} cost={row.get('cost_usd_est')} "
+                  f"({row.get('cost_basis')}) "
+                  f"ci_green={row['first_push_ci_green']} owner_commits={row['owner_corrections']}")
+        for bead, why in got["waiting"]:
+            print(f"waiting     {bead}: {why}")
+        tail = "(dry run, none written)" if args.dry_run else "appended"
+        print(f"{len(got['collected'])} result line(s) {tail}")
+        return 0
+    if act == "scorepack":
+        text = trial.scorepack(root, registry=registry)
+        print(text if text else "nothing is due for scoring (landed + 14 days, unscored)", end="")
+        return 0
+    if act == "score":
+        escapes = []
+        for item in args.escape or []:
+            parts = item.split(":", 2)
+            escapes.append({"severity": parts[0], "ref": parts[1] if len(parts) > 1 else "",
+                            "summary": parts[2] if len(parts) > 2 else ""})
+        if bool(escapes) == bool(args.none):
+            print("score: give --none, or one or more --escape SEVERITY:REF[:SUMMARY]",
+                  file=sys.stderr)
+            return 2
+        row = trial.score(root, _one(args), escapes, scorer=args.scorer or "", early=args.early)
+        print(f"scored {row['bead']}: {len(escapes)} escape(s)")
+        return 0
+    return 2
+
+
+def _one(args) -> str:
+    if len(args.items) != 1:
+        raise trial.TrialError(f"{args.action} takes exactly one bead id")
+    return args.items[0]
+
+
+def _pairs(items, cast) -> dict:
+    out = {}
+    for item in items or []:
+        bead, _, value = item.partition("=")
+        out[bead] = cast(value)
+    return out
+
+
+def _trial_enroll(root: Path, registry, args) -> int:
+    if not args.items:
+        raise trial.TrialError("enroll needs a repo name (or 'all' with --ready)")
+    repo, beads = args.items[0], args.items[1:]
+    if repo == "all":
+        if beads or not args.ready:
+            raise trial.TrialError("'all' means every registered repo: needs --ready, no ids")
+        repos = [p.name for p in registry.active if p.exists]
+    else:
+        repos = [repo]
+    if bool(beads) == bool(args.ready):
+        raise trial.TrialError("give bead ids, or --ready for every ready bead; not both")
+    got = trial.enroll(root, registry, repos, beads or None, dry_run=args.dry_run, seed=args.seed)
+    note = " (provisional: nothing is stored on a dry run; pass --seed to reproduce it)" \
+        if args.dry_run and got["seed_is_new"] else ""
+    print(f"seed {got['seed']}{note}; blocks of {trial.BLOCK} per repo")
+    print(f"{'repo':<28}{'bead':<36}{'arm':<5}{'block':<6}pos")
+    for r in got["rows"]:
+        print(f"{r['repo']:<28}{r['bead']:<36}{r['arm']:<5}{r['block']:<6}{r['pos']}")
+    for bead, repo_name, why in got["refused"]:
+        print(f"skipped  {repo_name}/{bead}: {'; '.join(why)}")
+    for r in got["label_failures"]:
+        print(f"LABEL FAILED: run  bd label add {r['bead']} trial:{r['arm']}  in {r['repo']}")
+    if args.dry_run:
+        print(f"dry run -- nothing written ({len(got['rows'])} would be enrolled)")
+    else:
+        print(f"{len(got['rows'])} enrolled -> {trial.ledger_path(root)}")
+        print("commit knowledge/trial/ and each repo's .beads/issues.jsonl")
+    return 1 if got["label_failures"] else 0
+
+
 # -- parser ----------------------------------------------------------------
 
 
@@ -1285,7 +1387,8 @@ def build_parser() -> argparse.ArgumentParser:
                         "record: write THIS agent's run facts to knowledge/agent-runs/; "
                         "whoami: print a tag that lets `record` find this agent's transcript")
     p.add_argument("--role", choices=recorded.ROLES, default="solo",
-                   help="record: millstone|sluice|tailrace|solo (a plain Claude session)")
+                   help="record: millstone|sluice|tailrace (crew subagents), solo (a plain "
+                        "Claude session) or orchestrator (a session that runs the crew)")
     p.add_argument("--bead", help="record: the bead id as bd prints it")
     p.add_argument("--pr", type=int, help="record: pull request number")
     p.add_argument("--verdict", choices=recorded.VERDICTS, help="record: the role's verdict")
@@ -1322,6 +1425,35 @@ def build_parser() -> argparse.ArgumentParser:
                    help="skip transcripts modified more recently than this, so a live "
                         "session does not append a new line per sweep (default 300)")
     p.set_defaults(func=cmd_agents)
+
+    p = sub.add_parser("trial", help="the crew-vs-default-Claude trial (docs/TRIAL.md)")
+    p.add_argument("action", choices=["enroll", "start", "brief", "collect", "status",
+                                      "scorepack", "score"],
+                   help="enroll: randomise beads A/B; start: bind this session to its bead; "
+                        "brief: the session prompt; collect: read outcomes after a session "
+                        "ends; status: per-arm counts and the pre-registered looks; scorepack: "
+                        "the BLIND escape-scorer prompt; score: file a blind score")
+    p.add_argument("items", nargs="*", metavar="arg",
+                   help="enroll: REPO [BEAD ...]; start/brief/score: BEAD")
+    p.add_argument("--ready", action="store_true", help="enroll: every ready bead of the repo "
+                                                       "(REPO may be 'all')")
+    p.add_argument("--dry-run", action="store_true", help="enroll/collect: write nothing")
+    p.add_argument("--seed", type=int, help="enroll: master seed (only before the ledger has one)")
+    p.add_argument("--surface", choices=["laptop", "cloud"], default="laptop",
+                   help="brief: where the session runs")
+    p.add_argument("--session-id", help="start: default $CLAUDE_CODE_SESSION_ID")
+    p.add_argument("--sessions-dir", default=str(sessionlog.DEFAULT_DIR),
+                   help="collect: Claude Code transcripts (default ~/.claude/projects)")
+    p.add_argument("--pr", action="append", metavar="BEAD=N", help="collect: PR number override")
+    p.add_argument("--cost-usd", action="append", metavar="BEAD=USD",
+                   help="collect: the session's true final cost, when only a snapshot exists")
+    p.add_argument("--escape", action="append", metavar="SEV:REF[:SUMMARY]", help="score")
+    p.add_argument("--none", action="store_true", help="score: no escape found")
+    p.add_argument("--early", action="store_true", help="score: before the 14-day window closes "
+                                                       "(provisional, status ignores it)")
+    p.add_argument("--scorer", help="score: free label for who scored")
+    p.add_argument("--json", action="store_true", help="status: machine-readable")
+    p.set_defaults(func=cmd_trial)
 
     p = sub.add_parser("release", help="hand a stuck task back to the queue")
     p.add_argument("project")
