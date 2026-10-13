@@ -62,7 +62,9 @@ def median_ci(values: list[float], alpha: float = 0.05) -> tuple[float, float] |
     The interval (x_(r), x_(n+1-r)) covers the median with probability
     1 - 2 P(Bin(n, 1/2) <= r-1); take the widest-r interval whose miss
     probability is at most alpha, so coverage is at least 1 - alpha (it is
-    conservative, usually 96-99%). None when n is too small for any interval
+    conservative: about 98% at n < 20, nearer 96% by n = 60, approaching 95% as
+    n grows, from 1 - 2 * scipy.stats.binom.cdf(r - 1, n, 0.5)). None when n is
+    too small for any interval
     (n < 6 at alpha 0.05).
     """
     v = sorted(values)

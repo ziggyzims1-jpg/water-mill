@@ -272,17 +272,24 @@ undated records are dropped and counted. `--min-n` (default 8) and `--seed`
 - *per run* (`source == "transcript"`): `duration_seconds`, `tokens_total`,
   `tool_call_count`, `cost_usd`. Compare crew runs with non-crew subagent runs
   or with sessions. A session is a whole conversation, a crew run is one
-  dispatch, so crew-vs-session medians differ in scale by construction.
+  agent's task, so crew-vs-session medians differ in scale by construction;
+  any comparison with a `session` side prints a one-line `caveat:` above it
+  (and a `caveat` field in `--json`). The numbers are still printed.
 - *per bead* (`source == "handoff"`): `landed_rate`, `sluice_rounds` (landed
   beads), `first_pass_approval_rate`. Only crew work has handoff records, so
   against any other group this section prints "skipped" rather than a
   comparison.
 
 **First-pass approval rate** = landed with exactly one Sluice round and no
-pushed fixes. ("Keep rate" means something else here; it is not used.) It rests
-on `detail.sluice_pushed_fixes`, which is always parsed from prose and so is
-listed in `fields_inferred`: by default every such record is excluded and the
-row shows `excluded: N inferred`. `--include-inferred` puts them back.
+pushed fixes; a landed bead with no Sluice round has no value. It rests on
+`detail.sluice_pushed_fixes`, which crewlog always lists in `fields_inferred`.
+When `detail.sluice_verdict` is exactly `approve` or `approve_after_fixes` the
+flag follows that verdict word, not prose (`crewlog._pushed_fixes`), so those
+records are admitted and the row says `admitted N with pushed-fixes from the
+verdict`. Records whose flag came from the prose fallback (`do_not_merge`, or
+no verdict) stay excluded (`excluded: N inferred`) unless `--include-inferred`.
+This admission applies to this metric only; every other metric excludes any
+inferred value.
 
 **Per metric, each group shows** `n` (usable values), the median (or rate) with a
 95% interval, and `[records; excluded: nulls, inferred]` so you can see how much
@@ -290,7 +297,7 @@ was thrown away. Then, only if both groups have at least `--min-n` usable values
 
 | Data | Interval per group | Difference A - B | p-value |
 |---|---|---|---|
-| durations, tokens, tool calls, sluice rounds (skewed) | median, distribution-free from order statistics (coverage at least 95%, usually 96-99%) | seeded percentile bootstrap of the difference in medians | Mann-Whitney U, normal approximation with tie and continuity correction |
+| durations, tokens, tool calls, sluice rounds (skewed) | median, distribution-free from order statistics (coverage at least 95%: about 98% below n = 20, approaching 95% as n grows) | seeded percentile bootstrap of the difference in medians | Mann-Whitney U, normal approximation with tie and continuity correction |
 | proportions (landed, first-pass) | Wilson score | Newcombe hybrid score | Fisher exact, two-sided |
 
 Otherwise it prints `too few to say: n = 158 vs 6, need at least 8 in each

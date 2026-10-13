@@ -102,7 +102,8 @@ def test_first_pass_means_one_round_and_no_pushed_fixes():
     assert one(base) is True
     assert one({"detail": {"sluice_rounds": 2, "sluice_pushed_fixes": False}}) is False
     assert one({"detail": {"sluice_rounds": 1, "sluice_pushed_fixes": True}}) is False
-    assert one({"detail": {"sluice_rounds": 0, "sluice_pushed_fixes": None}}) is False
+    # landed with no Sluice review: not applicable, so null -- not a failure
+    assert one({"detail": {"sluice_rounds": 0, "sluice_pushed_fixes": None}}) is None
     assert one({"detail": {}}) is None
 
 
@@ -156,3 +157,93 @@ def test_cli_compare_json_and_pairing_rule(tmp_path, capsys):
     assert data["min_n"] == 8 and data["comparisons"][0]["a"] == "crew"
     assert cli.main(["--root", str(tmp_path), "agents", "compare"]) == 0
     assert "too few to say" in capsys.readouterr().out
+
+
+def _verdict(i, verdict, *, pushed, rounds=1):
+    r = _handoff(i, rounds=rounds, pushed=pushed)
+    r["detail"]["sluice_verdict"] = verdict
+    r["fields_inferred"] = ["detail.sluice_verdict", "detail.sluice_pushed_fixes"]
+    return r
+
+
+def test_first_pass_admits_pushed_fixes_only_when_verdict_derived(tmp_path):
+    recs = [_verdict(i, "approve", pushed=False) for i in range(6)]
+    recs += [_verdict(10 + i, "approve_after_fixes", pushed=True) for i in range(3)]
+    recs += [_verdict(20 + i, "do_not_merge", pushed=False) for i in range(2)]  # prose fallback
+    recs += [_verdict(30 + i, None, pushed=False) for i in range(2)]  # no verdict: prose
+    _seed(tmp_path, recs)
+    g = _find(agentcompare.compare(tmp_path, [("crew", "session")]), 0,
+              "first_pass_approval_rate")["groups"][0]
+    assert (g["n"], g["successes"]) == (9, 6)
+    assert (g["admitted_verdict_derived"], g["excluded_inferred"]) == (9, 4)
+    text = agentcompare.render(agentcompare.compare(tmp_path, [("crew", "crew")]))
+    assert "admitted 9 with pushed-fixes from the verdict" in text
+    # still reported when the per-bead section is skipped (B has no handoff records)
+    skipped = agentcompare.render(agentcompare.compare(tmp_path, [("crew", "session")]))
+    assert "skipped" in skipped and "admitted 9 with pushed-fixes from the verdict" in skipped
+    every = _find(agentcompare.compare(tmp_path, [("crew", "session")], include_inferred=True),
+                  0, "first_pass_approval_rate")["groups"][0]
+    assert (every["n"], every["admitted_verdict_derived"]) == (13, 0)
+
+
+def test_verdict_admission_is_for_first_pass_only(tmp_path):
+    # an inferred outcome is never admitted, whatever the verdict says
+    recs = [_verdict(i, "approve", pushed=False) for i in range(10)]
+    for r in recs:
+        r["fields_inferred"].append("outcome")
+    _seed(tmp_path, recs)
+    res = agentcompare.compare(tmp_path, [("crew", "session")])
+    landed = _find(res, 0, "landed_rate")["groups"][0]
+    assert (landed["n"], landed["excluded_inferred"], landed["admitted_verdict_derived"]) \
+        == (0, 10, 0)
+    # nor is a first-pass record whose other inferred field is in play
+    for r in recs:
+        r["fields_inferred"] = ["detail.sluice_rounds", "detail.sluice_pushed_fixes"]
+    _seed(tmp_path / "b", recs)
+    fp = _find(agentcompare.compare(tmp_path / "b", [("crew", "session")]), 0,
+               "first_pass_approval_rate")["groups"][0]
+    assert (fp["n"], fp["excluded_inferred"]) == (0, 10)
+
+
+def test_session_comparisons_carry_a_caveat_and_still_print_numbers(tmp_path):
+    _seed(tmp_path, [_run(f"a{i}", "mill-crew", 100 + i, 1000 + i) for i in range(10)]
+          + [_run(f"s{i}", "session", 900 + i, 9000 + i) for i in range(10)]
+          + [_run(f"b{i}", "subagent:x", 50 + i, 500 + i) for i in range(10)])
+    res = agentcompare.compare(tmp_path, [("crew", "subagent"), ("session", "crew")])
+    assert res["comparisons"][0]["caveat"] is None
+    assert "not like-for-like" in res["comparisons"][1]["caveat"]
+    text = agentcompare.render(res)
+    lines = text.splitlines()
+    caveats = [i for i, line in enumerate(lines) if "caveat:" in line]
+    assert len(caveats) == 1
+    assert lines[caveats[0] + 1].startswith("=== A: sessions")
+    assert _find(res, 1, "duration_seconds")["tested"]
+    assert text.count("p = ") == 6  # three tested run metrics in each comparison
+
+
+def test_handoff_and_transcript_records_never_cross_scopes(tmp_path):
+    # Real handoff records carry duration_seconds / cost_usd (from the task log);
+    # a transcript record could carry outcome or detail.sluice_rounds. Neither may
+    # leak into the other scope's metrics, even when every value is usable.
+    beads = []
+    for i in range(10):
+        r = _handoff(i, rounds=2)
+        r["duration_seconds"], r["cost_usd"] = 99999.0, 50.0
+        r["detail"].update(tokens_total=99999, tool_call_count=999)
+        beads.append(r)
+    runs = []
+    for i in range(12):
+        r = _run(f"r{i}", "mill-crew", 100 + i, 1000 + i, cost=1.0)
+        r["outcome"] = "unlanded"
+        r["detail"]["sluice_rounds"] = 7
+        runs.append(r)
+    _seed(tmp_path, beads + runs)
+    res = agentcompare.compare(tmp_path, [("crew", "crew")])
+    for metric in ("duration_seconds", "tokens_total", "tool_call_count", "cost_usd"):
+        g = _find(res, 0, metric)["groups"][0]
+        assert (g["records"], g["n"]) == (12, 12), metric
+        assert g["median"] < 99999, metric
+    landed = _find(res, 0, "landed_rate")["groups"][0]
+    assert (landed["records"], landed["n"], landed["successes"]) == (10, 10, 10)
+    rounds = _find(res, 0, "sluice_rounds")["groups"][0]
+    assert (rounds["n"], rounds["median"]) == (10, 2)

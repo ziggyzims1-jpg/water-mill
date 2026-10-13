@@ -14,14 +14,21 @@ grouping so nobody has to guess:
   record against a transcript record.
 * **Nulls and inferred values are excluded, per metric, and counted.** A value
   is inferred when the record names its field in `fields_inferred`.
-  `--include-inferred` puts them back (first-pass approval depends on
-  `detail.sluice_pushed_fixes`, which is always parsed from prose).
+  `--include-inferred` puts them back. One exception, for first-pass approval
+  only: `detail.sluice_pushed_fixes` is admitted when `detail.sluice_verdict`
+  is exactly `approve` or `approve_after_fixes`, because crewlog then derives
+  the flag from the verdict word, not from prose (`crewlog._pushed_fixes`).
+  How many were admitted that way is counted and printed.
 * **Too few to say is an answer.** Below `min_n` usable values in either group
   no difference, interval or p-value is printed -- only n, and the medians if
   they exist. Do not lower the default to get a p-value.
 
 "First-pass approval rate" = landed with exactly one Sluice round and no pushed
-fixes. ("Keep rate" means something else in this repo.)
+fixes; a landed bead with no Sluice round has no value (null), not a failure.
+
+Crew runs and sessions are not like-for-like (a session is a whole
+conversation, a crew run is one agent's task); any comparison with a `session`
+side carries a caveat line, and the numbers are still printed.
 """
 
 from __future__ import annotations
@@ -80,15 +87,26 @@ class Metric:
     fields: tuple[str, ...]        # fields_inferred names that make it inferred
     unit: str = ""
     only: Callable[[dict], bool] = lambda r: True  # population filter
+    # Inferred fields admitted anyway when `admit(record)` holds (counted apart).
+    admit_fields: tuple[str, ...] = ()
+    admit: Callable[[dict], bool] = lambda r: False
 
 
 def _detail(name: str) -> Callable[[dict], Any]:
     return lambda r: (r.get("detail") or {}).get(name)
 
 
+VERDICT_DERIVED = ("approve", "approve_after_fixes")
+
+
+def _verdict_derived(r: dict) -> bool:
+    """crewlog._pushed_fixes followed the verdict word, not prose."""
+    return (r.get("detail") or {}).get("sluice_verdict") in VERDICT_DERIVED
+
+
 def _first_pass(r: dict) -> Any:
     d = r.get("detail") or {}
-    if d.get("sluice_rounds") is None:
+    if not d.get("sluice_rounds"):  # None, or landed without any Sluice review
         return None
     return d["sluice_rounds"] == 1 and d.get("sluice_pushed_fixes") is False
 
@@ -108,7 +126,8 @@ METRICS = [
            ("detail.sluice_rounds",), only=lambda r: r.get("outcome") == "landed"),
     Metric("first_pass_approval_rate", "bead", "proportion", _first_pass,
            ("detail.sluice_rounds", "detail.sluice_pushed_fixes"),
-           only=lambda r: r.get("outcome") == "landed"),
+           only=lambda r: r.get("outcome") == "landed",
+           admit_fields=("detail.sluice_pushed_fixes",), admit=_verdict_derived),
 ]
 
 
@@ -128,18 +147,23 @@ def _collect(records: list[dict], group: str, metric: Metric, since: str | None,
                 kept.append(r)
         pool = kept
     values: list = []
-    nulls = inferred = 0
+    nulls = inferred = admitted = 0
     for r in pool:
         v = metric.value(r)
+        hit = set(metric.fields) & set(r.get("fields_inferred") or [])
         if v is None:
             nulls += 1
-        elif not include_inferred and set(metric.fields) & set(r.get("fields_inferred") or []):
-            inferred += 1
+        elif hit and not include_inferred:
+            if hit <= set(metric.admit_fields) and metric.admit(r):
+                admitted += 1
+                values.append(v)
+            else:
+                inferred += 1
         else:
             values.append(v)
     return {"group": group, "source": source, "records": len(pool), "values": values,
             "n": len(values), "excluded_null": nulls, "excluded_inferred": inferred,
-            "excluded_undated": undated}
+            "excluded_undated": undated, "admitted_verdict_derived": admitted}
 
 
 # -- one metric, two groups ------------------------------------------------
@@ -160,7 +184,8 @@ def compare_metric(records, metric, a, b, *, since, min_n, include_inferred, see
     }
     for g in (ga, gb):
         row = {k: g[k] for k in ("group", "records", "n", "excluded_null",
-                                  "excluded_inferred", "excluded_undated")}
+                                  "excluded_inferred", "excluded_undated",
+                                  "admitted_verdict_derived")}
         vals = g["values"]
         if metric.kind == "proportion":
             k = sum(1 for v in vals if v)
@@ -192,6 +217,14 @@ def compare_metric(records, metric, a, b, *, since, min_n, include_inferred, see
     return out
 
 
+SESSION_CAVEAT = ("  caveat: sessions are not like-for-like with agent runs -- a session is a "
+                  "whole conversation, a crew run is one agent's task.")
+
+
+def _session_side(a: str, b: str) -> bool:
+    return "session" in (a, b)
+
+
 def compare(root, pairs=None, *, since: str | None = None, min_n: int = DEFAULT_MIN_N,
             include_inferred: bool = False, seed: int = 0) -> dict:
     records = agentlog.read(root)
@@ -201,6 +234,7 @@ def compare(root, pairs=None, *, since: str | None = None, min_n: int = DEFAULT_
                                   include_inferred=include_inferred, seed=seed)
                    for m in METRICS]
         comparisons.append({"a": a, "b": b, "metrics": results,
+                            "caveat": SESSION_CAVEAT.strip() if _session_side(a, b) else None,
                             "tested": sum(1 for r in results if r["tested"])})
     return {"since": since, "min_n": min_n, "include_inferred": include_inferred,
             "seed": seed, "records_read": len(records), "comparisons": comparisons}
@@ -237,7 +271,10 @@ def render(result: dict) -> str:
         "source=handoff records; the two are never mixed.",
     ]
     for comp in result["comparisons"]:
-        lines += ["", f"=== A: {group_label(comp['a'])}   vs   B: {group_label(comp['b'])} ==="]
+        lines.append("")
+        if comp.get("caveat"):
+            lines.append(SESSION_CAVEAT)
+        lines += [f"=== A: {group_label(comp['a'])}   vs   B: {group_label(comp['b'])} ==="]
         scope = None
         for m in comp["metrics"]:
             if m["scope"] == "bead" and not all(g["records"] for g in m["groups"]):
@@ -248,6 +285,14 @@ def render(result: dict) -> str:
                     lines.append(
                         "  -- per bead (source=handoff): skipped -- no handoff records for "
                         f"group {' and '.join(empty)} (only mill-crew work has them) --")
+                if (m["metric"] == "first_pass_approval_rate" and not result["include_inferred"]):
+                    for tag, g in zip("AB", m["groups"], strict=True):
+                        if g["records"]:
+                            lines.append(
+                                f"     ({tag}: first_pass_approval_rate would use n={g['n']}: "
+                                f"admitted {g['admitted_verdict_derived']} with pushed-fixes "
+                                f"from the verdict, excluded {g['excluded_inferred']} inferred, "
+                                f"{g['excluded_null']} null)")
                 continue
             if m["scope"] != scope:
                 scope = m["scope"]
@@ -264,7 +309,10 @@ def render(result: dict) -> str:
                     stat = "no usable values"
                 excl = (f"excluded: {g['excluded_null']} null, "
                         f"{g['excluded_inferred']} inferred"
-                        + (f", {g['excluded_undated']} undated" if g["excluded_undated"] else ""))
+                        + (f", {g['excluded_undated']} undated" if g["excluded_undated"] else "")
+                        + (f"; admitted {g['admitted_verdict_derived']} with pushed-fixes from "
+                           "the verdict" if m["metric"] == "first_pass_approval_rate"
+                           and not result["include_inferred"] else ""))
                 lines.append(f"      {tag}  n={g['n']:<4} {stat}"
                              + (f"  {_ci(g, m['unit'], prop)}" if g["n"] else "")
                              + f"   [{g['records']} records; {excl}]")

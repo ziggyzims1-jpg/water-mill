@@ -128,6 +128,19 @@ def test_bootstrap_is_deterministic_and_seed_dependent():
     assert a != stats.bootstrap_median_diff(x, y, seed=4)
 
 
+# stats.bootstrap_median_diff(x, y, seed=7) on the data below, recorded 2026-10-13
+PINNED_BOOT = (1.8364803932976432, -1.6217561668719336, 7.142627330798805)
+
+
+def test_bootstrap_is_pinned_for_a_seed():
+    # A regression pin, not a SciPy reference (the resampling stream is
+    # random.Random's): continuous data, so an unseeded or re-ordered resampler
+    # moves the percentiles. Exact equality: the same seed must print the same CI.
+    x = [math.exp(i / 7) for i in range(25)]
+    y = [math.exp(i / 9) + 0.5 for i in range(22)]
+    assert stats.bootstrap_median_diff(x, y, seed=7) == pytest.approx(PINNED_BOOT, abs=1e-12)
+
+
 def test_bootstrap_interval_brackets_a_known_shift():
     # y is x shifted by exactly 10: the observed median difference is -10 and a
     # 95% percentile interval must contain it and exclude 0.
