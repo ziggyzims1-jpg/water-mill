@@ -9,8 +9,10 @@ grouping so nobody has to guess:
   times (its handoff record plus a transcript record per millstone / sluice /
   tailrace dispatch). Per-bead outcome metrics (landed, sluice rounds,
   first-pass approval) use `source == "handoff"` records only; per-run metrics
-  (duration, tokens, tool calls, cost) use `source == "transcript"` records
-  only. Two groups are always compared inside one section, never a handoff
+  (duration, tokens, tool calls, cost, cost_usd_est) use `source == "transcript"`
+  records only. `cost_usd_est` is an API-equivalent estimate (pricing.py, derived
+  by agentlog.read at read time), not billed cost; the result carries the price
+  table's as-of date. Two groups are always compared inside one section, never a handoff
   record against a transcript record.
 * **Nulls and inferred values are excluded, per metric, and counted.** A value
   is inferred when the record names its field in `fields_inferred`.
@@ -37,7 +39,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from watermill import agentlog, stats
+from watermill import agentlog, pricing, stats
 
 DEFAULT_MIN_N = 8
 MULTIPLE_WARNING_AFTER = 5
@@ -120,6 +122,10 @@ METRICS = [
            ("detail.tool_call_count",)),
     Metric("cost_usd", "run", "continuous", lambda r: r.get("cost_usd"),
            ("cost_usd",), "$"),
+    # An estimate from model + tokens (pricing.py): inferred, so excluded unless
+    # --include-inferred. cost_usd above stays the stated cost only.
+    Metric("cost_usd_est", "run", "continuous", _detail("cost_usd_est"),
+           ("detail.cost_usd_est",), "$"),
     Metric("landed_rate", "bead", "proportion",
            lambda r: {"landed": True, "unlanded": False}.get(r.get("outcome")), ("outcome",)),
     Metric("sluice_rounds", "bead", "continuous", _detail("sluice_rounds"),
@@ -240,7 +246,9 @@ def compare(root, pairs=None, *, since: str | None = None, min_n: int = DEFAULT_
                             "caveat": SESSION_CAVEAT.strip() if _session_side(a, b) else None,
                             "tested": sum(1 for r in results if r["tested"])})
     return {"since": since, "min_n": min_n, "include_inferred": include_inferred,
-            "seed": seed, "records_read": len(records), "comparisons": comparisons}
+            "seed": seed, "records_read": len(records),
+            "cost_usd_est_basis": pricing.BASIS, "pricing_as_of": pricing.AS_OF,
+            "comparisons": comparisons}
 
 
 # -- text ------------------------------------------------------------------
@@ -319,6 +327,12 @@ def render(result: dict) -> str:
                 lines.append(f"      {tag}  n={g['n']:<4} {stat}"
                              + (f"  {_ci(g, m['unit'], prop)}" if g["n"] else "")
                              + f"   [{g['records']} records; {excl}]")
+            if m["metric"] == "cost_usd_est":
+                lines.append(
+                    "      (cost_usd_est is an API-equivalent ESTIMATE at list prices as of "
+                    f"{result.get('pricing_as_of', pricing.AS_OF)}, not a bill"
+                    + ("; inferred, so excluded here: pass --include-inferred to compare it)"
+                       if not result["include_inferred"] else ")"))
             if m["tested"]:
                 d = m["difference"]
                 lo, hi = (_num(v, m["unit"], prop) for v in d["ci95"])
