@@ -260,3 +260,272 @@ def test_an_http_error_becomes_a_ShipError_carrying_the_status(tmp_path, send):
     with pytest.raises(shipper.ShipError) as exc:
         shipper.ship(tmp_path, url="http://loki:3100")
     assert "400" in str(exc.value)
+
+
+# -- agent records (runs/agents.jsonl) --------------------------------------
+
+
+import re  # noqa: E402
+
+from watermill import agentlog  # noqa: E402
+
+
+def _agent(root, key="crew:demo-1", kind="mill-crew", outcome="landed",
+           ended_at="2026-09-01T10:00:00+00:00", **over):
+    rec = agentlog.make_record(
+        key=key, agent_kind=kind, source="handoff", project="demo",
+        outcome=outcome, ended_at=ended_at,
+        detail={"sluice_rounds": 2, "landed_at": "2026-09-01"},
+    )
+    rec.update(over)
+    path = root / agentlog.AGENTLOG_FILENAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as fh:
+        fh.write(json.dumps(rec, sort_keys=True) + "\n")
+
+
+def test_agent_kind_is_bucketed_to_a_closed_set():
+    b = shipper.agent_kind_bucket
+    assert b("mill-crew") == "mill-crew" and b("session") == "session"
+    assert b("subagent:builder") == "subagent" and b("subagent") == "subagent"
+    assert b("brand-new-kind") == "other" and b(None) == "other"
+
+
+def test_an_agent_kind_outside_the_closed_set_is_refused_as_a_label():
+    with pytest.raises(shipper.ShipError):
+        shipper.build_payload([({"agent_kind": "subagent:builder"}, {"recorded_at": ""})])
+    # and a per-record label is still refused
+    with pytest.raises(shipper.ShipError):
+        shipper.build_payload([({"key": "crew:x"}, {"recorded_at": ""})])
+
+
+def test_agent_lines_are_filed_at_the_work_end_not_sweep_time():
+    row = {"recorded_at": "2026-10-13T00:00:00+00:00",
+           "ended_at": "2026-09-01T10:00:00+00:00"}
+    out = shipper.build_payload([({"source": "agent"}, row)])
+    assert out["streams"][0]["values"][0][0] == shipper.to_nanos("2026-09-01T10:00:00+00:00")
+    # a task still uses recorded_at
+    out = shipper.build_payload([({"source": "task"}, row)])
+    assert out["streams"][0]["values"][0][0] == shipper.to_nanos(row["recorded_at"])
+
+
+def test_agent_time_falls_back_to_landed_at_then_started_at():
+    row = {"recorded_at": "2026-10-13", "ended_at": None,
+           "detail": {"landed_at": "2026-09-02"}}
+    assert shipper.line_time({"source": "agent"}, row) == "2026-09-02"
+    row = {"recorded_at": "2026-10-13", "started_at": "2026-08-30"}
+    assert shipper.line_time({"source": "agent"}, row) == "2026-08-30"
+
+
+def test_agents_ship_with_bucketed_label_and_full_kind_in_the_line(tmp_path, send):
+    rec = send()
+    _agent(tmp_path, key="s:1", kind="subagent:builder")
+    _agent(tmp_path)
+    shipper.ship(tmp_path, url="http://loki:3100")
+    streams = {s["stream"]["agent_kind"]: s for s in rec.payload["streams"]}
+    assert set(streams) == {"mill-crew", "subagent"}
+    assert streams["subagent"]["stream"]["source"] == "agent"
+    assert json.loads(streams["subagent"]["values"][0][1])["agent_kind"] == "subagent:builder"
+
+
+def test_a_resweep_does_not_ship_a_work_twice(tmp_path, send):
+    send()
+    _agent(tmp_path)
+    assert shipper.ship(tmp_path, url="http://loki:3100")["shipped"] == 1
+    # same content, and a changed-content re-append of the same key
+    _agent(tmp_path)
+    _agent(tmp_path, title="renamed")
+    assert shipper.ship(tmp_path, url="http://loki:3100")["shipped"] == 0
+
+
+def test_unlanded_then_landed_ships_once_when_it_lands(tmp_path, send):
+    rec = send()
+    _agent(tmp_path, outcome="unlanded", ended_at=None)
+    assert shipper.ship(tmp_path, url="http://loki:3100")["shipped"] == 0
+    assert not rec.calls
+    _agent(tmp_path, outcome="landed")
+    assert shipper.ship(tmp_path, url="http://loki:3100")["shipped"] == 1
+    line = json.loads(rec.payload["streams"][0]["values"][0][1])
+    assert line["outcome"] == "landed"
+    assert shipper.ship(tmp_path, url="http://loki:3100")["shipped"] == 0
+
+
+def test_an_old_state_file_without_agents_still_works(tmp_path, send):
+    send()
+    _run(tmp_path)
+    shipper.ship(tmp_path, url="http://loki:3100")
+    state = shipper.read_state(tmp_path)
+    state.pop("agents", None)
+    shipper.write_state(tmp_path, state)
+    _agent(tmp_path)
+    summary = shipper.ship(tmp_path, url="http://loki:3100")
+    assert summary["shipped"] == 1          # the run/task marks were kept
+
+
+def test_a_failed_push_does_not_mark_agents_shipped(tmp_path, send):
+    send(status=500)
+    _agent(tmp_path)
+    with pytest.raises(shipper.ShipError):
+        shipper.ship(tmp_path, url="http://loki:3100")
+    send()
+    assert shipper.ship(tmp_path, url="http://loki:3100")["shipped"] == 1
+
+
+def test_dry_run_shows_agent_payload_and_records_nothing(tmp_path, send):
+    rec = send()
+    _agent(tmp_path)
+    summary = shipper.ship(tmp_path, url="http://loki:3100", dry_run=True)
+    assert summary["payload"]["streams"][0]["stream"]["source"] == "agent"
+    assert not rec.calls and shipper.read_state(tmp_path) == {}
+
+
+DASHBOARD = Path(__file__).resolve().parent.parent / "docs/grafana/agent-performance.json"
+
+
+def _exprs():
+    data = json.loads(DASHBOARD.read_text())
+    return [t["expr"] for panel in data["panels"] for t in panel["targets"]]
+
+
+#: Every stream label an agent line carries, read off a real payload rather than
+#: ALLOWED_LABELS: `outcome` and `env` are allowed labels but no agent stream has
+#: them, so a selector on them would silently match nothing.
+_MATCHER = r"(\w+)\s*(=~|!~|!=|=)\s*\""
+
+
+def _agent_stream_labels(tmp_path):
+    _agent(tmp_path)
+    payload = shipper.ship(tmp_path, dry_run=True)["payload"]
+    return {k for s in payload["streams"] for k in s["stream"]}
+
+
+def _check_dashboard_labels(exprs, emitted):
+    for expr in exprs:
+        selectors = re.findall(r"\{([^{}]*)\}", expr)
+        assert selectors, expr
+        for selector in selectors:
+            matchers = re.findall(_MATCHER, selector)
+            # every comma-separated matcher was parsed, whatever its operator
+            assert len(matchers) == len([m for m in selector.split(",") if m.strip()]), selector
+            assert {k for k, _ in matchers} <= emitted, (expr, matchers)
+            assert ("source", "=") in matchers, expr
+        for group in re.findall(r"\b(?:by|without)\s*\(([^)]*)\)", expr):
+            for key in (k.strip() for k in group.split(",") if k.strip()):
+                assert key in emitted, (expr, key)
+
+
+def test_dashboard_queries_use_only_labels_the_shipper_emits(tmp_path):
+    emitted = _agent_stream_labels(tmp_path)
+    assert emitted == {"job", "project", "source", "agent_kind"}
+    exprs = _exprs()
+    assert exprs
+    _check_dashboard_labels(exprs, emitted)
+    for expr in exprs:
+        assert 'source="agent"' in expr
+
+
+@pytest.mark.parametrize("bad", [
+    '{job="watermill", source="agent", bogus!="x"}[7d]',     # negative matcher
+    '{job="watermill", source="agent", outcome="landed"}[7d]',  # allowed, never on agents
+    'sum by(bogus) (count_over_time({job="watermill", source="agent"}[7d]))',
+    'sum without (bogus) (count_over_time({job="watermill", source="agent"}[7d]))',
+])
+def test_the_dashboard_label_check_catches_an_unknown_label(tmp_path, bad):
+    with pytest.raises(AssertionError):
+        _check_dashboard_labels([bad], _agent_stream_labels(tmp_path))
+
+
+def test_dashboard_label_values_are_in_the_closed_set():
+    for expr in _exprs():
+        for value in re.findall(r'agent_kind="([^"]+)"', expr):
+            assert value in shipper.AGENT_KIND_BUCKETS
+
+
+def test_dashboard_panels_say_what_they_exclude():
+    data = json.loads(DASHBOARD.read_text())
+    assert data["templating"]["list"][0]["type"] == "datasource"
+    for panel in data["panels"]:
+        assert panel["datasource"]["uid"] == "${datasource}"
+        if any(w in panel["title"] for w in ("duration", "Cost", "approval", "Records")):
+            assert "EXCLUDES" in panel["description"], panel["title"]
+
+
+def test_the_dashboard_does_not_call_a_second_metric_keep_rate():
+    # docs/OBSERVABILITY.md defines keep rate (completed / all tasks); one name,
+    # one meaning.
+    for panel in json.loads(DASHBOARD.read_text())["panels"]:
+        assert "keep rate" not in panel["title"].lower()
+        for target in panel["targets"]:
+            assert "keep" not in target["legendFormat"].lower()
+
+
+def test_unwrapped_crew_aggregations_are_grouped_not_one_series_per_bead():
+    # `| json` makes every record its own label set; an unwrapped range
+    # aggregation with no `by` returns one series per bead, not a mean.
+    for expr in _exprs():
+        for fn in ("avg_over_time", "max_over_time", "quantile_over_time"):
+            for tail in expr.split(fn + "(")[1:]:
+                assert re.search(r"\[7d\]\)\s*by\s*\(", tail), expr
+
+
+def test_a_line_older_than_its_stream_already_holds_is_filed_at_the_floor(tmp_path, send):
+    rec = send()
+    _agent(tmp_path, key="crew:new", ended_at="2026-09-10T00:00:00+00:00")
+    shipper.ship(tmp_path, url="http://loki:3100")
+    # a bead that ended earlier lands later, into the same stream
+    _agent(tmp_path, key="crew:old", ended_at="2026-09-01T00:00:00+00:00")
+    shipper.ship(tmp_path, url="http://loki:3100")
+    stamp, line = rec.payload["streams"][0]["values"][0]
+    assert int(stamp) == int(shipper.to_nanos("2026-09-10T00:00:00+00:00"))
+    assert json.loads(line)["ended_at"] == "2026-09-01T00:00:00+00:00"   # truth kept in the line
+    # a fresh stream is not floored by another stream's mark
+    _agent(tmp_path, key="s:1", kind="session", ended_at="2026-08-01T00:00:00+00:00")
+    shipper.ship(tmp_path, url="http://loki:3100")
+    assert rec.payload["streams"][0]["values"][0][0] == shipper.to_nanos("2026-08-01T00:00:00+00:00")
+
+
+def test_a_malformed_agents_or_newest_mark_does_not_crash(tmp_path, send):
+    send()
+    _agent(tmp_path)
+    (tmp_path / shipper.STATE_FILENAME).write_text('{"agents": 3, "newest": "x"}')
+    assert shipper.ship(tmp_path, url="http://loki:3100")["shipped"] == 1
+
+
+def _panels():
+    return json.loads(DASHBOARD.read_text())["panels"]
+
+
+#: Panels that count crew *works* (one per bead) versus panels about agent
+#: *runs*. Crew transcript records (one per millstone/sluice/tailrace run) share
+#: agent_kind mill-crew with the per-bead handoff records, so each side filters
+#: on the record's own source -- `source_extracted` after `| json`, because the
+#: record field collides with the stream label `source`.
+_WORK_PANELS = ("Records per kind", "landed per week", "Sluice rounds", "first-pass")
+_RUN_PANELS = ("duration", "Cost")
+
+
+def test_crew_work_panels_count_handoff_records_and_run_panels_read_transcripts():
+    seen_work = seen_run = 0
+    for panel in _panels():
+        exprs = [t["expr"] for t in panel["targets"]]
+        if any(w in panel["title"] for w in _WORK_PANELS):
+            seen_work += 1
+            for expr in exprs:
+                # every crew selector filters to handoff records; a non-crew
+                # selector has no handoff records to double-count
+                for part in expr.split("{")[1:]:
+                    if 'agent_kind!="mill-crew"' in part.split("}")[0]:
+                        continue
+                    assert '| json | source_extracted="handoff"' in part, (panel["title"], expr)
+        if any(w in panel["title"] for w in _RUN_PANELS):
+            seen_run += 1
+            for expr in exprs:
+                for part in expr.split("{")[1:]:
+                    assert '| json | source_extracted="transcript"' in part, (panel["title"], expr)
+    assert seen_work == 4 and seen_run == 2
+
+
+def test_no_query_filters_the_record_source_by_its_shadowed_name():
+    # after `| json`, `source=` is the stream label ("agent"), never handoff/transcript
+    for expr in _exprs():
+        assert not re.search(r'\|\s*source\s*=~?\s*"(handoff|transcript)', expr), expr
