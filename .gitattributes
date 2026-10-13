@@ -1,3 +1,8 @@
 # Findings are appended one line at a time by concurrent sessions; two appends
 # at the end of the file are both kept instead of conflicting on rebase.
 knowledge/findings.jsonl merge=union
+
+# The trial ledger and results are append-only; concurrent sessions (a cloud
+# session branch and the laptop) each add lines, and both sets are kept.
+knowledge/trial/ledger.jsonl merge=union
+knowledge/trial/results.jsonl merge=union

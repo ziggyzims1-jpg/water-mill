@@ -31,7 +31,9 @@ from . import agentlog, landed, sessionlog
 from .registry import Registry, RegistryError
 
 RECORDED_DIR = "knowledge/agent-runs"
-ROLES = ("millstone", "sluice", "tailrace", "solo")
+ROLES = ("millstone", "sluice", "tailrace", "solo", "orchestrator")
+#: Roles that are a top-level session, not a crew subagent: one session = one record.
+SESSION_ROLES = ("solo", "orchestrator")
 VERDICTS = ("approve", "approve_after_fixes", "do_not_merge", "reject", "landed",
             "blocked", "verify_failed", "needs_manual")
 OUTCOMES = ("landed", "unlanded", "blocked")
@@ -67,7 +69,7 @@ def build(
     if base is None:
         key = f"recorded:{project}:{role}:{subject or 'none'}:{tag or agentlog._now()}"
         record = agentlog.make_record(
-            key=key, agent_kind="mill-crew" if role != "solo" else "session",
+            key=key, agent_kind="session" if role in SESSION_ROLES else "mill-crew",
             source=agentlog.RECORDED, project=project, subject=subject, outcome=outcome,
             detail=facts)
     else:
@@ -75,13 +77,13 @@ def build(
         record.update(
             source=agentlog.RECORDED, recorded_at=agentlog._now(), project=project,
             subject=subject or base.get("subject"), outcome=outcome, title=None,
-            agent_kind="mill-crew" if role != "solo" else base["agent_kind"],
+            agent_kind=base["agent_kind"] if role in SESSION_ROLES else "mill-crew",
             # the flags replace prose guesses, but a floor stays a floor
             # (water-mill-658): `agents compare` must still exclude it
             fields_inferred=list(sessionlog.FLOOR_FIELDS)
             if (base.get("detail") or {}).get("output_tokens_floor") else [])
         record["detail"] = {**base["detail"], **facts}
-    if subject and role != "solo":
+    if subject and role not in SESSION_ROLES:
         record["detail"]["crew_key"] = f"crew:{subject}"
     return record
 
