@@ -307,9 +307,10 @@ outside.
   because SCHEMA built the table first, a reload that reads the filter at
   POST time rather than reload time. Each is now a test in the cell and a
   finding here, and the migration one became a bead for a generic check
-  (hpt-qt8.8). The cell has no `main`: the contract's base branch is the
-  session's branch, landings go through the GitHub MCP tools on the exact
-  head sha, and the graph commits sit on water-mill's session branch too.
+  (hpt-qt8.8). The cell had no `main` until the end of the round: the
+  contract's base branch was the session's branch, landings went through
+  the GitHub MCP tools on the exact head sha, and `main` was then cut from
+  that branch and made the default, with the contract pointed at it.
   263 findings now name the cell.
 
 ## Counters
