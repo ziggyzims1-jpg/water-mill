@@ -98,6 +98,47 @@ def cmd_projects(args) -> int:
     return 0
 
 
+def _crew_drift_lines(root, targets) -> tuple[list[str], int]:
+    """Report-lines and failure count for crew-file drift (water-mill-mb6)."""
+    from .crewdrift import compare
+
+    lines: list[str] = []
+    failed = 0
+    for project in targets:
+        if not project.exists or project.path == root:
+            continue
+        drift = compare(root, project.path, project.name)
+        if drift.clean:
+            lines.append(f"{project.name}: crew files identical to water-mill's")
+        elif project.crew_exempt:
+            lines.append(
+                f"{project.name}: crew files DIFFER ({', '.join(drift.differing)}) "
+                f"-- exempt: {project.crew_exempt}"
+            )
+        else:
+            lines.append(
+                f"{project.name}: crew files DIFFER from water-mill's: "
+                f"{', '.join(drift.differing)}"
+            )
+            failed += 1
+    return lines, failed
+
+
+def _report_only_crew(root, paths) -> list[str]:
+    """Crew drift for paths outside the registry (e.g. the workshop copy): report only."""
+    from .crewdrift import compare
+
+    out = []
+    for raw in paths or []:
+        drift = compare(root, Path(raw).expanduser().resolve(), raw)
+        out.append(
+            f"{raw}: crew files identical to water-mill's" if drift.clean
+            else f"{raw}: crew files DIFFER ({', '.join(drift.differing)}) "
+            "-- unregistered, report only"
+        )
+    return out
+
+
 def cmd_validate(args) -> int:
     registry = Registry.load(factory_root(args.root))
     targets = [registry.get(args.project)] if args.project else list(registry.projects)
@@ -124,7 +165,11 @@ def cmd_validate(args) -> int:
             print("    note:    no backup_check -- this project cannot prove it is recoverable")
         if not contract.fence.paths:
             print("    note:    no fenced paths -- nothing is protected from a bad task")
-    return 1 if failed else 0
+    drift_lines, drift_failed = _crew_drift_lines(factory_root(args.root), targets)
+    extra = _report_only_crew(factory_root(args.root), getattr(args, "crew_path", None))
+    for line in drift_lines + extra:
+        print(line)
+    return 1 if (failed or drift_failed) else 0
 
 
 def cmd_add(args) -> int:
@@ -1048,6 +1093,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("validate", help="parse and explain a project's contract")
     p.add_argument("project", nargs="?")
+    p.add_argument("--crew-path", action="append", metavar="DIR",
+                   help="also report crew-file drift for DIR (unregistered; never fails)")
     p.set_defaults(func=cmd_validate)
 
     p = sub.add_parser("doctor", help="run the preflight checks without working")
