@@ -232,8 +232,33 @@ checkout.
   excluded, and a crew run lives on the cache: the dogfood millstone run (340 s,
   30 tool calls) shows `tokens_total` 363 against 2.4 M `cache_read_tokens` and
   109 k `cache_creation_tokens`. A record taken at sign-off also misses the
-  turns after it, and a live transcript under-counts streamed output (partial
-  `usage`). Never rank or price runs by `tokens_total`; use the next two fields.
+  turns after it, and a subagent transcript under-counts streamed output (next item). Never rank or price runs by `tokens_total`; use the next two fields.
+- **`output_tokens` is a floor for subagent runs; true for sessions** (water-mill-658,
+  measured 2026-10-13 on 16 sessions and 201 subagent runs, counts only).
+  A top-level session writes the final `usage` on every line of a message, so
+  the largest per `message.id` is the true total (1 211 of 1 213 messages carry
+  a `stop_reason`; per no-subagent session it lands within 1-4% of the
+  session's own `cost-state` outputTokens, the rest being side calls). A
+  subagent transcript is written live and never finalised: 63% of its messages
+  (3 561 of 5 658) have no line with a `stop_reason`, hold the first streamed
+  chunk (tens of tokens against thousands of characters of content; about 42 k
+  tokens recorded for about 3.3 M characters), and nothing later fixes it --
+  the file has only user/attachment/assistant lines, no result or summary line,
+  the parent's `toolUseResult` for the Agent call has no usage, and the sidecar
+  `.meta.json` has none. So the total does not exist anywhere on disk for those
+  messages. Records say so: `detail.output_messages_final` /
+  `output_messages_partial`, and `detail.output_tokens_floor` (true when over 5%
+  of messages are partial), which lists `detail.output_tokens` and
+  `detail.tokens_total` in `fields_inferred`; `cost_usd_est`'s output term is a
+  floor too, so `agents compare` excludes floor runs from `tokens_total` and
+  `cost_usd_est` unless `--include-inferred`. **Bias for the trial
+  (water-mill-166):** arm A (crew = subagents) is under-counted on output,
+  the priciest class, arm B (a top-level session) is not, so token and cost
+  comparisons favour the crew by measurement alone. Compare duration, tool
+  calls, landed rate and `tokens_total_incl_cache`'s input side; treat any
+  `--include-inferred` token/cost comparison as crew-flattering. A session's
+  `cost-state` line covers its subagents (per-model outputTokens, not split
+  per agent), the only independent total, but it is not per run.
 - **API-equivalent cost estimate and the cache-inclusive total** (water-mill-cdi).
   `detail.cost_usd_est` is an **API-equivalent estimate**: what a run's tokens
   would cost at Anthropic's first-party API list prices. On a Claude

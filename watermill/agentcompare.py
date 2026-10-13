@@ -125,7 +125,7 @@ METRICS = [
     # An estimate from model + tokens (pricing.py): inferred, so excluded unless
     # --include-inferred. cost_usd above stays the stated cost only.
     Metric("cost_usd_est", "run", "continuous", _detail("cost_usd_est"),
-           ("detail.cost_usd_est",), "$"),
+           ("detail.cost_usd_est", "detail.output_tokens"), "$"),
     Metric("landed_rate", "bead", "proportion",
            lambda r: {"landed": True, "unlanded": False}.get(r.get("outcome")), ("outcome",)),
     Metric("sluice_rounds", "bead", "continuous", _detail("sluice_rounds"),

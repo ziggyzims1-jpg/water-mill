@@ -884,6 +884,9 @@ def cmd_agents(args) -> int:
         return 0
     if args.action == "record":
         return _record(args)
+    if args.json and args.action != "compare":
+        print(f"agents {args.action}: --json is a compare-only flag", file=sys.stderr)
+        return 2
     root = factory_root(args.root)
     if args.action == "compare":
         return _compare(root, args)
