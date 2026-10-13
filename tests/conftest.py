@@ -256,3 +256,10 @@ def _no_production_markers(monkeypatch):
                  "DATABASE_URL"):
         monkeypatch.delenv(name, raising=False)
     os.environ.setdefault("GIT_TERMINAL_PROMPT", "0")
+
+
+@pytest.fixture(autouse=True)
+def _no_real_home(tmp_path_factory, monkeypatch):
+    """`agents sweep` defaults to ~/.claude/projects, which holds private
+    transcripts; no test may reach them by forgetting --sessions-dir."""
+    monkeypatch.setenv("HOME", str(tmp_path_factory.mktemp("home")))
