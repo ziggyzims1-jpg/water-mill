@@ -11,9 +11,12 @@ No message text, no tool input, no tool output. Records are built from an
 explicit whitelist of numbers, timestamps, enums and ids (`_extract` is the only
 function that reads a transcript line, and it returns counters, not content),
 and every string that does get through passes `_clip`. The one free-text field
-is `title`, taken from a subagent's `description` in its `.meta.json` -- a
-short label the dispatcher chose, capped at TITLE_CAP. Sessions get no title
-(their `ai-title` is a summary of the conversation).
+is `title`, and only a mill-crew run has one: its `.meta.json` `description`,
+a label the orchestrator writes by convention ("Sluice: review PR #32 (a7z)"),
+capped at TITLE_CAP. Sessions get no title (their `ai-title` summarises the
+conversation) and neither do other subagents: their description is a model's
+summary of a task in whatever project the owner was in, which is conversation
+content by another name.
 
 Two facts about real transcripts that synthetic fixtures got wrong:
 
@@ -34,16 +37,24 @@ subagent's `duration_seconds` as last minus first timestamp. `agent_kind` is
 
 `detail` (all kinds): `transcript` (path relative to the sessions dir),
 `session_id`, `role` (millstone|sluice|tailrace|null), `model`, `models`,
-`input_tokens`, `output_tokens`, `cache_creation_tokens`, `cache_read_tokens`,
+`input_tokens`, `output_tokens`, `tokens_total` (input + output; cache reads
+and writes are excluded, they are reported on their own),
+`cache_creation_tokens`, `cache_read_tokens`,
 `message_count` (distinct assistant messages), `tool_call_count`, `error_count`
 (API error lines), `interrupted` (bool), `cwd_repo`, `agent_id`, `subagent_count`
 (sessions), `crew_key` / `bead_hint` (mill-crew, see below).
 
 Crew subagents *link, they do not double-count*: the handoff-derived record
 `crew:<bead>` stays the one record of the bead's outcome; the transcript record
-for a role's run carries `detail.crew_key` pointing at it. Stats over crew
-outcomes read `source == "handoff"`; stats over cost/tokens read the transcript
-records (one per role run -- a bead has up to three plus re-reviews).
+for a role's run carries `detail.crew_key` pointing at it. Both have
+`agent_kind == "mill-crew"`, so every reader filters on `source`: per-bead work
+is `source == "handoff"`, per-run cost/tokens is `source == "transcript"` (one
+per role run -- a bead has up to three plus re-reviews).
+
+Linking prefers a missing link to a wrong one. A short id (`a7z`) is matched
+within the run's own repo; it may match another project's bead only when the
+run's cwd is not inside one repo (the workshop root, an ancestor of a known
+checkout), and then only if exactly one bead has that suffix.
 """
 
 from __future__ import annotations
@@ -57,7 +68,7 @@ from pathlib import Path
 from . import agentlog, landed
 
 SOURCE = "transcript"
-TITLE_CAP = 120
+TITLE_CAP = 60
 SHORT_CAP = 80
 DEFAULT_DIR = Path("~/.claude/projects")
 CREW_ROLES = ("millstone", "sluice", "tailrace")
@@ -135,7 +146,7 @@ def _extract(path: Path) -> dict | None:
                 model = msg.get("model")
                 if not isinstance(model, str) or model.startswith("<"):
                     continue  # "<synthetic>" error stand-ins are not model output
-                models[model] += 1
+                models[_clip(model) or "unknown"] += 1
                 key = msg.get("id") or f"line-{lines}"
                 usage = msg.get("usage") or {}
                 best = messages.setdefault(key, {})
@@ -151,6 +162,7 @@ def _extract(path: Path) -> dict | None:
     totals = {dst: sum(m.get(dst, 0) for m in messages.values()) for _, dst in _USAGE_FIELDS}
     return {
         **totals,
+        "tokens_total": totals["input_tokens"] + totals["output_tokens"],
         "message_count": len(messages),
         "tool_call_count": len(tools),
         "error_count": errors,
@@ -218,12 +230,14 @@ def _bead_hint(agent_type: str | None, description: str | None) -> str | None:
 
 
 def _link(hint: str | None, repo: str | None, crew: list[dict],
-          description: str | None = None) -> dict | None:
+          description: str | None = None, anchored: bool = True) -> dict | None:
     """The one handoff-derived crew record this label names, else None.
 
     By bead id (exact, then suffix within the repo's project), then by the
     "PR #n" the label names against the note's pr_number in the same project.
-    Ambiguity links nothing.
+    Ambiguity links nothing, and a run `anchored` in one repo never links to
+    another project's bead by suffix (bead `cheme-abc` must not land on
+    `zimmy-life-tracker-abc` because cheme-solver is not registered).
     """
     if hint:
         exact = [r for r in crew if r.get("subject") == hint]
@@ -231,7 +245,7 @@ def _link(hint: str | None, repo: str | None, crew: list[dict],
             return exact[0]
         tail = [r for r in crew if (r.get("subject") or "").endswith("-" + hint)]
         mine = [r for r in tail if r.get("project") == repo]
-        if len(mine) == 1 or (not mine and len(tail) == 1):
+        if len(mine) == 1 or (not mine and not anchored and len(tail) == 1):
             return (mine or tail)[0]
     pr = _PR.search(description or "")
     if pr and repo:
@@ -269,6 +283,7 @@ def _record(
             "models": stats["models"],
             "input_tokens": stats["input_tokens"],
             "output_tokens": stats["output_tokens"],
+            "tokens_total": stats["tokens_total"],
             "cache_creation_tokens": stats["cache_creation_tokens"],
             "cache_read_tokens": stats["cache_read_tokens"],
             "message_count": stats["message_count"],
@@ -325,7 +340,8 @@ def collect(
         if role:
             kind = "mill-crew"
             hint = _bead_hint(agent_type, meta.get("description"))
-            linked = _link(hint, repo, crew, meta.get("description"))
+            linked = _link(hint, repo, crew, meta.get("description"),
+                           anchored=_anchored(stats["cwd"], known))
             detail["bead_hint"] = hint
             detail["crew_key"] = linked["key"] if linked else None
             if linked:
@@ -338,11 +354,20 @@ def collect(
         out.append(_record(
             agent, base, key=f"session:{sid}:{agent.stem}", agent_kind=kind,
             project=repo or agent.parents[2].name, stats=stats,
-            title=_clip(meta.get("description"), TITLE_CAP), subject=subject,
+            title=_clip(meta.get("description"), TITLE_CAP) if role else None,
+            subject=subject,
             duration=_seconds(stats["first"], stats["last"]), cost=None,
             inferred=inferred, detail=detail,
         ))
     return out
+
+
+def _anchored(cwd: str | None, known: dict[str, Path] | None) -> bool:
+    """True when `cwd` sits inside one repo, not above the known checkouts."""
+    if not cwd:
+        return False
+    here = Path(cwd)
+    return not any(here in Path(checkout).parents for checkout in (known or {}).values())
 
 
 def _unsettled(path: Path, settle_seconds: float, now: float) -> bool:

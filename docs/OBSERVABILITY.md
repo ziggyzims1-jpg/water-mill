@@ -153,22 +153,34 @@ and field list: the docstring of `watermill/sessionlog.py`.
 
 - **Metadata only, by construction.** Counters, timestamps, model names and ids.
   No message text, tool input or tool output ever enters a record or a log line;
-  the sole free-text field is `title`, a subagent's `.meta.json` `description`
-  clipped to 120 characters (sessions get none). A test plants a canary in every
-  content position of a fixture and asserts it never appears.
+  the sole free-text field is `title`, and only mill-crew runs carry one: the
+  `.meta.json` `description` label ("Sluice: review PR #32 (a7z)") clipped to
+  60 characters. Sessions and other subagents get `title: null` -- their
+  descriptions summarise private work. A test plants a canary in every content
+  position of a fixture and asserts it appears nowhere in any record.
 - **Keys and kinds.** `session:<session id>` (`agent_kind: session`) and
   `session:<session id>:agent-<id>` (`mill-crew` when `agentType` starts with
   millstone/sluice/tailrace, else `subagent:<agentType>`). `outcome` is always
   `null`: a transcript does not say whether the work was good.
 - **Tokens are per message, not per line.** A message is written once per
   content block with partial `usage`; the record takes the largest value per
-  `message.id`, and counts each `tool_use` id once.
-- **Crew records link, they do not double-count.** The handoff record
-  `crew:<bead>` stays the bead's only outcome. A transcript record for a role
-  run carries `detail.crew_key` (and `subject`) when its label names exactly one
-  known bead or PR (listed in `fields_inferred`); otherwise `detail.bead_hint`.
-  Outcome statistics read `source == "handoff"`; cost and token statistics read
-  `source == "transcript"`.
+  `message.id`, and counts each `tool_use` id once. `detail.tokens_total` is
+  `input_tokens + output_tokens` -- cache reads and writes are excluded (they
+  are `detail.cache_read_tokens` / `detail.cache_creation_tokens`).
+- **Crew records link, they do not double-count -- filter on `source`.** A
+  crew transcript record keeps `agent_kind: mill-crew`, the same kind as the
+  handoff record, so `agent_kind == "mill-crew"` alone counts every bead two to
+  four times. The rule for every reader (stats, dashboards):
+  - **per bead** (outcome, one row per piece of work): `source == "handoff"`,
+    key `crew:<bead>`;
+  - **per run** (tokens, duration, one row per millstone/sluice/tailrace
+    dispatch): `source == "transcript"`.
+
+  A transcript record carries `detail.crew_key` (and `subject`) when its label
+  names exactly one known bead or PR (listed in `fields_inferred`); otherwise
+  only `detail.bead_hint`. A missing link is preferred to a wrong one: a short
+  id matches another project's bead only from a cwd above the checkouts (the
+  workshop root), never from inside a repo.
 - `cost_usd` is set only on sessions, from the transcript's own `cost-state`
   line (it covers the session's subagents too -- do not add the two).
 
