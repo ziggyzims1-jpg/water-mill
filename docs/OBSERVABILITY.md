@@ -102,6 +102,47 @@ configuration problem rather than a project problem:
 {job="watermill", source="run"} | json | refused="true"
 ```
 
+## `runs/agents.jsonl`: every agent's work, one schema
+
+`runs/tasks.jsonl` only gets a line when `watermill run` works a task. Crew work
+dispatched from Claude Code sessions (millstone -> sluice -> tailrace through
+the Agent tool) never reached it, so `runs/agents.jsonl` is the record that
+does not care who dispatched the work. It is append-only and, like the rest of
+`runs/`, gitignored. Beads `61r` (transcripts), `qam` (Loki) and `pu9` (compare)
+build on this schema; the authoritative field list is the docstring of
+`watermill/agentlog.py`.
+
+```bash
+./bin/watermill agents sweep --dry-run   # per-project counts, writes nothing
+./bin/watermill agents sweep             # safe to cron
+```
+
+One JSON object per line. Envelope (every agent kind): `schema` (1), `key`
+(stable identity, `crew:<bead id>`), `agent_kind` (`mill-crew` here), `source`,
+`recorded_at`, `project`, `subject` (normalised bead id), `title`, `outcome`
+(`landed` / `unlanded`), `started_at`, `ended_at`, `cost_usd`,
+`duration_seconds`, `fields_inferred`, and a kind-specific `detail` object. For
+`mill-crew`, `detail` holds `handoff`, `pr_number`, `landed_at`, `sluice_rounds`,
+`sluice_verdict`, `sluice_pushed_fixes`, `findings_count`, `findings_waived` and
+`bead_created_at`.
+
+Rules that make it trustworthy:
+
+- **Null, never a guess.** `cost_usd` and `duration_seconds` are filled only from
+  a `tasks.jsonl` line for the same bead or the note's own words. Anything parsed
+  out of free text is named in `fields_inferred` (as `detail.pr_number`, ...), so
+  a statistic needing hard numbers can exclude those records.
+- **Idempotent, and a later line supersedes.** `read()` returns the latest line
+  per `key`. A sweep appends a record only if its content differs from the
+  latest stored line, so a second sweep appends 0, and a bead that was
+  `unlanded` and later lands gets a new line rather than an edit.
+- **Sources.** Each registered project's `brain/handoffs/mill/*.md` and
+  water-mill's own `HANDOFF-mill/*.md`, with bead timing from that checkout's
+  tracked `.beads/issues.jsonl` (never the bd database). A checkout that is not
+  on this machine is reported and skipped.
+- **Landed means a line starting `**LANDED`** (bare or `**LANDED.**`), which is
+  looser than `landed.py`, whose strict marker misses the second form.
+
 ## What this does not cover
 
 It ships the ledger and the task log. It does **not** ship `run.log`, the agent
