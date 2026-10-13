@@ -233,8 +233,30 @@ checkout.
   30 tool calls) shows `tokens_total` 363 against 2.4 M `cache_read_tokens` and
   109 k `cache_creation_tokens`. A record taken at sign-off also misses the
   turns after it, and a live transcript under-counts streamed output (partial
-  `usage`). The cache fields are carried so cost can be estimated later
-  (water-mill-cdi); never rank or price runs by `tokens_total`.
+  `usage`). Never rank or price runs by `tokens_total`; use the next two fields.
+- **API-equivalent cost estimate and the cache-inclusive total** (water-mill-cdi).
+  `detail.cost_usd_est` is an **API-equivalent estimate**: what a run's tokens
+  would cost at Anthropic's first-party API list prices. On a Claude
+  subscription nothing is billed per token, so it is never billed cost; use it
+  to compare runs, not to reconcile a bill. It and
+  `detail.tokens_total_incl_cache` (input + output + cache writes + cache reads)
+  are **derived at read time**: `agentlog.read()` computes them from each
+  record's model and token counters with `watermill/pricing.py` (per-model
+  rates, the as-of date `AS_OF` and the source cited there), so every line, old
+  or new, is priced by the current table and nothing stores a frozen figure.
+  Derived records also carry `detail.cost_usd_est_as_of`; `agents compare`
+  prints the as-of date and reports it as `pricing_as_of` in `--json`.
+  `cost_usd_est` is named in `fields_inferred` as `detail.cost_usd_est`, and
+  `cost_usd` (stated cost only) is never touched. Cache writes are priced by
+  TTL from the transcript's `usage.cache_creation` split (kept as
+  `detail.cache_creation_5m_tokens` / `cache_creation_1h_tokens`): 1.25x input
+  for 5-minute writes, 2x for 1-hour. Writes without a split are priced at
+  Claude Code's TTL for the kind of run: 1 hour for a top-level session, 5
+  minutes for a subagent (what every transcript on the owner's machine showed
+  on 2026-10-13). The estimate is null for a model not in the table (Haiku 5.5
+  on purpose: its price is tiered by prompt size) and for a record whose
+  `models` mix rate cards. `agents compare` lists it as `cost_usd_est`,
+  excluded as inferred unless `--include-inferred`, and says so in its output.
 - **No transcript, still a record.** If `auto` finds nothing (a container
   without `~/.claude/projects`), the flags are recorded alone
   (`detail.transcript_located: false`, no token fields) and a warning is printed.

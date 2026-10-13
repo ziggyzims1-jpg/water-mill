@@ -39,10 +39,14 @@ subagent's `duration_seconds` as last minus first timestamp. `agent_kind` is
 `session_id`, `role` (millstone|sluice|tailrace|null), `model`, `models`,
 `input_tokens`, `output_tokens`, `tokens_total` (input + output; cache reads
 and writes are excluded, they are reported on their own),
-`cache_creation_tokens`, `cache_read_tokens`,
+`cache_creation_tokens`, `cache_read_tokens`, `cache_creation_5m_tokens` /
+`cache_creation_1h_tokens` (the writes split by cache TTL, from
+`usage.cache_creation`; null when no message carried the split),
 `message_count` (distinct assistant messages), `tool_call_count`, `error_count`
 (API error lines), `interrupted` (bool), `cwd_repo`, `agent_id`, `subagent_count`
-(sessions), `crew_key` / `bead_hint` (mill-crew, see below).
+(sessions), `crew_key` / `bead_hint` (mill-crew, see below). The estimate
+`cost_usd_est` and `tokens_total_incl_cache` are NOT stored here: `agentlog.read`
+derives them from these counters (see pricing).
 
 Crew subagents *link, they do not double-count*: the handoff-derived record
 `crew:<bead>` stays the one record of the bead's outcome; the transcript record
@@ -78,6 +82,11 @@ _USAGE_FIELDS = (
     ("output_tokens", "output_tokens"),
     ("cache_creation_input_tokens", "cache_creation_tokens"),
     ("cache_read_input_tokens", "cache_read_tokens"),
+)
+# usage.cache_creation splits the writes by TTL (priced 1.25x vs 2x input).
+_WRITE_SPLIT = (
+    ("ephemeral_5m_input_tokens", "cache_creation_5m_tokens"),
+    ("ephemeral_1h_input_tokens", "cache_creation_1h_tokens"),
 )
 
 
@@ -154,12 +163,21 @@ def _extract(path: Path) -> dict | None:
                     n = usage.get(src)
                     if isinstance(n, int) and not isinstance(n, bool):
                         best[dst] = max(best.get(dst, 0), n)
+                split = usage.get("cache_creation")
+                if isinstance(split, dict):
+                    for src, dst in _WRITE_SPLIT:
+                        n = split.get(src)
+                        if isinstance(n, int) and not isinstance(n, bool):
+                            best[dst] = max(best.get(dst, 0), n)
                 for block in msg.get("content") or []:
                     if isinstance(block, dict) and block.get("type") == "tool_use":
                         tools.add(str(block.get("id") or f"{key}-{len(tools)}"))
     if not lines:
         return None
     totals = {dst: sum(m.get(dst, 0) for m in messages.values()) for _, dst in _USAGE_FIELDS}
+    for _, dst in _WRITE_SPLIT:  # null, not 0, when no message carried the split
+        seen = [m[dst] for m in messages.values() if dst in m]
+        totals[dst] = sum(seen) if seen else None
     return {
         **totals,
         "tokens_total": totals["input_tokens"] + totals["output_tokens"],
@@ -286,6 +304,8 @@ def _record(
             "tokens_total": stats["tokens_total"],
             "cache_creation_tokens": stats["cache_creation_tokens"],
             "cache_read_tokens": stats["cache_read_tokens"],
+            "cache_creation_5m_tokens": stats["cache_creation_5m_tokens"],
+            "cache_creation_1h_tokens": stats["cache_creation_1h_tokens"],
             "message_count": stats["message_count"],
             "tool_call_count": stats["tool_call_count"],
             "error_count": stats["error_count"],
