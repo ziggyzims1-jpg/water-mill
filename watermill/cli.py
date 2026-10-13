@@ -952,8 +952,8 @@ def _record(args) -> int:
                 print(f"warning: {path} has no readable transcript lines; recording "
                       "the flags only", file=sys.stderr)
         except sessionlog.LocateError as exc:
-            if args.transcript == "auto" and args.run_tag is None and "pass --" in str(exc):
-                print(f"error: {exc}", file=sys.stderr)
+            if exc.refuse:  # a transcript is there and we cannot say which: never guess
+                print(f"error: {exc}; nothing recorded", file=sys.stderr)
                 return 2
             print(f"warning: transcript not located ({exc}); recording the flags only",
                   file=sys.stderr)
@@ -974,6 +974,8 @@ def _record(args) -> int:
             ("role", d["role"]), ("bead", d.get("bead")), ("pr", d.get("pr_number")),
             ("verdict", d.get("verdict")), ("rounds", d.get("sluice_rounds")),
             ("arm", d.get("arm")), ("tokens_total", d.get("tokens_total")),
+            ("cache_read", d.get("cache_read_tokens")),
+            ("cache_creation", d.get("cache_creation_tokens")),
             ("tool_calls", d.get("tool_call_count")),
             ("duration_s", record.get("duration_seconds")),
             ("transcript_located", located)) if v is not None))

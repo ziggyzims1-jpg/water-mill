@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
-import time
 from pathlib import Path
 
 import pytest
@@ -108,30 +106,56 @@ def _live_tree(tmp_path, *names):
     return base, sid
 
 
-def test_self_location_solo_crew_and_ambiguity(tmp_path):
+def test_self_location_never_guesses_a_crew_file(tmp_path):
     base, sid = _live_tree(tmp_path, ("a1", "millstone"), ("b2", "sluice"))
     solo = sessionlog.locate_own(base, session_id=sid, role="solo")
     assert solo.name == "sess-1.jsonl"  # the session's CLAUDE_CODE_SESSION_ID names it
-    mill = sessionlog.locate_own(base, session_id=sid, role="millstone")
-    assert mill.name == "agent-a1.jsonl"  # the one live file of that role
-    base2, sid = _live_tree(tmp_path / "two", ("a1", "millstone"), ("a2", "millstone"))
-    with pytest.raises(sessionlog.LocateError, match="--run-tag"):
-        sessionlog.locate_own(base2, session_id=sid, role="millstone")
-    # a stale sibling is not a candidate
-    old = time.time() - 3600
-    os.utime(base2 / "-d" / sid / "subagents" / "agent-a2.jsonl", (old, old))
-    got = sessionlog.locate_own(base2, session_id=sid, role="millstone")
-    assert got.name == "agent-a1.jsonl"
-    with pytest.raises(sessionlog.LocateError):
-        sessionlog.locate_own(base2, session_id="no-such-session", role="solo")
+    # even ONE fresh file of the role is not taken on trust: its twin may be
+    # sitting in a long tool call and look stale
+    with pytest.raises(sessionlog.LocateError, match="--run-tag") as err:
+        sessionlog.locate_own(base, session_id=sid, role="millstone")
+    assert err.value.refuse
+    with pytest.raises(sessionlog.LocateError) as err:
+        sessionlog.locate_own(base, session_id="no-such-session", role="solo")
+    assert not err.value.refuse  # nothing to find here: flags alone are fine
+    with pytest.raises(sessionlog.LocateError) as err:
+        sessionlog.locate_own(tmp_path / "absent", session_id=sid, role="solo")
+    assert not err.value.refuse
 
 
-def test_an_ambiguous_auto_refuses_and_writes_nothing(tmp_path, monkeypatch, capsys):
+def _tag_into(path, tag):
+    with path.open("a") as h:
+        h.write(json.dumps({"type": "user", "timestamp": "2026-01-01T00:00:00Z",
+                            "message": {"content": [{"type": "tool_result", "content": tag}]}})
+                + "\n")
+
+
+def test_a_tag_picks_the_right_twin_and_a_doubled_tag_is_refused(tmp_path):
     base, sid = _live_tree(tmp_path, ("a1", "millstone"), ("a2", "millstone"))
+    tag = sessionlog.new_tag()
+    twin = base / "-d" / sid / "subagents" / "agent-a2.jsonl"
+    _tag_into(twin, tag)
+    assert sessionlog.locate_own(base, session_id=sid, role="millstone", tag=tag) == twin
+    _tag_into(base / "-d" / sid / "subagents" / "agent-a1.jsonl", tag)
+    with pytest.raises(sessionlog.LocateError) as err:
+        sessionlog.locate_own(base, session_id=sid, role="millstone", tag=tag)
+    assert err.value.refuse
+
+
+@pytest.mark.parametrize("tag", [None, "wm-run-notinanyfile"])
+def test_a_crew_record_that_cannot_find_itself_writes_nothing(tmp_path, monkeypatch,
+                                                              capsys, tag):
+    """No tag, or a tag in no transcript (whoami in the SAME call): exit 2, no file.
+
+    A flags-only line there would sit beside the laptop transcript's line for
+    the same run under another key, and count the run twice.
+    """
+    base, sid = _live_tree(tmp_path, ("a1", "millstone"))
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", sid)
-    rc, out = _record(tmp_path, "--role", "millstone", "--transcript", "auto", sessions=base)
+    argv = ["--role", "millstone", "--transcript", "auto"] + (["--run-tag", tag] if tag else [])
+    rc, out = _record(tmp_path, *argv, sessions=base)
     assert rc == 2 and not out.exists()
-    assert "--run-tag" in capsys.readouterr().err
+    assert "nothing recorded" in capsys.readouterr().err
 
 
 def test_an_unlocatable_transcript_still_records_the_flags(tmp_path, monkeypatch, capsys):
@@ -182,6 +206,21 @@ def test_a_recorded_line_and_the_laptop_transcript_are_one_record(tmp_path, reco
     if record_first:
         assert all(r["source"] == "recorded" for r in raw)  # the sweep did not add its own
     assert CANARY not in (root / "runs" / "agents.jsonl").read_text()
+
+
+@pytest.mark.parametrize("recorded_first", [True, False])
+def test_a_recorded_line_outranks_a_later_transcript_line_in_read(tmp_path, recorded_first):
+    """The fold itself, whatever order the lines reached the log in."""
+    t = agentlog.make_record(key="k1", agent_kind="mill-crew", source="transcript",
+                             project="p", outcome=None, detail={"tokens_total": 10})
+    r = agentlog.make_record(key="k1", agent_kind="mill-crew", source="recorded",
+                             project="p", outcome=None, detail={"tokens_total": 12})
+    log = tmp_path / agentlog.AGENTLOG_FILENAME
+    log.parent.mkdir(parents=True)
+    log.write_text("".join(json.dumps(x) + "\n" for x in ((r, t) if recorded_first else (t, r))))
+    (row,) = agentlog.read(tmp_path)
+    assert row["source"] == "recorded"
+    assert agentlog.unseen(tmp_path, [t]) == []
 
 
 def test_recorded_lines_count_in_per_run_stats_once(tmp_path):

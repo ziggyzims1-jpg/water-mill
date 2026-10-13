@@ -401,16 +401,29 @@ def collect(
 #     agent's transcript as that call's output), and `agents record --run-tag`
 #     finds the one transcript containing it. The search returns a path and
 #     keeps nothing it read.
-# Without a tag: a solo run is the session's top-level file; a crew role is the
-# one live (recently written) subagent file whose meta agentType matches.
-# Anything ambiguous is refused, never guessed.
+# Without a tag only a solo run is located: it is the top-level file the
+# session id names, which nothing else shares. A crew role is NEVER located
+# without a tag: two crew agents of one type routinely run side by side in one
+# session, and "the one recently written file of that agentType" picks the
+# wrong one whenever its owner sits in a long tool call. A record in the wrong
+# file silently corrupts the numbers, so anything ambiguous is refused (exit 2,
+# nothing written), never guessed.
 
-FRESH_SECONDS = 90
 TAG_PREFIX = "wm-run-"
 
 
 class LocateError(Exception):
-    """The running agent's transcript could not be pinned down."""
+    """The running agent's transcript could not be pinned down.
+
+    `refuse` is False only when there is no transcript to find here at all (no
+    directory, or no file for this session -- a cloud container): the caller
+    may then record its flags alone. Otherwise a transcript exists and the
+    caller could not say which, and must write nothing.
+    """
+
+    def __init__(self, message: str, *, refuse: bool = True):
+        super().__init__(message)
+        self.refuse = refuse
 
 
 def new_tag() -> str:
@@ -434,28 +447,19 @@ def _contains(path: Path, needle: str) -> bool:
 
 def locate_own(
     sessions_dir: Path, *, session_id: str | None, role: str | None = None,
-    tag: str | None = None, now: float | None = None,
-    fresh_seconds: float = FRESH_SECONDS,
+    tag: str | None = None,
 ) -> Path:
     """The transcript file of the agent calling this, or LocateError."""
-    import time
     base = Path(sessions_dir).expanduser()
-    now = time.time() if now is None else now
     if not base.is_dir():
-        raise LocateError(f"no transcript directory at {base}")
+        raise LocateError(f"no transcript directory at {base}", refuse=False)
     if session_id:
         pool = _session_files(base, session_id)
         if not pool:
-            raise LocateError(f"session {session_id} has no transcript under {base}")
+            raise LocateError(f"session {session_id} has no transcript under {base}",
+                              refuse=False)
     else:
         pool = sorted(base.glob("*/*.jsonl")) + sorted(base.glob("*/*/subagents/agent-*.jsonl"))
-
-    def live(p: Path) -> bool:
-        try:
-            return now - p.stat().st_mtime <= fresh_seconds
-        except OSError:
-            return False
-
     if tag:
         hits = [p for p in pool if _contains(p, tag)]
         if len(hits) == 1:
@@ -463,24 +467,14 @@ def locate_own(
         raise LocateError(
             f"tag {tag} found in {len(hits)} transcripts (run `agents whoami` as an "
             "earlier, separate tool call in this same agent, then pass its output)")
-    top = [p for p in pool if p.parent.name != "subagents"]
-    subs = [p for p in pool if p.parent.name == "subagents"]
     if role == "solo":
+        top = [p for p in pool if p.parent.name != "subagents"]
         if len(top) == 1:
             return top[0]
-        raise LocateError("cannot tell which top-level session is this one")
-    if role in CREW_ROLES:
-        mine = [p for p in subs if live(p)
-                and _role(_meta(p.with_suffix(".meta.json")).get("agentType")) == role]
-        if len(mine) == 1:
-            return mine[0]
-        raise LocateError(
-            f"{len(mine)} live {role} transcripts; pass --run-tag from `agents whoami` "
-            "to say which is yours")
-    cands = [p for p in pool if live(p)]
-    if len(cands) == 1:
-        return cands[0]
-    raise LocateError(f"{len(cands)} live transcripts; pass --role or --run-tag")
+        raise LocateError("cannot tell which top-level session is this one; "
+                          "pass --run-tag from `agents whoami`")
+    raise LocateError(f"role {role or 'unset'} needs --run-tag from `agents whoami` "
+                      "(only --role solo is located without one)")
 
 
 def _anchored(cwd: str | None, known: dict[str, Path] | None) -> bool:
