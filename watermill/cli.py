@@ -14,8 +14,10 @@ so the parser refuses the combination outright rather than warning about it.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
@@ -30,6 +32,7 @@ from . import (
     recall,
     report,
     review,
+    sessionlog,
     shipper,
     tasklog,
     usage,
@@ -40,7 +43,7 @@ from .engine import Engine
 from .errors import PreflightRefusal, WatermillError
 from .preflight import preflight
 from .queue import WorkQueue
-from .registry import REGISTRY_FILENAME, Registry
+from .registry import REGISTRY_FILENAME, Registry, RegistryError
 
 SCAFFOLD = (Path(__file__).parent / "scaffold" / "watermill.yaml").resolve()
 
@@ -885,8 +888,30 @@ def cmd_agents(args) -> int:
               f"{'would append' if args.dry_run else 'appended'}")
     for name in missing:
         print(f"{name:<28} checkout or handoff directory not found, skipped")
+    if not args.no_sessions:
+        total += _sweep_sessions(root, args, records)
     print(f"{'dry run -- nothing written; ' if args.dry_run else ''}{total} record(s) new")
     return 0
+
+
+def _sweep_sessions(root: Path, args, crew_by_project: dict[str, list[dict]]) -> int:
+    """Transcript metadata (never content) into runs/agents.jsonl; see sessionlog."""
+    known = {crewlog.FACTORY_PROJECT: Path(root)}
+    with contextlib.suppress(RegistryError):
+        known.update({p.name: p.path for p in Registry.load(root).active})
+    crew = [r for found in crew_by_project.values() for r in found]
+    base = Path(args.sessions_dir).expanduser()
+    found = sessionlog.collect(base, crew, known, settle_seconds=args.settle_seconds)
+    fresh = agentlog.unseen(root, found) if args.dry_run else agentlog.append_new(root, found)
+    if not base.is_dir():
+        print(f"{'transcripts':<28} {base} not found, skipped")
+        return 0
+    new_kinds = Counter(r["agent_kind"] for r in fresh)
+    read_kinds = Counter(r["agent_kind"] for r in found)
+    for kind in sorted(read_kinds):
+        print(f"{kind:<28} {read_kinds[kind]:>4} read  {new_kinds[kind]:>4} "
+              f"{'would append' if args.dry_run else 'appended'}")
+    return len(fresh)
 
 
 # -- parser ----------------------------------------------------------------
@@ -1101,6 +1126,14 @@ def build_parser() -> argparse.ArgumentParser:
                    help="sweep: backfill mill crew history from handoffs and bead JSONL")
     p.add_argument("--dry-run", action="store_true",
                    help="count what would be appended, write nothing")
+    p.add_argument("--sessions-dir", default=sessionlog.DEFAULT_DIR,
+                   help="Claude Code transcripts (default ~/.claude/projects); "
+                        "metadata only is read into records")
+    p.add_argument("--no-sessions", action="store_true",
+                   help="skip the transcript sweep, backfill crew handoffs only")
+    p.add_argument("--settle-seconds", type=float, default=300,
+                   help="skip transcripts modified more recently than this, so a live "
+                        "session does not append a new line per sweep (default 300)")
     p.set_defaults(func=cmd_agents)
 
     p = sub.add_parser("release", help="hand a stuck task back to the queue")

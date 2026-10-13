@@ -20,7 +20,9 @@ Envelope, present on every record whatever the agent kind:
                               never duplicate a key; see "Folding" below.
     agent_kind        str     "mill-crew" | a sibling bead's kinds ("subagent",
                               "session", ...). Free-form, lowercase, hyphenated.
-    source            str     how the record was produced: "handoff" here.
+    source            str     how the record was produced: "handoff" (crewlog) or
+                              "transcript" (sessionlog: sessions and subagents,
+                              kinds "session", "subagent:<type>", "mill-crew").
     recorded_at       str     ISO-8601 UTC, when this line was written
     project           str     registry name; "water-mill" for the factory itself
     subject           str     what the work was about -- a normalised bead id
