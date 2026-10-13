@@ -1,0 +1,31 @@
+# Handoff — water-mill-cdi
+
+## Millstone (2026-10-13)
+- **State:** branch bead/cdi, PR https://github.com/ziggyzims1-jpg/water-mill/pull/39. make verify green (537 passed, ruff clean). Not blocked.
+- **Built:** watermill/pricing.py (RATES, AS_OF, canonical(), annotate()); wired in sessionlog._record and recorded.build; agentcompare METRICS gains cost_usd_est plus a printed note when excluded; docs/OBSERVABILITY.md; tests/test_pricing.py.
+- **Dry run** (sessionlog.collect over ~/.claude/projects): 186 of 186 mill-crew transcript runs gained an estimate (213 records total). `agents sweep --dry-run` itself prints only counts and exited 1 here (unrelated, not investigated).
+- **Hand check:** x6r2 millstone run, claude-sonnet-5: in 264 x $2 + out 60,298 x $10 + cache write 1,740,519 x $2.50 + cache read 26,675,649 x $0.20, per M = 0.0005+0.6030+4.3513+5.3351 = $10.2899, equals the stored cost_usd_est.
+- **Did not work / limits:** the rate table is from the claude-api skill's cached 2026-10-06 data. Cache read rates: Fable 5.1 $0.25, Fable 5 $1.00, Opus 5.5 / Sonnet 5.5 $0.20 are documented; Opus 5/4.x and Sonnet 5/4.6 use the 0.1x rule (not individually confirmed). Haiku 5.5 deliberately omitted (tiered above 100K prompts) so it yields null. Cache writes assumed 5-minute (1.25x); 1h writes (2x) are indistinguishable. Mixed-price `models` gives null.
+- **Lessons:** old recorded lines in knowledge/agent-runs/ do not gain an estimate until re-recorded (annotate runs at build time only). Sluice's 1.75M cache-read run is ~$0.35 on Opus 5.5, so cache reads dominate tokens but not cost as much as writes do.
+- **Look first:** watermill/pricing.py annotate().
+- **Open question:** should agentlog.read backfill the estimate for older recorded lines?
+- **Follow-up:** Grafana cost panel could use detail.cost_usd_est (docs/grafana/agent-performance.json); not touched.
+
+## Sluice (2026-10-13)
+- **Verdict: approve_after_fixes.** Pushed 024e8d8 (fix) and 5fdf6b3 (sluice run record) to bead/cdi. Scope clean: only pricing/sessionlog/recorded/agentlog/agentcompare, tests, OBSERVABILITY.md, knowledge/agent-runs/. No fenced path, nothing of water-mill-mb6's touched.
+- **Cache-write TTL (was wrong).** Real transcripts carry `usage.cache_creation.{ephemeral_5m,ephemeral_1h}_input_tokens` on every message: top-level sessions 9.3 M writes, all 1h; subagents 33.3 M, all 5m. sessionlog now keeps them as `cache_creation_5m_tokens` / `cache_creation_1h_tokens` (null when absent, never 0) via `_WRITE_SPLIT`; `pricing.estimate_usd` prices 5m at 1.25x and 1h at 2x input (`WRITE_5M`/`WRITE_1H`; rates confirmed in claude-api skill shared/prompt-caching.md "Economics" and shared/models.md). Unsplit writes fall back to the run kind's TTL (`write_split`: session 1h, else 5m). Effect: sessions' total estimate $97.04 -> $116.36; crew runs unchanged (all 5m). RATES is now (input, output, cache_read); all rows re-checked against the skill table.
+- **Derive at read time (decided: derive only, not stored).** `agentlog.read()` runs `pricing.annotate` on each record; writers (`sessionlog._record`, `recorded.build`) no longer store `cost_usd_est` / `tokens_total_incl_cache`. Why: one source of truth, old lines gain it, a price change is one edit, stored figures are recomputed. `unseen()` now folds via `_latest()` (raw lines) or every sweep would re-append everything (mutation proved it: 4 tests fail). Shipper uses read(), so Loki lines carry the estimate as of ship time. Derived records carry `detail.cost_usd_est_as_of`; compare JSON has `pricing_as_of` and `cost_usd_est_basis`.
+- **Billing honesty.** pricing docstring, OBSERVABILITY.md, compare note now say "API-equivalent estimate at list prices, not a bill"; compare prints the as-of date with or without --include-inferred.
+- **`agents sweep --dry-run` exit 1: not a bug.** Exits 0 on main and branch. Millstone ran `sweep --dry-run --json > file` and piped the file into its own `json.load`; sweep ignores `--json` (a compare-only flag on the shared `agents` parser) and prints text, so the agent's heredoc raised JSONDecodeError -> exit 1. Follow-up worth a bead: reject `--json` on sweep instead of silently ignoring it.
+- **Nulls.** Over 214 local transcript records: all 187 crew runs priced; null only for 1 mixed fable-5-1+opus-5-5 session and 1 Haiku 5.5 claude-code-guide subagent. No subagent mixes models. No fast-mode usage seen.
+- **Hand check** (millstone cdi transcript agent-abbda..., sonnet-5-5, all 5m): 36x$2 + 193x$10 + 109,062x$2.50 + 1,690,468x$0.20 = $0.612751 -> 0.6128, matches `annotate`.
+- **Verified:** make verify green in my worktree (541 passed, ruff clean, canary test green). Mutations each caught: 1h rate at 1.25x; session/subagent fallback swapped; read() not deriving; unseen() using read(); split not extracted; split 0 instead of null.
+- **Not fixed / concerns:** (1) subagent transcripts' `output_tokens` look like first-chunk partials (that millstone run: max 29 per message, 193 total), so output cost is a floor; pre-existing sessionlog data issue, follow-up bead. (2) Haiku 5.5 and mixed-model runs stay null; per-message per-model pricing would fix both if ever worth it. (3) Millstone's committed record knowledge/agent-runs/millstone-water-mill-cdi-*.jsonl still has a stored cost_usd_est; harmless (read() recomputes), left as the run's own record.
+- **Findings:** 3 recorded (TTL split; derive-in-read + unseen; output_tokens floor).
+- **Lander:** CI verify was pending at push time on 5fdf6b3.
+
+## Tailrace (2026-10-13)
+**LANDED** — PR #39 MERGED, squash sha ec3e4b392f7839e978993adbfc2e0d336568e30c. CI `verify` was green on head 5fdf6b3 (https://github.com/ziggyzims1-jpg/water-mill/actions/runs/38473315602/job/115557673149), confirmed head == remote branch tip before merge.
+- No conflicts. Sluice's 3 findings in knowledge/findings.jsonl committed; plus one lander lesson (verify on exact head sha). Millstone's lessons: the "old lines don't gain estimate" one is superseded by sluice's derive-at-read decision, not filed.
+- `bd close`: "Closed water-mill-cdi ... Merged in PR #39" (no auto-export warning); .beads/issues.jsonl re-exported (26 issues).
+- Nothing for the human by hand; sluice follow-ups (reject --json on sweep; subagent output_tokens floor) are suggested beads, not filed.
