@@ -1,0 +1,148 @@
+seed 20261013 (provisional: nothing is stored on a dry run; pass --seed to reproduce it); blocks of 4 per repo
+repo                        bead                                arm  block pos
+zimmy-life-tracker          Zimmy Life Tracker-268              A    0     0
+zimmy-life-tracker          Zimmy Life Tracker-2da              A    0     1
+zimmy-life-tracker          Zimmy Life Tracker-3l6              B    0     2
+zimmy-life-tracker          Zimmy Life Tracker-3o6              B    0     3
+zimmy-life-tracker          Zimmy Life Tracker-5e2              B    1     0
+zimmy-life-tracker          Zimmy Life Tracker-5s6              A    1     1
+zimmy-life-tracker          Zimmy Life Tracker-5wz              A    1     2
+zimmy-life-tracker          Zimmy Life Tracker-60e              B    1     3
+zimmy-life-tracker          Zimmy Life Tracker-6pi              B    2     0
+zimmy-life-tracker          Zimmy Life Tracker-6u6              B    2     1
+zimmy-life-tracker          Zimmy Life Tracker-78w              A    2     2
+zimmy-life-tracker          Zimmy Life Tracker-795              A    2     3
+zimmy-life-tracker          Zimmy Life Tracker-7h1              A    3     0
+zimmy-life-tracker          Zimmy Life Tracker-84d              B    3     1
+zimmy-life-tracker          Zimmy Life Tracker-8df              A    3     2
+zimmy-life-tracker          Zimmy Life Tracker-a2u              B    3     3
+zimmy-life-tracker          Zimmy Life Tracker-ata              A    4     0
+zimmy-life-tracker          Zimmy Life Tracker-c7p              A    4     1
+zimmy-life-tracker          Zimmy Life Tracker-chu              B    4     2
+zimmy-life-tracker          Zimmy Life Tracker-cy9              B    4     3
+zimmy-life-tracker          Zimmy Life Tracker-e3t              A    5     0
+zimmy-life-tracker          Zimmy Life Tracker-eec              B    5     1
+zimmy-life-tracker          Zimmy Life Tracker-fbo              B    5     2
+zimmy-life-tracker          Zimmy Life Tracker-jds              A    5     3
+zimmy-life-tracker          Zimmy Life Tracker-k6i.1            A    6     0
+zimmy-life-tracker          Zimmy Life Tracker-k6i.2            A    6     1
+zimmy-life-tracker          Zimmy Life Tracker-k6i.5            B    6     2
+zimmy-life-tracker          Zimmy Life Tracker-k6i.6            B    6     3
+zimmy-life-tracker          Zimmy Life Tracker-kgz              A    7     0
+zimmy-life-tracker          Zimmy Life Tracker-mt9              A    7     1
+zimmy-life-tracker          Zimmy Life Tracker-off              B    7     2
+zimmy-life-tracker          Zimmy Life Tracker-oxp              B    7     3
+zimmy-life-tracker          Zimmy Life Tracker-q31.7            A    8     0
+zimmy-life-tracker          Zimmy Life Tracker-q9a              B    8     1
+zimmy-life-tracker          Zimmy Life Tracker-qms              A    8     2
+zimmy-life-tracker          Zimmy Life Tracker-rui              B    8     3
+zimmy-life-tracker          Zimmy Life Tracker-w91              A    9     0
+zimmy-life-tracker          Zimmy Life Tracker-xdm              A    9     1
+zimmy-life-tracker          Zimmy Life Tracker-z4e              B    9     2
+zimmy-life-tracker          zimmy-life-tracker-2rx              B    9     3
+zimmy-life-tracker          zimmy-life-tracker-39r              A    10    0
+zimmy-life-tracker          zimmy-life-tracker-46x              B    10    1
+zimmy-life-tracker          zimmy-life-tracker-5fb              B    10    2
+zimmy-life-tracker          zimmy-life-tracker-6wo.11           A    10    3
+zimmy-life-tracker          zimmy-life-tracker-6wo.12           B    11    0
+zimmy-life-tracker          zimmy-life-tracker-6wo.15           A    11    1
+zimmy-life-tracker          zimmy-life-tracker-6wo.16           B    11    2
+zimmy-life-tracker          zimmy-life-tracker-6wo.17           A    11    3
+zimmy-life-tracker          zimmy-life-tracker-6wo.18           B    12    0
+zimmy-life-tracker          zimmy-life-tracker-6wo.19           A    12    1
+zimmy-life-tracker          zimmy-life-tracker-6wo.20           A    12    2
+zimmy-life-tracker          zimmy-life-tracker-6wo.4            B    12    3
+zimmy-life-tracker          zimmy-life-tracker-6wo.6            A    13    0
+zimmy-life-tracker          zimmy-life-tracker-6wo.9            B    13    1
+zimmy-life-tracker          zimmy-life-tracker-9xn.5            A    13    2
+zimmy-life-tracker          zimmy-life-tracker-e3z              B    13    3
+zimmy-life-tracker          zimmy-life-tracker-ga3              A    14    0
+zimmy-life-tracker          zimmy-life-tracker-jla              A    14    1
+zimmy-life-tracker          zimmy-life-tracker-jsv              B    14    2
+zimmy-life-tracker          zimmy-life-tracker-n0a              B    14    3
+zimmy-life-tracker          zimmy-life-tracker-wdj              A    15    0
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-0h6.1    B    0     0
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-0h6.10   A    0     1
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-0h6.6    A    0     2
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-0h6.8    B    0     3
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-0h6.9    A    1     0
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-1sk.2    B    1     1
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-1sk.4    B    1     2
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-1sk.6    A    1     3
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-1wy      B    2     0
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-ai4.6    A    2     1
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-brw.7    A    2     2
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-brw.8    B    2     3
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-e70      A    3     0
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-e7m.10   B    3     1
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-e7m.11   A    3     2
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-e7m.8    B    3     3
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-ptk.1    A    4     0
+zim-dashboard-demo-cell-1b  zim-dashboard-demo-cell-1b-qiq      B    4     1
+cheme-solver                cheme-22c                           B    0     0
+cheme-solver                cheme-a1f                           A    0     1
+cheme-solver                cheme-dik                           B    0     2
+cheme-solver                cheme-dl6                           A    0     3
+hillel-programming          hpt-0ko.17                          A    0     0
+hillel-programming          hpt-6ef.9                           B    0     1
+hillel-programming          hpt-c5x                             B    0     2
+hillel-programming          hpt-qt8.8                           A    0     3
+hillel-programming          hpt-qt8.9                           B    1     0
+skipped  zimmy-life-tracker/zimmy-life-tracker-lqg: epic; names fenced path(s) db.py, services/clock.py, services/streak_service.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zimmy-life-tracker/Zimmy Life Tracker-k6i: epic; names fenced path(s) db.py, services/clock.py, services/streak_service.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zimmy-life-tracker/Zimmy Life Tracker-q31: epic
+skipped  zimmy-life-tracker/zimmy-life-tracker-9xn: epic
+skipped  zimmy-life-tracker/zimmy-life-tracker-6wo: epic
+skipped  zimmy-life-tracker/Zimmy Life Tracker-6c0: names fenced path(s) brain/ (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zimmy-life-tracker/zimmy-life-tracker-5ox: names fenced path(s) brain/, scripts/gen_corpus.py, tests/test_invariants.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zimmy-life-tracker/Zimmy Life Tracker-k6i.7: names fenced path(s) db.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zimmy-life-tracker/zimmy-life-tracker-yzg: names fenced path(s) scripts/backup_restore.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zimmy-life-tracker/zimmy-life-tracker-o2z: names fenced path(s) services/actual_service.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zimmy-life-tracker/zimmy-life-tracker-a5e: names fenced path(s) services/library_service.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zimmy-life-tracker/Zimmy Life Tracker-7fn: names fenced path(s) services/clock.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-3e7: epic
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-brw: epic
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-ai4: epic
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-e7m.7: names fenced path(s) db.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-e7m.6: names fenced path(s) db.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-e7m.5: names fenced path(s) db.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-e7m: epic; names fenced path(s) db.py, services/integrations/ (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-1sk: epic
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-ai4.3: names fenced path(s) assets/branding/ (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-ptk: epic
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-0h6: epic
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-0h6.11: names fenced path(s) db.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-9k8.5: names fenced path(s) CLAUDE.md (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-0h6.7: names fenced path(s) db.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-e7m.9: names fenced path(s) db.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  zim-dashboard-demo-cell-1b/zim-dashboard-demo-cell-1b-55t: names fenced path(s) Makefile (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  cheme-solver/cheme-7dp: names fenced path(s) Makefile (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  cheme-solver/cheme-djp: names fenced path(s) brain/ (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  cheme-solver/cheme-1t6: names fenced path(s) brain/ (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-qt8: epic; names fenced path(s) CLAUDE.md, db.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-ibu: epic; names fenced path(s) CLAUDE.md (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-3fr: epic; names fenced path(s) CLAUDE.md (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-t7x: epic; names fenced path(s) CLAUDE.md (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-9mt: epic; names fenced path(s) watermill.yaml (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-6ef: epic; names fenced path(s) docs/FORM.md (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-0ko: epic; names fenced path(s) docs/FORM.md (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-udx: epic; names fenced path(s) docs/FORM.md (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-1tz: epic; names fenced path(s) services/integrations/ (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-3ih: epic
+skipped  hillel-programming/hpt-d7b: epic
+skipped  hillel-programming/hpt-0cb: epic
+skipped  hillel-programming/hpt-266: epic
+skipped  hillel-programming/hpt-92d: epic; names fenced path(s) docs/FORM.md (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-qt8.7: names fenced path(s) CLAUDE.md (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-ibu.3: names fenced path(s) CLAUDE.md (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-3fr.7: names fenced path(s) CLAUDE.md (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-3fr.6: names fenced path(s) CLAUDE.md (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-6ef.8: names fenced path(s) CLAUDE.md (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-0ko.18: names fenced path(s) db.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-0ko.10: names fenced path(s) docs/FORM.md (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-ibu.4: names fenced path(s) CLAUDE.md (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+skipped  hillel-programming/hpt-3fr.8: names fenced path(s) db.py (label fence-directed if the bead directs it, fence-clear if it does not edit them)
+note     zimmy-life-tracker: block 15 is partial (1 of 4); arms in this repo so far A=31 B=30. Balance is exact only in full blocks: enrol in multiples of 4 per repo.
+note     zim-dashboard-demo-cell-1b: block 4 is partial (2 of 4); arms in this repo so far A=9 B=9. Balance is exact only in full blocks: enrol in multiples of 4 per repo.
+note     hillel-programming: block 1 is partial (1 of 4); arms in this repo so far A=2 B=3. Balance is exact only in full blocks: enrol in multiples of 4 per repo.
+dry run -- nothing written (88 would be enrolled)
