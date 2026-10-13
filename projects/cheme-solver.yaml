@@ -1,0 +1,112 @@
+# ChemE Solver -- a study site for chemical-engineering coursework.
+#
+# Vendored here like zim-dashboard-demo-cell-1b's contract, and for the same
+# reason: the repository has not adopted a `watermill.yaml` of its own (it was
+# not stamped from watermill-cell-template and registering it does not change
+# that). Once it carries its own watermill.yaml, that file wins over this one;
+# delete this then.
+#
+# Registered 2026-10-13 at the owner's direct request (bead water-mill-m2r)
+# after the mill crew had already been working in it (brain/handoffs/mill/).
+#
+# The fence below was built from reading the repo, not from a template:
+# no Gurobi licence or any licence file exists in it (grep finds none); the
+# only secret-shaped inputs are the invite code and session settings, read by
+# backend/cheme/config.py from environment variables.
+
+version: 1
+name: cheme-solver
+
+description: >
+  FastAPI + SQLite backend (backend/cheme) with a Vite/React/TypeScript
+  frontend. Problem library, step planner and practice generators over
+  YAML content in content/books/. Small user base (classmates) behind an
+  invite code; deployed by the owner, not by the factory.
+
+commands:
+  # content validation + ruff lint/format + pytest, then frontend typecheck,
+  # vitest and build. Worktrees have no .venv: pass VENV=/path/to/.venv.
+  gate: make verify
+  install: make install
+
+git:
+  base_branch: main
+  target: branch
+  remote: origin
+
+review:
+  create: gh pr create --base {base} --head {branch} --title {title} --body {body}
+  verify: gh pr checks {branch} --watch --fail-fast
+  merge: gh pr merge {branch} --squash --delete-branch
+
+queue:
+  kind: beads
+  ready: bd ready --json
+  stale: bd list --status in_progress --json
+  show: bd show {id}
+  claim: bd update {id} --claim
+  release: bd update {id} --status open
+  close: bd close {id}
+  comment: bd comment {id} {text}
+  exclude_types:
+    - epic
+
+fence:
+  paths:
+    # The gate and CI -- an agent that can edit these can make itself pass.
+    # (.github/workflows/ does not exist yet; fenced so it starts fenced.)
+    - Makefile
+    - .github/workflows/
+    # The work graph and doctrine.
+    - .beads/
+    - CLAUDE.md
+    - AGENTS.md
+    - brain/
+    # Agent/editor config: hooks here run on every session start.
+    - .claude/
+    - .codex/
+    - .agents/
+    # PRODUCTION DEPLOY: systemd unit, Caddyfile and cloudflared examples,
+    # and the env.example that names the real runtime variables. The unit
+    # and Caddy/cloudflared files describe the live host; a change here is a
+    # production change.
+    - deploy/
+    # Deploy runbooks (Pi in DEPLOY.md, Azure VM in DEPLOY-AZURE.md): they
+    # carry host names, paths and rollout steps the owner runs by hand.
+    - docs/DEPLOY.md
+    - docs/DEPLOY-AZURE.md
+    # CREDENTIAL / SECRET PATHS. Settings (invite code, cookie secure flag,
+    # session days) come from environment variables in config.py; the real
+    # .env lives only on the host and is gitignored. Fence the reader, the
+    # password-hashing and session code, and the env files in case one is
+    # ever dropped in the tree.
+    - backend/cheme/config.py
+    - backend/cheme/auth.py
+    - backend/cheme/routes/auth.py
+    - .env
+    - "*.env"
+    - .beads-credential-key
+    # The schema: SQLite migrations are append-only and run against real
+    # user data on the host; same rule as zimmy's db.py.
+    - backend/cheme/db.py
+    - backend/cheme/migrations/
+    # Runtime state, gitignored, holds real accounts: never an agent's to
+    # touch even if it appears in a worktree.
+    - var/
+
+environment:
+  # The gate runs a frontend build (npm ci) plus pytest.
+  min_free_gb: 3
+
+notes:
+  - >-
+    No Gurobi licence or other licence file exists in the repo; the
+    env-only rule for licences still applies if one is ever added.
+  - >-
+    No .github/workflows/ yet, so `gh pr checks` has nothing to watch: the
+    review.verify step may find no checks. Local `make verify` is the gate.
+
+caps:
+  max_tasks: 5
+  max_hours: 3
+  task_timeout_minutes: 30
