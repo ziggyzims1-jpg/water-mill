@@ -20,9 +20,11 @@ Envelope, present on every record whatever the agent kind:
                               never duplicate a key; see "Folding" below.
     agent_kind        str     "mill-crew" | a sibling bead's kinds ("subagent",
                               "session", ...). Free-form, lowercase, hyphenated.
-    source            str     how the record was produced: "handoff" (crewlog) or
+    source            str     how the record was produced: "handoff" (crewlog),
                               "transcript" (sessionlog: sessions and subagents,
-                              kinds "session", "subagent:<type>", "mill-crew").
+                              kinds "session", "subagent:<type>", "mill-crew") or
+                              "recorded" (the agent's own `agents record` at
+                              sign-off, see `recorded.py`).
     recorded_at       str     ISO-8601 UTC, when this line was written
     project           str     registry name; "water-mill" for the factory itself
     subject           str     what the work was about -- a normalised bead id
@@ -60,7 +62,12 @@ Envelope, present on every record whatever the agent kind:
 
 ## Folding
 
-`read()` returns the latest line per key. `append_new()` writes a record only
+`read()` returns the latest line per key, except that a `recorded` line beats
+every non-recorded line for its key, whenever either was written: the agent's
+own sign-off facts are the better evidence, and a later `agents sweep` of the
+same laptop transcript (same key) must not replace them or count the run twice.
+A non-recorded record for a key that already has a recorded winner is never
+appended. `append_new()` writes a record only
 when its content (ignoring `recorded_at`) differs from the latest line already
 stored for that key, so a second sweep appends nothing, and a bead that was
 unlanded at the first sweep and landed by the second gets a new line that
@@ -75,6 +82,7 @@ from pathlib import Path
 
 AGENTLOG_FILENAME = "runs/agents.jsonl"
 SCHEMA_VERSION = 1
+RECORDED = "recorded"
 
 
 def _now() -> str:
@@ -106,10 +114,18 @@ def read_all(root: Path) -> list[dict]:
     return rows
 
 
+def _outranked(new: dict, held: dict) -> bool:
+    """A recorded winner is not displaced by a line from any other source."""
+    return held.get("source") == RECORDED and new.get("source") != RECORDED
+
+
 def read(root: Path, agent_kind: str | None = None, project: str | None = None) -> list[dict]:
     """The latest line per key, in first-seen order, optionally filtered."""
     latest: dict[str, dict] = {}
     for row in read_all(root):
+        held = latest.get(row["key"])
+        if held is not None and _outranked(row, held):
+            continue
         latest[row["key"]] = row
     return [
         r for r in latest.values()
@@ -147,13 +163,18 @@ def make_record(
 
 def unseen(root: Path, records: list[dict]) -> list[dict]:
     """Which of `records` would change what `read()` returns."""
-    latest = {r["key"]: _content(r) for r in read(root)}
+    winners = {r["key"]: r for r in read(root)}
+    latest = {k: _content(r) for k, r in winners.items()}
     out: list[dict] = []
     for record in records:
         content = _content(record)
+        held = winners.get(record["key"])
+        if held is not None and _outranked(record, held):
+            continue
         if latest.get(record["key"]) == content:
             continue
         latest[record["key"]] = content  # a duplicate within the batch
+        winners[record["key"]] = record
         out.append(record)
     return out
 
