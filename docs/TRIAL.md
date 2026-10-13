@@ -14,20 +14,25 @@ the data it affects is looked at, never an edit in place.
 | | Arm A (crew) | Arm B (solo) |
 |---|---|---|
 | Session | one top-level orchestrator session | one top-level general-purpose Claude session |
-| Work | runs millstone, then sluice, then tailrace as subagents | implements, runs the gate, opens the PR |
-| Ends | PR merged by tailrace after sluice approves and CI is green, bead closed | PR open and CI reported; **not merged** |
-| Merge | tailrace (inside the session) | the owner, or a tailrace run outside the session |
+| Work | runs millstone, then sluice, then tailrace as subagents | implements, runs the gate, opens the PR, lands it; **no review agent** |
+| Ends | PR merged after sluice approves and every check is green, bead closed | PR merged after every check is green, bead closed |
+| Merge | tailrace (inside the session) | the session itself (owner's decision, 2026-10-13) |
 
 Same for both: the bead text, the repo's gate (`make verify`), the repo's
 fence, "implement, test, open a PR", the knowledge steps (recall at the start,
 `watermill remember` with `--tag trial:A|B` at sign-off, a handoff), and the
-merge rule (CI green, then a merge by tailrace or the owner).
+**landing rule, word for word** (`trial._landing`): wait for every check-run on
+the PR head to be completed and green, then squash-merge exactly that head
+(`--match-head-commit` / `sha=`) as a tool call of its own, with the commit
+message *subject* `<PR title> (#<n>)`, *body* `Bead <id>.`, then close the
+bead the way the repo's lander does. On the laptop both arms use the branch
+`bead/<slug>`; in the cloud both use the session branch. Both arms therefore
+end at the same point, "landed", and the landed rate (section 5) compares like
+with like. The one designed difference is the crew: arm B has no review step.
 
-**Known asymmetry, stated up front.** Arm A's session includes landing and the
-bead close; arm B's does not. That makes A's measured cost and duration a
-little *higher* than B's for the same work, so it works against the crew
-claim, not for it. Landing is small next to implementation and review, but we
-do not correct for it.
+`ARM_B_SELF_MERGES` in `watermill/trial.py` is the switch for this decision
+(False = arm B stops at an open PR and the owner merges); changing it after
+enrolment is an amendment.
 
 **One trial bead per top-level session.** The session's `cost-state` line is
 cumulative per session, so a session that ran two beads cannot be split.
@@ -41,9 +46,17 @@ A bead is eligible when all of these hold (`trial.eligibility`):
 - it is not an epic and its status is `open`;
 - it is not labelled `hand-only` (the owner's mark for work done by hand);
 - it names no path from the repo's `fence.paths` (outside its *Out of scope*
-  section), unless it carries the label `fence-directed` (the bead itself
-  directs the fenced change). Mentioning `CLAUDE.md` counts: a bead that
-  needs a root-doc update is excluded rather than judged;
+  section) as one it may edit, unless it carries the label `fence-directed`
+  (the bead itself directs the fenced change) or `fence-clear` (the owner's
+  mark: it names a fenced path but edits none). Not counted as a mention: a
+  citation of a handoff note (`See brain/handoffs/mill/x.md`; handoffs are
+  crew output, never bead work) and a sentence that says the path is not
+  changed (`db.py is fenced and not touched`, `No db.py change`) unless the
+  same sentence also directs an edit. Any other mention counts, so the rule
+  errs towards excluding: a bead that edits a `CLAUDE.md` row (the repo
+  convention's doc update) is excluded rather than judged, and so is a bead
+  that only *reads* a fenced file (`brain/samples/x.png`) until the owner
+  labels it `fence-clear`;
 - it is not already in the ledger.
 
 The rules do not look at the bead's content beyond that, so they cannot
@@ -66,7 +79,21 @@ project of itself).
 - **Order cannot steer the draw.** Beads in one call are sorted by id before
   assignment, so the order they were typed in changes nothing.
 - **No re-randomising.** A bead that is in the ledger is refused; there is no
-  command to remove or re-draw one. The ledger is opened for append only.
+  command to remove or re-draw one. The ledger is opened for append only. An
+  id given twice in one call takes one position.
+- **Enrol from one machine.** The ledger is `merge=union`, so two machines
+  that enrol from the same base both keep their lines when git merges them: a
+  bead enrolled twice (possibly once per arm), two beads on one block position
+  (the block is no longer two and two), a second seed, or a bead started by two
+  sessions. `trial.ledger_problems` finds each of these; `enroll`, `start` and
+  `brief` refuse while any exists and `status` prints them first. It is a
+  protocol failure (section 6), resolved by the owner, never by appending.
+  (Byte-identical lines collapse in a union merge, which is harmless: the
+  same bead with the same arm.)
+- **Balance is exact in full blocks only.** `enroll` reports a repo whose last
+  block is partial. A batch of eight is two exact blocks when it is eight
+  beads of one repo or four in each of two repos; eight spread 2/2/2/2 over
+  four repos is four half-blocks, each of which may be AA or BB.
 - **Recorded before work starts**, in the ledger and as the bead label
   `trial:A` / `trial:B`.
 - A dry run (`--dry-run`) writes nothing and, given the same `--seed`, shows
@@ -94,10 +121,13 @@ landing.**
   exact test**, alpha 0.05. The per-bead count is reported alongside
   (descriptively; escapes cluster, so a count test would be misleading).
 - **Population.** Enrolled beads that **landed** and whose 14 days have
-  passed (scored). Beads that never landed have no escape window; they are
-  counted in the landed rate (section 5) and in the sensitivity analysis below.
+  passed (scored). Both arms land their own work (section 1), so a bead that
+  never landed is a failure of that arm's process, not of an external merge
+  queue; such beads have no escape window and are counted in the landed rate
+  (section 5) and in the sensitivity analysis below.
 - **Sensitivity (reported, not confirmatory).** Treat every enrolled bead that
-  did not land within 30 days of enrolment as a failure and repeat the test.
+  did not land within 30 days of enrolment as a failure and repeat the test
+  (`status`'s `sensitivity` line, same Fisher test, same looks).
 - **Effect and interval.** Report the two proportions with Wilson 95% intervals
   and their difference with Newcombe's interval (`stats.newcombe_diff`).
 - **Size.** About 60 landed, scored beads per arm gives ~80% power to tell a
@@ -110,15 +140,22 @@ landing.**
 Each is reported with its p-value and says so: there are four of them and no
 correction is applied, so none is a finding on its own.
 
-- **`cost_usd_est`**: the session's final `cost-state` `totalCostUSD`
-  (an API-equivalent estimate at list prices, not a bill). Mann-Whitney U on
-  per-bead values, with medians; the final report adds
-  `stats.bootstrap_median_diff` (seeded) for the difference. Only rows with `cost_basis` `cost-state` or `manual` enter (see
-  section 8).
+- **`cost_usd_est`, laptop beads only**: the session's final `cost-state`
+  `totalCostUSD` (an API-equivalent estimate at list prices, not a bill).
+  Mann-Whitney U on per-bead values, with medians; the final report adds
+  `stats.bootstrap_median_diff` (seeded) for the difference. Beads run on the
+  laptop or in the cloud, chosen per bead (owner's decision, 2026-10-13); only
+  rows with `cost_basis` `cost-state`, which only a laptop session has, enter
+  the comparison (`COMPARED_COST_BASES`). A cloud bead's cost is a snapshot
+  (`recorded-snapshot`) or an owner-supplied figure (`manual`, marked
+  `cost_supplied_by: owner`); both are stored and reported, never compared,
+  and `status` says how many it left out. Cloud beads count in every other
+  outcome.
 - **Duration**: session first-to-last timestamp, wall seconds. Mann-Whitney.
 - **First-push CI green**: the earliest commit of the PR that has any
   check-run, all of whose runs completed green. Fisher's exact test.
-- **Landed rate**: the PR merged. Fisher's exact test.
+- **Landed rate**: the PR merged. Fisher's exact test. Comparable because both
+  arms land their own PR under the same rule.
 - **Owner corrections** (commits on the PR without a `Co-Authored-By: Claude`
   trailer, merges excluded) are recorded and reported descriptively, not tested.
 
@@ -143,19 +180,34 @@ correction is applied, so none is a finding on its own.
 
 - Escapes are scored **after** the 14 days, by an agent or person who is not
   told the arm. `watermill trial scorepack` builds that prompt from the bead's
-  own text (title and description), the repo path, the PR number, the landing
-  date and the rubric. It contains no arm, no label, no `trial:` tag, no
-  ledger or results path; beads appear in a hash order, not enrolment order.
-  `tests/test_trial.py` pins this.
+  own text (title and description), the repo path, the landing commit on
+  main, the landing date and the rubric. It contains no arm, no label, no
+  `trial:` tag, no ledger or results path, and **no PR number** (the PR page
+  shows the branch, every branch commit and the authors); beads appear in a
+  hash order, not enrolment order. Two beads with the same text get the same
+  block whatever their arm. `tests/test_trial.py` pins this.
+- **What the scorer reads on main is the same shape for both arms.** Both
+  land with the same squash message (subject `<PR title> (#<n>)`, body `Bead
+  <id>.`), because GitHub's default squash body lists every branch commit:
+  sluice fixups, `chore(agent-runs)` lines naming the roles, per-model
+  `Co-Authored-By` trailers. The scorer is told to read `origin/main` only and
+  always through `trial.BLIND_PATHSPEC`, which excludes `brain/` (handoffs:
+  a `## Sluice` section names arm A), `knowledge/` (run records named by role,
+  findings tagged `trial:A|B`), `.beads/` (the labels) and `HANDOFF*`; the
+  test runs that pathspec through git. It is told not to open PRs, branches
+  or authors on GitHub and not to `bd show` the scored beads.
 - The orchestrator files the scorer's answers with `trial score`; the scorer
   never runs a `trial` command and is told not to read handoffs, run records,
   labels or comments.
 - **Findings carry the arm** (`trial:A` / `trial:B`, by the owner's
   instruction, so the graph grows from both arms). The scorer must not see
   them; it is not given `watermill recall`.
-- **Residual leaks, said plainly:** the landed work itself can reveal the arm
-  (a crew PR has sluice fixup commits; an arm B PR does not), and a defect's
-  bug bead may cite a handoff. The brief tells both arms to keep the words
+- **Residual leaks, said plainly:** the scorer could ignore the instructions
+  (it has the repo; blinding is by what it is given and told, not by access
+  control); the landed diff's own style can differ by arm; a defect in a file
+  under an excluded path would be missed (no eligible bead edits `brain/` or
+  `.beads/`, fenced in every cell); and a bug bead may cite a handoff or say
+  "found by sluice". The brief tells both arms to keep the words
   "trial" and "arm" out of PRs, commits and bead text, but the scoring is
   blind to the label, not to the style of the work. Report this limit with
   the result.
@@ -183,8 +235,8 @@ Everything goes through `watermill trial` (all state is in
      `cost-state` line and have stopped being written for five minutes;
    - the PR (number from the agents' own `knowledge/agent-runs/` record, or
      `--pr BEAD=N`) through the REST API: merged, first-green CI, owner commits.
-   Re-running appends a new line only when something changed (for arm B the
-   PR is merged after the session, so a later collect records it); the latest
+   Re-running appends a new line only when something changed (a PR merged
+   or a figure supplied after an earlier collect); the latest
    line per bead wins.
 4. **Score**, 14 days after landing: `watermill trial scorepack` ->
    blind scorer -> `watermill trial score <bead> --none | --escape SEV:REF:SUMMARY`.
@@ -204,11 +256,14 @@ the session ends). So for a cloud run:
   snapshot is the orchestrator only; the crew subagents' tokens are **not**
   in it, so it is a floor that flatters the crew, and for arm B it misses only
   the last few turns;
-- `status` **excludes snapshots from the cost comparison** and says how many
-  it excluded. Duration, CI, landing and escapes are unaffected;
+- `status` **compares cost on laptop beads only**: it excludes snapshots and
+  owner-supplied figures from the cost comparison and says how many of each it
+  excluded. Duration, CI, landing and escapes are unaffected;
 - the owner can read the true session total from the Claude Code session
-  usage and supply it: `watermill trial collect --cost-usd <bead>=<usd>`
-  (stored as `cost_basis: manual`, and then included);
+  usage and record it: `watermill trial collect --cost-usd <bead>=<usd>`
+  (stored as `cost_basis: manual`, `cost_supplied_by: owner`, with a note; it
+  persists through later collects until the owner supplies another, and is
+  reported, not compared);
 - if `$WM` (water-mill) is not attached to the cloud session, `trial start`,
   `recall` and `remember` cannot run; the session id then reaches the ledger
   only through the recorded line, and the findings are lost to the graph (the
@@ -216,8 +271,8 @@ the session ends). So for a cloud run:
   water-mill to every trial session to avoid this; it gives that session
   write access to the factory checkout's session branch.
 
-If every trial session runs in the cloud, the cost secondary cannot be
-analysed without the manual step. Duration, CI, landing and escapes can.
+If every trial session runs in the cloud, the cost secondary has no data.
+Duration, CI, landing and escapes do not depend on the surface.
 
 ## 9. Not measured, not claimed
 

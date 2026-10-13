@@ -1135,7 +1135,12 @@ def _pairs(items, cast) -> dict:
     out = {}
     for item in items or []:
         bead, _, value = item.partition("=")
-        out[bead] = cast(value)
+        try:
+            out[bead] = cast(value)
+        except ValueError:
+            raise trial.TrialError(f"{item!r}: expected BEAD=VALUE") from None
+        if not bead:
+            raise trial.TrialError(f"{item!r}: expected BEAD=VALUE")
     return out
 
 
@@ -1160,6 +1165,10 @@ def _trial_enroll(root: Path, registry, args) -> int:
         print(f"{r['repo']:<28}{r['bead']:<36}{r['arm']:<5}{r['block']:<6}{r['pos']}")
     for bead, repo_name, why in got["refused"]:
         print(f"skipped  {repo_name}/{bead}: {'; '.join(why)}")
+    for p in got["partial_blocks"]:
+        print(f"note     {p['repo']}: block {p['block']} is partial ({p['filled']} of "
+              f"{trial.BLOCK}); arms in this repo so far A={p['A']} B={p['B']}. Balance is exact "
+              f"only in full blocks: enrol in multiples of {trial.BLOCK} per repo.")
     for r in got["label_failures"]:
         print(f"LABEL FAILED: run  bd label add {r['bead']} trial:{r['arm']}  in {r['repo']}")
     if args.dry_run:

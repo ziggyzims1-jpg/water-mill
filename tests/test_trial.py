@@ -250,9 +250,12 @@ def test_arm_b_laptop_brief_is_solo_with_the_same_knowledge_steps(world):
     text = trial.brief(world[0], b, registry=world[1])
     for must in ("single general-purpose Claude", "trial start", "recall", "--tag trial:B",
                  "make verify", "Do NOT use the millstone, sluice or tailrace",
-                 "--role solo", "--arm B", "handoff", "do NOT merge", "remember"):
-        assert must in text
+                 "--role solo", "--arm B", "handoff", "remember",
+                 # owner 2026-10-13: arm B lands its own PR, sha-guarded, then closes the bead
+                 "gh pr merge", "--match-head-commit", f"bd close {b}", "BLOCKED"):
+        assert must in text, must
     assert "--tag trial:A" not in text and "--role orchestrator" not in text
+    assert "do NOT merge" not in text
 
 
 def test_cloud_briefs_follow_the_rest_runbook_and_say_what_cost_is_missing(world):
@@ -265,7 +268,40 @@ def test_cloud_briefs_follow_the_rest_runbook_and_say_what_cost_is_missing(world
         assert "gh pr create" not in text
     assert "Session close" in trial.brief(world[0], a, surface="cloud")
     assert "floor" in trial.brief(world[0], a, surface="cloud")
-    assert "Do NOT merge" in trial.brief(world[0], b, surface="cloud")
+    cloud_b = trial.brief(world[0], b, surface="cloud")
+    assert "Session close" in cloud_b and "pulls/<n>/merge" in cloud_b and 'sha="$SHA"' in cloud_b
+    assert "Do NOT merge" not in cloud_b and "beads-sync" in cloud_b
+
+
+@pytest.mark.parametrize("surface", ["laptop", "cloud"])
+def test_both_arms_land_by_the_same_words_and_the_same_squash_message(world, surface):
+    a, b = enrolled_pair(world)
+    text_a = trial.brief(world[0], a, surface=surface, registry=world[1])
+    text_b = trial.brief(world[0], b, surface=surface, registry=world[1])
+    assert trial._landing(a, surface) in text_a and trial._landing(b, surface) in text_b
+    # the landing rule differs only by the bead id
+    assert trial._landing(a, surface).replace(a, "X") == trial._landing(b, surface).replace(b, "X")
+    # arm A's verbatim crew line carries the tag AND the squash message to every crew agent
+    crew = text_a.split('after the bead id: "', 1)[1].split('" Do not edit', 1)[0]
+    assert "--tag trial:A" in crew and trial.merge_message(a) in crew
+    assert "trial:B" not in crew
+    for bead, text in ((a, text_a), (b, text_b)):  # GitHub's default body would name the arm
+        if surface == "laptop":
+            assert f'--subject "<PR title> (#<n>)" --body "Bead {bead}."' in text
+        else:
+            assert f'-f commit_title="<PR title> (#<n>)" -f commit_message="Bead {bead}."' in text
+    if surface == "laptop":
+        assert f"bead/{trial._slug(a, 'alpha')}" in text_a
+        assert f"bead/{trial._slug(b, 'alpha')}" in text_b
+
+
+def test_arm_b_end_point_is_one_switch(world, monkeypatch):
+    _, b = enrolled_pair(world)
+    monkeypatch.setattr(trial, "ARM_B_SELF_MERGES", False)
+    for surface in ("laptop", "cloud"):
+        text = trial.brief(world[0], b, surface=surface, registry=world[1])
+        assert "do NOT merge" in text or "Do NOT merge" in text
+        assert "--match-head-commit" not in text and "pulls/<n>/merge" not in text
 
 
 def test_brief_refuses_an_unenrolled_bead(world):
@@ -506,6 +542,11 @@ def test_status_interim_at_30_per_arm_prints_fisher_and_mann_whitney(tmp_path):
     assert s["metrics"]["primary"]["p_value"] < 0.05
     cost = s["metrics"]["secondary"][0]
     assert cost["p_value"] is not None and cost["median"]["B"] > cost["median"]["A"]
+    from watermill import stats  # the secondary is Mann-Whitney on exactly these values
+    want = stats.mann_whitney([1.0 + i for i in range(30)], [4.0 + i for i in range(30)])[1]
+    assert cost["p_value"] == round(want, 6)
+    primary = s["metrics"]["primary"]  # and the primary is Fisher on the 2x2
+    assert primary["p_value"] == round(stats.fisher_exact(3, 27, 12, 18), 6)
     seed_trial_final = tmp_path / "f"
     seed_trial_final.mkdir()
     seed_trial(seed_trial_final, 60)
@@ -546,3 +587,265 @@ def test_recorded_accepts_the_orchestrator_role_as_a_session():
     assert rec["agent_kind"] == "session" and "crew_key" not in rec["detail"]
     crew = recorded.build(None, role="sluice", project="p", bead="p-1")
     assert crew["agent_kind"] == "mill-crew" and crew["detail"]["crew_key"] == "crew:p-1"
+
+
+# -- review (sluice, water-mill-d20): eligibility on real bead wording -------------
+
+
+def _why(world, description, **labels):
+    fence = world[1].get("alpha").load_contract().fence
+    return trial.eligibility(task("a-1", description=description), fence, hand_only=set(),
+                             fence_directed=labels.get("directed", set()), enrolled_beads=set(),
+                             fence_clear=labels.get("clear", set()))
+
+
+@pytest.mark.parametrize("text", [
+    # wording taken from beads the first dry run excluded for a mention alone
+    "Keep calendarErrorState.test.jsx green. See brain/handoffs/mill/6wo-5.md.",
+    "Regression test per case (method in brain/handoffs/mill/79r.md).",
+    "**Files.** `tests/test_db.py` (new test). `db.py` is fenced and not touched.",
+    "Files: data-fixtures/job_runs.json, routes/jobs.py. No db.py change.",
+])
+def test_a_mention_that_is_not_an_edit_does_not_exclude(world, text):
+    assert _why(world, text) == []
+
+
+@pytest.mark.parametrize("text", [
+    "Files: db.py (the migration), routes/x.py",
+    "Edit db.py and leave the Makefile untouched.",  # a negation does not hide a directed edit
+    "Update brain/schema.md with the new table",
+    # a bold-marked Out of scope section ends at the next bold section
+    "**Out of scope.** Changing the limits.\n**Verification.** run it\n**Files.** Makefile",
+])
+def test_a_fenced_edit_still_excludes(world, text):
+    assert _why(world, text)
+
+
+def test_the_owner_can_clear_a_false_fence_hit(world):
+    text = "Files: x.py. Headless check with brain/samples/table.png."
+    assert _why(world, text)
+    assert _why(world, text, clear={"a-1"}) == []
+
+
+def test_a_repeated_explicit_id_takes_one_block_position(world):
+    tr = FakeTracker([task("a-1"), task("a-2")])
+    got = enroll(world, "alpha", ["a-1", "a-1", "a-2"], tr)
+    assert [r["bead"] for r in got["rows"]] == ["a-1", "a-2"]
+    assert trial.ledger_problems(trial.read_ledger(world[0])) == []
+
+
+def test_enroll_reports_a_partial_block(world):
+    tr = FakeTracker([task(f"a-{i}") for i in range(6)])
+    got = enroll(world, "alpha", [f"a-{i}" for i in range(6)], tr, dry_run=True)
+    (p,) = got["partial_blocks"]
+    assert p["block"] == 1 and p["filled"] == 2 and p["A"] + p["B"] == 6
+    full = enroll(world, "alpha", [f"a-{i}" for i in range(4)], tr, dry_run=True)
+    assert full["partial_blocks"] == []
+
+
+# -- review: two machines enrol, git merges the ledger with merge=union ----------
+
+
+def _git(cwd, *argv):
+    import subprocess
+    return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *argv], cwd=cwd,
+                          capture_output=True, text=True, check=True)
+
+
+def _two_machines(world, first, second, seeds=(7, 7)):
+    """Enrol `first` on a branch and `second` on main from the same base; merge."""
+    root = world[0]
+    attrs = (Path(__file__).resolve().parents[1] / ".gitattributes").read_text()
+    (root / ".gitattributes").write_text(attrs)
+    _git(root, "init", "-q", "-b", "main")
+    tr = FakeTracker([task(f"a-{i}") for i in range(8)])
+    enroll(world, "alpha", ["a-7"], tr, seed=7)  # a shared base with a seed line
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "base")
+    _git(root, "checkout", "-qb", "laptop2")
+    # different machines enrol at different moments; byte-identical lines would collapse
+    # in the union (and then carry the same arm, which is harmless)
+    enroll(world, "alpha", first, tr, seed=seeds[0], now="2026-10-14T10:00:00+00:00")
+    _git(root, "commit", "-qam", "machine 2")
+    _git(root, "checkout", "-q", "main")
+    enroll(world, "alpha", second, tr, seed=seeds[1], now="2026-10-14T10:00:05+00:00")
+    _git(root, "commit", "-qam", "machine 1")
+    _git(root, "merge", "-q", "--no-edit", "laptop2")  # union: no conflict, both kept
+    return trial.read_ledger(root), tr
+
+
+def test_a_union_merge_that_double_assigns_a_bead_is_detected_and_refused(world):
+    ledger, tr = _two_machines(world, ["a-1"], ["a-1"])
+    assert sum(1 for r in ledger if r.get("bead") == "a-1") == 2
+    problems = trial.ledger_problems(ledger)
+    assert any("a-1 is enrolled 2 times" in p for p in problems)
+    with pytest.raises(trial.TrialError, match="inconsistent"):
+        enroll(world, "alpha", ["a-5"], tr)
+    with pytest.raises(trial.TrialError, match="inconsistent"):
+        trial.start(world[0], "a-1", session_id="s", remote=False)
+    with pytest.raises(trial.TrialError, match="inconsistent"):
+        trial.brief(world[0], "a-1", registry=world[1])
+    s = trial.status(world[0])
+    assert s["ledger_problems"] and "LEDGER INCONSISTENT" in trial.render_status(s)
+
+
+def test_a_union_merge_of_different_beads_on_one_block_position_is_detected(world):
+    ledger, _ = _two_machines(world, ["a-1", "a-2"], ["a-3", "a-4"])
+    problems = trial.ledger_problems(ledger)
+    assert any("no longer balanced" in p for p in problems), problems
+
+
+def test_a_sound_ledger_has_no_problems(world):
+    tr = FakeTracker([task(f"a-{i}") for i in range(8)])
+    enroll(world, "alpha", ["a-0", "a-1", "a-2"], tr)
+    enroll(world, "alpha", ["a-3", "a-4"], tr)
+    trial.start(world[0], "a-0", session_id="s0", remote=False)
+    assert trial.ledger_problems(trial.read_ledger(world[0])) == []
+
+
+def test_a_second_master_seed_is_a_problem():
+    ledger = [{"type": "seed", "seed": 1}, {"type": "seed", "seed": 2}]
+    assert "2 master seeds" in trial.ledger_problems(ledger)[0]
+
+
+def test_the_first_enrol_line_is_the_bead_s_arm():
+    ledger = [{"type": "enroll", "bead": "x", "arm": "A"}, {"type": "enroll", "bead": "x",
+                                                           "arm": "B"}]
+    assert trial.enrolled(ledger)["x"]["arm"] == "A"
+
+
+# -- review: the blind scorer sees the same thing for either arm -----------------
+
+
+def test_scorepack_blocks_are_identical_in_form_for_both_arms(world):
+    root, registry, _ = world
+    same = dict(title="Same title", description="Goal: same text\nFiles: x.py")
+    tr = FakeTracker([task(f"alpha-{i}", labels=["trial:A", "trial:B"],
+                           comments=[{"text": "## Sluice said hi"}], **same) for i in range(4)])
+    enroll(world, "alpha", None, tr)
+    enr = trial.enrolled(trial.read_ledger(root))
+    rows = [{"type": "collect", "bead": b, "repo": "alpha", "arm": r["arm"], "landed": True,
+             "landed_at": "2026-09-01T00:00:00Z", "landed_sha": f"sha-{b}", "pr_number": 77,
+             "first_push_ci_green": True, "owner_corrections": 0} for b, r in enr.items()]
+    trial._append(trial.results_path(root), rows)
+    text = trial.scorepack(root, tracker_for=lambda p: tr, registry=registry,
+                           today=datetime(2026, 10, 20, tzinfo=UTC))
+    blocks = {}
+    for chunk in text.split("### ")[1:]:
+        bead = chunk.split("\n", 1)[0]
+        blocks[enr[bead]["arm"]] = chunk.replace(bead, "<id>").strip()
+    assert set(blocks) == {"A", "B"} and blocks["A"] == blocks["B"]
+    lowered = text.lower()
+    for forbidden in ("trial", "sluice", "#77", "pull request:", "bead/", "claude/"):
+        assert forbidden not in lowered, forbidden
+    assert trial.BLIND_PATHSPEC in text and "sha-" in text
+
+
+def test_the_blind_pathspec_hides_handoffs_records_findings_and_labels(tmp_path):
+    repo = tmp_path / "r"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    (repo / "app.py").write_text("x = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "the work")
+    for path in ("brain/handoffs/mill/x.md", "knowledge/agent-runs/sluice-x.jsonl",
+                 ".beads/issues.jsonl", "HANDOFF-mill/x.md"):
+        (repo / path).parent.mkdir(parents=True, exist_ok=True)
+        (repo / path).write_text("## Sluice\n")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", f"notes {path}")
+    import shlex
+    argv = shlex.split(f"log --format=%s {trial.BLIND_PATHSPEC}")
+    assert _git(repo, *argv).stdout.split("\n")[:-1] == ["the work"]
+
+
+# -- review: cost --------------------------------------------------------------
+
+
+def test_cost_state_read_keeps_numbers_only(world):
+    root, registry, tmp = world
+    bead = started_world(world)
+    sessions = tmp / "sessions"
+    path = write_session(sessions)
+    with path.open("a") as handle:  # a cost-state line with text in it: none of it may leak
+        handle.write(json.dumps({"type": "cost-state", "totalCostUSD": 3.0, "lastPrompt":
+                                 "CANARY-PROMPT", "modelUsage": {"CANARY-MODEL": {
+                                     "inputTokens": 1, "outputTokens": 1}}}) + "\n")
+    old = time.time() - 3600
+    import os
+    os.utime(path, (old, old))
+    (row,) = trial.collect(root, registry, sessions_dir=sessions, prs={bead: 1},
+                           gh_for=gh_factory(FakeGH()))["collected"]
+    assert row["cost_usd_est"] == 3.0
+    assert "CANARY" not in trial.results_path(root).read_text()
+
+
+def test_an_owner_supplied_cost_is_marked_and_survives_a_later_collect(world):
+    root, registry, tmp = world
+    bead = started_world(world)
+    sessions = tmp / "sessions"
+    write_session(sessions)
+    gh = gh_factory(FakeGH())
+    (row,) = trial.collect(root, registry, sessions_dir=sessions, manual_cost={bead: 9.5},
+                           prs={bead: 1}, gh_for=gh)["collected"]
+    assert row["cost_basis"] == "manual" and row["cost_supplied_by"] == "owner"
+    assert any("supplied by the owner" in n for n in row["notes"])
+    assert trial.collect(root, registry, sessions_dir=sessions, prs={bead: 1},
+                         gh_for=gh)["collected"] == []  # not reverted to the cost-state figure
+    assert trial.latest(trial.read_results(root), "collect")[bead]["cost_usd_est"] == 9.5
+    with pytest.raises(trial.TrialError, match="not in the trial"):
+        trial.collect(root, registry, sessions_dir=sessions, manual_cost={"zz-9": 1.0},
+                      gh_for=gh)
+
+
+def test_collect_records_the_landing_commit(world):
+    root, registry, tmp = world
+    bead = started_world(world)
+    sessions = tmp / "sessions"
+    write_session(sessions)
+    fake = FakeGH()
+    fake.pr = lambda n: {"merged_at": "2026-10-21T09:00:00Z", "merge_commit_sha": "abc123"}
+    (row,) = trial.collect(root, registry, sessions_dir=sessions, prs={bead: 1},
+                           gh_for=gh_factory(fake))["collected"]
+    assert row["landed_sha"] == "abc123"
+
+
+def test_cost_is_compared_on_laptop_beads_only(tmp_path):
+    seed_trial(tmp_path, 9)
+    rows = trial.read_results(tmp_path)
+    for r in rows:
+        if r["type"] == "collect" and r["arm"] == "B" and r["bead"].endswith(("0", "1")):
+            trial._append(trial.results_path(tmp_path), [{**r, "cost_basis": "manual"}])
+    s = trial.status(tmp_path)
+    assert s["metrics"]["secondary"][0]["n"] == {"A": 9, "B": 7}
+    assert s["cost_excluded_by_basis"] == {"manual": 2}
+    assert "laptop beads only" in trial.render_status(s)
+
+
+# -- review: the sensitivity analysis -------------------------------------------
+
+
+def test_sensitivity_counts_an_unlanded_bead_after_30_days_as_a_failure(tmp_path):
+    ledger = [{"type": "seed", "seed": 1}]
+    for arm in "AB":
+        ledger.append({"type": "enroll", "bead": f"x-{arm}", "repo": "alpha", "arm": arm,
+                       "seed": 1, "block": 0, "pos": "AB".index(arm),
+                       "enrolled_at": "2026-09-01T00:00:00+00:00"})
+    trial._append(trial.ledger_path(tmp_path), ledger)
+    trial._append(trial.results_path(tmp_path), [
+        {"type": "collect", "bead": "x-A", "arm": "A", "landed": True,
+         "landed_at": "2026-09-05T00:00:00Z"},
+        {"type": "score", "bead": "x-A", "early": False, "escapes": []}])
+    early = trial.status(tmp_path, today=datetime(2026, 9, 20, tzinfo=UTC))
+    assert early["metrics"]["sensitivity"]["n"] == {"A": 1, "B": 0}
+    late = trial.status(tmp_path, today=datetime(2026, 10, 5, tzinfo=UTC))
+    m = late["metrics"]["sensitivity"]
+    assert m["n"] == {"A": 1, "B": 1} and m["k"] == {"A": 0, "B": 1}
+
+
+def test_only_blocker_and_bug_are_primary_escapes(tmp_path):
+    seed_trial(tmp_path, 3)
+    trial._append(trial.results_path(tmp_path), [
+        {"type": "score", "bead": "alpha-A0", "early": False, "escapes": [{"severity": "test-gap"}]},
+        {"type": "score", "bead": "alpha-A1", "early": False, "escapes": [{"severity": "blocker"}]}])
+    assert trial.status(tmp_path)["metrics"]["primary"]["k"] == {"A": 1, "B": 0}

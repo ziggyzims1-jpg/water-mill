@@ -60,6 +60,22 @@ PRIMARY_SEVERITIES = ("blocker", "bug")  # "bug-or-worse"
 GREEN = ("success", "neutral", "skipped")
 COST_BASES = ("cost-state", "recorded-snapshot", "manual")
 SETTLE_SECONDS = 300
+FENCE_CLEAR_LABEL = "fence-clear"  # owner: names a fenced path but does not edit one
+SENSITIVITY_LAND_DAYS = 30  # docs/TRIAL.md section 4: not landed by then = failure
+
+# -- the owner's design decisions (2026-10-13), one switch each ----------------
+#: Arm B merges its own PR (sha-guarded, after every check is green) and closes
+#: the bead, so both arms end at "landed". False = arm B stops at an open PR.
+ARM_B_SELF_MERGES = True
+#: Cost bases that enter the cost comparison. "cost-state" is the laptop
+#: session's own final total; a cloud bead has only a snapshot (or an
+#: owner-supplied figure, "manual"), so cost is compared on laptop beads only.
+COMPARED_COST_BASES = ("cost-state",)
+
+#: What the blind scorer must never read: handoffs and run records name the crew
+#: roles, findings carry trial:A/B tags, `.beads/` holds the trial:A/B labels.
+BLIND_EXCLUDE = ("brain", "knowledge", ".beads", "HANDOFF*")
+BLIND_PATHSPEC = "-- . " + " ".join(f"':(exclude){p}'" for p in BLIND_EXCLUDE)
 
 
 class TrialError(WatermillError):
@@ -147,6 +163,59 @@ def master_seed(ledger: list[dict]) -> int | None:
         if row.get("type") == "seed":
             return int(row["seed"])
     return None
+
+
+def ledger_problems(ledger: list[dict]) -> list[str]:
+    """What makes the ledger unusable for assignment; empty means sound.
+
+    The ledger is `merge=union`, so two machines that enrolled from the same base
+    both keep their lines after a merge: a second master seed, a bead enrolled
+    twice (possibly with two arms), two beads on one block position (the block
+    is no longer two-and-two) or a bead started by two sessions. None of these
+    can be repaired by appending, so every assigning command refuses on them.
+    """
+    problems = []
+    seeds = sorted({int(r["seed"]) for r in ledger if r.get("type") == "seed"})
+    if len(seeds) > 1:
+        problems.append(f"{len(seeds)} master seeds in the ledger ({', '.join(map(str, seeds))})")
+    beads: dict[str, list[dict]] = {}
+    slots: dict[tuple, set[str]] = {}
+    for row in ledger:
+        if row.get("type") != "enroll" or not row.get("bead"):
+            continue
+        beads.setdefault(row["bead"], []).append(row)
+        slot = (row.get("repo"), row.get("block"), row.get("pos"))
+        slots.setdefault(slot, set()).add(row["bead"])
+        if seeds and row.get("seed") is not None and int(row["seed"]) != seeds[0]:
+            problems.append(f"{row['bead']} was assigned under seed {row['seed']}, not the "
+                            f"master seed {seeds[0]}")
+    for bead, rows in sorted(beads.items()):
+        if len(rows) > 1:
+            arms = "/".join(r.get("arm", "?") for r in rows)
+            problems.append(f"{bead} is enrolled {len(rows)} times (arms {arms})")
+    for (repo, block, pos), held in sorted(slots.items(), key=str):
+        if len(held) > 1:
+            problems.append(f"{repo} block {block} position {pos} holds {len(held)} beads "
+                            f"({', '.join(sorted(held))}): the block is no longer balanced")
+    starts: dict[str, set] = {}
+    sessions: dict[str, set] = {}
+    for row in ledger:
+        if row.get("type") == "start" and row.get("bead"):
+            starts.setdefault(row["bead"], set()).add(row.get("session_id"))
+            sessions.setdefault(row.get("session_id"), set()).add(row["bead"])
+    problems += [f"{b} was started by {len(s)} sessions" for b, s in sorted(starts.items())
+                 if len(s) > 1]
+    problems += [f"session {s} started {len(b)} trial beads" for s, b in sorted(
+        sessions.items(), key=str) if len(b) > 1]
+    return problems
+
+
+def _refuse_if_unsound(ledger: list[dict]) -> None:
+    problems = ledger_problems(ledger)
+    if problems:
+        raise TrialError("the trial ledger is inconsistent (concurrent enrolment merged?): "
+                         + "; ".join(problems) + ". This is a protocol failure for the owner "
+                         "(docs/TRIAL.md section 6); nothing written.")
 
 
 def latest(results: list[dict], kind: str) -> dict[str, dict]:
@@ -265,17 +334,44 @@ def _scannable(text: str) -> str:
         if head.startswith("out of scope"):
             skipping = True
             continue
-        if skipping and re.match(r"^\s*(goal|files|approach|verification|context)\b", line, re.I):
+        # the next section ends it, however it is marked up (`Files:`, `**Files.**`, `## Files`)
+        if skipping and re.match(r"^[\s*#_-]*(goal|files|approach|verification|context|"
+                                 r"acceptance|tests?|notes?)\b", line, re.I):
             skipping = False
         if not skipping:
             keep.append(line)
     return "\n".join(keep)
 
 
+# A sentence that says the fenced path is NOT changed ("db.py is fenced and not
+# touched", "No db.py change") names it without directing an edit.
+_NOT_EDITED = re.compile(r"\bnot\s+(?:be\s+)?(?:touched|changed|edited|modified)\b|\buntouched\b|"
+                         r"\bno\s+[`'\"]?[\w./-]+[`'\"]?\s+(?:change|edit)s?\b", re.I)
+# ...unless the same sentence also directs an edit ("edit db.py, leave Makefile untouched"):
+# then every path in it still counts (exclusion is the safe side).
+_EDIT_VERB = re.compile(r"\b(?:edit|add|update|modify|write|rewrite|directs?|append|"
+                        r"remove|delete|rename|migrat\w*)\b", re.I)
+
+
+def _is_reference(token: str) -> bool:
+    """A handoff note is crew output, never what a bead edits: citing one is a reference."""
+    return "/handoffs/" in f"/{token}"
+
+
 def fence_mentions(text: str, fence) -> list[str]:
-    """Fence patterns the bead text names as a path (outside Out of scope)."""
-    tokens = {t.strip(".,:;)(`'\"") for t in _TOKEN.findall(_scannable(text))}
-    tokens = {t for t in tokens if t and ("/" in t or "." in t or t[:1].isupper())}
+    """Fence patterns the bead text names as a path it may edit (outside Out of scope).
+
+    Not counted: handoff citations (`See brain/handoffs/mill/x.md`) and sentences
+    that say the path is not changed. Anything else that names a fenced path is
+    counted; the owner's `fence-clear` label overrides a false hit.
+    """
+    tokens = set()
+    for sentence in re.split(r"(?<=[.;!?])\s+|\n", _scannable(text)):
+        if _NOT_EDITED.search(sentence) and not _EDIT_VERB.search(sentence):
+            continue
+        tokens |= {t.strip(".,:;)(`'\"") for t in _TOKEN.findall(sentence)}
+    tokens = {t for t in tokens if t and ("/" in t or "." in t or t[:1].isupper())
+              and not _is_reference(t)}
     hits = []
     for pattern in fence.paths:
         one = type(fence)(paths=(pattern,))
@@ -285,7 +381,7 @@ def fence_mentions(text: str, fence) -> list[str]:
 
 
 def eligibility(task: dict, fence, *, hand_only: set[str], fence_directed: set[str],
-                enrolled_beads: set[str]) -> list[str]:
+                enrolled_beads: set[str], fence_clear: set[str] = frozenset()) -> list[str]:
     """Why a bead cannot enter the trial; empty means eligible."""
     bead = task.get("id", "")
     why = []
@@ -298,9 +394,9 @@ def eligibility(task: dict, fence, *, hand_only: set[str], fence_directed: set[s
     if bead in hand_only:
         why.append(f"labelled {HAND_ONLY_LABEL}")
     touched = fence_mentions(f"{task.get('title', '')}\n{task.get('description', '')}", fence)
-    if touched and bead not in fence_directed:
+    if touched and bead not in fence_directed and bead not in fence_clear:
         why.append(f"names fenced path(s) {', '.join(touched)} (label {FENCE_DIRECTED_LABEL} "
-                   "if the bead directs it)")
+                   f"if the bead directs it, {FENCE_CLEAR_LABEL} if it does not edit them)")
     return why
 
 
@@ -316,6 +412,9 @@ def enroll(root: Path, registry: Registry, repos: list[str], bead_ids: list[str]
     Explicit ids that are ineligible refuse the whole call (nothing written).
     """
     ledger = read_ledger(root)
+    _refuse_if_unsound(ledger)
+    if bead_ids is not None:
+        bead_ids = sorted(set(bead_ids))  # a repeated id must not take two block positions
     have = master_seed(ledger)
     if have is not None and seed is not None and seed != have:
         raise TrialError(f"the ledger already holds seed {have}; a different --seed would "
@@ -326,6 +425,7 @@ def enroll(root: Path, registry: Registry, repos: list[str], bead_ids: list[str]
     stamp = now or _now()
     rows: list[dict] = []
     refused: list[tuple[str, str, list[str]]] = []
+    partial: list[dict] = []
     trackers = {}
     for name in repos:
         project = registry.get(name)
@@ -338,6 +438,7 @@ def enroll(root: Path, registry: Registry, repos: list[str], bead_ids: list[str]
         tracker = trackers[name] = (tracker_for or Tracker)(project.path)
         hand_only = tracker.ids_with_label(HAND_ONLY_LABEL)
         directed = tracker.ids_with_label(FENCE_DIRECTED_LABEL)
+        clear = tracker.ids_with_label(FENCE_CLEAR_LABEL)
         tasks = tracker.ready() if bead_ids is None else [
             t for t in (tracker.show(b) for b in bead_ids) if t]
         if bead_ids is not None:
@@ -349,6 +450,7 @@ def enroll(root: Path, registry: Registry, repos: list[str], bead_ids: list[str]
             if bead_ids is not None and task["id"] not in bead_ids:
                 continue
             why = eligibility(task, fence, hand_only=hand_only, fence_directed=directed,
+                              fence_clear=clear,
                               enrolled_beads=set(done) | {r["bead"] for r in rows})
             if why:
                 refused.append((task["id"], name, why))
@@ -357,11 +459,17 @@ def enroll(root: Path, registry: Registry, repos: list[str], bead_ids: list[str]
         in_repo = sum(1 for r in done.values() if r["repo"] == name)
         for row in assign(use, name, in_repo, picked):
             rows.append({**row, "type": "enroll", "enrolled_at": stamp})
+        total = in_repo + len(picked)
+        if total % BLOCK:
+            arms = [r["arm"] for r in done.values() if r["repo"] == name] + [
+                r["arm"] for r in rows if r["repo"] == name]
+            partial.append({"repo": name, "block": total // BLOCK, "filled": total % BLOCK,
+                            "A": arms.count("A"), "B": arms.count("B")})
     if bead_ids is not None and refused:
         raise TrialError("; ".join(f"{b}: {', '.join(w)}" for b, _, w in refused)
                          + ". Nothing enrolled.")
     result = {"seed": use, "seed_is_new": have is None, "rows": rows, "refused": refused,
-              "label_failures": []}
+              "label_failures": [], "partial_blocks": partial}
     if dry_run or not rows:
         return result
     out = ([{"type": "seed", "seed": use, "drawn_at": stamp,
@@ -378,6 +486,7 @@ def start(root: Path, bead: str, *, session_id: str | None, remote: bool,
           now: str | None = None) -> dict:
     """Bind the calling top-level session to its trial bead (one bead per session)."""
     ledger = read_ledger(root)
+    _refuse_if_unsound(ledger)
     row = enrolled(ledger).get(bead)
     if row is None:
         raise TrialError(f"{bead} is not enrolled in the trial")
@@ -404,10 +513,41 @@ def start(root: Path, bead: str, *, session_id: str | None, remote: bool,
 _REMEMBER = ('{wm}/bin/watermill remember "{cell}" <lesson|...> "<one sentence>" --cause <cause> '
              '--tag trial:{arm} --tag <topic> [--path <file>] [--task {bead}]')
 
+_DENIED = ("If the permission system or the auto-mode classifier denies a tool call, do not "
+           "retry it, re-word it or route around it: stop and report BLOCKED, quoting the denied "
+           "command and the reason verbatim.")
+
 
 def _slug(bead: str, repo: str) -> str:
     """The bead id with its project prefix removed, as the handoff paths spell it."""
     return landed.normalise(bead).removeprefix(landed.normalise(repo) + "-")
+
+
+def merge_message(bead: str) -> str:
+    """The squash commit both arms land with. It is what the blind scorer reads on main,
+    so it must be identical in shape for both arms: GitHub's default squash body lists
+    every branch commit (sluice fixups, `chore(agent-runs)` lines, per-model trailers),
+    which would name the arm."""
+    return f'subject exactly "<PR title> (#<n>)" and body exactly "Bead {bead}."'
+
+
+def _merge_command(bead: str, surface: str) -> str:
+    if surface == "cloud":
+        return ('`gh api -X PUT repos/$O/$R/pulls/<n>/merge -f merge_method=squash -f sha="$SHA" '
+                f'-f commit_title="<PR title> (#<n>)" -f commit_message="Bead {bead}."` '
+                "(never delete $SB)")
+    return ('`gh pr merge <n> --squash --delete-branch --match-head-commit <sha> '
+            f'--subject "<PR title> (#<n>)" --body "Bead {bead}."`')
+
+
+def _landing(bead: str, surface: str) -> str:
+    """The merge rule, word for word the same for both arms."""
+    return ("Landing (the same rule for both arms of this study): wait until EVERY check-run on "
+            "the PR's head commit is completed and green (`verify` registers late; allow ~90 s "
+            "before trusting an empty list), then squash-merge exactly that head, as a tool call "
+            f"of its own, with the commit message {merge_message(bead)}: "
+            f"{_merge_command(bead, surface)}. A red check is fixed and pushed, then wait again; "
+            "never merge red, never force.")
 
 
 def brief(root: Path, bead: str, *, surface: str = "laptop",
@@ -415,7 +555,9 @@ def brief(root: Path, bead: str, *, surface: str = "laptop",
     """The exact prompt for the session working `bead` (arm from the ledger)."""
     if surface not in ("laptop", "cloud"):
         raise TrialError("surface is laptop or cloud")
-    row = enrolled(read_ledger(root)).get(bead)
+    ledger = read_ledger(root)
+    _refuse_if_unsound(ledger)
+    row = enrolled(ledger).get(bead)
     if row is None:
         raise TrialError(f"{bead} is not enrolled in the trial")
     arm, repo = row["arm"], row["repo"]
@@ -441,10 +583,16 @@ def brief(root: Path, bead: str, *, surface: str = "laptop",
     secret = ("Do not write the words \"trial\" or \"arm\", or the label, into PR titles, PR "
               "bodies, commit messages or the bead text: the escape scorer is blind to the arm "
               "and must stay so. The tag belongs in findings only.")
+    branch = (f"The PR branch is `bead/{slug}` (worktree: `git -C $REPO worktree add \"$WT\" -b "
+              f"bead/{slug} origin/main`)." if surface == "laptop" else
+              "The PR branch is the session branch $SB (see the cloud flow below).")
+    landing = _landing(bead, surface)
     if arm == "A":
         crew = ("TRIAL: this bead is trial:A. Every `watermill remember` you run must carry "
                 "--tag trial:A in addition to its other tags. Do not write the words 'trial' or "
-                "'arm' into the PR title, body, commits or bead text.")
+                "'arm' into the PR title, body, commits or bead text. When the PR is "
+                f"squash-merged, the commit message is {merge_message(bead)} "
+                f"({_merge_command(bead, surface)}).")
         body = [
             f"You are the ORCHESTRATOR for exactly ONE bead: {bead} (repo {repo}). This is a "
             "controlled trial of the mill crew; do not take any other bead in this session.",
@@ -456,8 +604,9 @@ def brief(root: Path, bead: str, *, surface: str = "laptop",
             "Put this line VERBATIM into the prompt of EACH crew agent (millstone, sluice and "
             "tailrace), after the bead id: \"" + crew + "\" Do not edit the crew definition files.",
             "Everything else follows the crew agents' own definitions, including their handoffs "
-            "and (in a cloud session) their cloud mode.",
-            know, secret,
+            "and (in a cloud session) their cloud mode. " + branch,
+            landing + " (tailrace does this, with the message above.)",
+            know, secret, _DENIED,
             "Your own sign-off, as the last things you do: write a short orchestrator handoff "
             "(where things stand, what failed, lessons, open questions); then, as its own tool "
             f"call earlier in the run, you will have run `{wm}/bin/watermill agents whoami` and "
@@ -466,27 +615,39 @@ def brief(root: Path, bead: str, *, surface: str = "laptop",
             "<landed|unlanded|blocked>` and commit that one file.",
         ]
     else:
+        if ARM_B_SELF_MERGES:
+            end = (landing + " Then close the bead the way the repo's lander does: "
+                   + (f"`bd close {bead} --reason \"Merged in PR #<n>\"`, `git -C $REPO pull "
+                      "--ff-only`, `bd export -o .beads/issues.jsonl`, commit it (`chore(beads): "
+                      f"close {bead}`) and push." if surface == "laptop" else
+                      f"`BD_DOLT_AUTO_PUSH=false bd close {bead} --reason \"Merged in PR #<n>\"`; "
+                      "the close travels as `.beads/issues.jsonl` on $SB via beads-sync (Session "
+                      "close below)."))
+        else:
+            end = ("Stop there: do NOT merge and do NOT close the bead. The merge is handled "
+                   "afterwards by the owner (or a tailrace run outside this session).")
         body = [
             f"You are a single general-purpose Claude working ONE bead: {bead} (repo {repo}). "
             "This is a controlled trial against the mill crew; do not take any other bead.",
             where, sess,
             f"Read the bead (`bd show {bead}`, in full including Out of scope and any READ ONLY "
             "marks) and the repo's CLAUDE.md files, and obey the repo's fence. Do the work in "
-            "your own git worktree, never the main checkout. Do NOT use the millstone, sluice or "
-            "tailrace agents, and do not delegate review to another agent; you may run tests and "
-            "reread your own diff.",
+            "your own git worktree, never the main checkout. " + branch + " Do NOT use the "
+            "millstone, sluice or tailrace agents, and do not delegate review to another agent; "
+            "you may run tests and reread your own diff.",
             "Implement, add the tests the bead asks for, run the repo's gate (`make verify` in "
             "the worktree) until green, then open a pull request whose body names the bead and "
-            "says how you verified it. Stop there: do NOT merge and do NOT close the bead. CI "
-            "green and the merge are handled afterwards by the owner (or a tailrace run outside "
-            "this session), the same rule arm A's PRs go through.",
+            "says how you verified it.",
+            end,
             "Your handoff: write `brain/handoffs/solo/" + slug + ".md` in the repo (where things "
             "stand, what you tried that failed, lessons, look-here-first, open questions).",
-            know, secret,
+            know, secret, _DENIED,
             f"Sign-off: earlier, as its own tool call, run `{wm}/bin/watermill agents whoami` and "
-            f"keep the tag; after the PR exists run `{wm}/bin/watermill agents record "
-            f"--transcript auto --run-tag <tag> --role solo --arm B --bead {bead} --pr <n> "
-            "--outcome <landed|unlanded|blocked>` and commit that one file.",
+            f"keep the tag; at the very end, with the outcome known, run `{wm}/bin/watermill "
+            f"agents record --transcript auto --run-tag <tag> --role solo --arm B --bead {bead} "
+            "--pr <n> --outcome <landed|unlanded|blocked>` and commit that one file"
+            + (" with your handoff, from $REPO's main checkout, and push." if surface == "laptop"
+               else " with your handoff on $SB."),
         ]
     if surface == "cloud":
         body.append(_cloud_steps(arm, bead, slug))
@@ -505,16 +666,18 @@ def _cloud_steps(arm: str, bead: str, slug: str) -> str:
         "start with `claude/`, else stop and report BLOCKED. Worktrees are `git worktree add "
         "--detach \"$WT\" origin/main`; publish with `git push origin HEAD:refs/heads/$SB`; never "
         "push `main`, never delete `$SB`. Prefix EVERY bd command with `BD_DOLT_AUTO_PUSH=false` "
-        "and run `BD_DOLT_AUTO_PUSH=false bd import -i .beads/issues.jsonl` first. PR: `gh api -X "
+        "and run `BD_DOLT_AUTO_PUSH=false bd import -i .beads/issues.jsonl` first; bead changes "
+        "reach main only through beads-sync, never in a PR. PR: `gh api -X "
         "POST repos/$O/$R/pulls -f title=... -f head=\"$SB\" -f base=main -f body=...`; CI: poll "
         "`gh api repos/$O/$R/commits/$SHA/check-runs` until the `verify` run is "
         "completed/success (it registers late; settle ~90 s). Handoffs and agent-run records are "
         "COMMITTED on $SB (the container is thrown away).")
+    close = (" After the merge, the runbook's Session close (session sync, the one docs-only PR "
+             "with the handoffs and records, reset of $SB only after that PR merged).")
     if arm == "A":
-        return (common + " Merge is tailrace's REST merge (`PUT .../merge -f merge_method=squash "
-                "-f sha=$SHA`); then the orchestrator's Session close from the runbook (session "
-                "sync, the one docs-only PR with handoffs and records, reset of $SB only after "
-                "that PR merged).")
+        return common + " Merge is tailrace's REST merge (above);" + close
+    if ARM_B_SELF_MERGES:
+        return common + close + " You are the session, so the Session close is yours."
     return (common + " Do NOT merge. Commit the handoff and the `agents record` file on $SB, push, "
             "and stop with the PR open and its check-runs reported.")
 
@@ -527,9 +690,11 @@ def _cloud_cost_note(arm: str) -> str:
         "(tokens, cache, tool calls, timestamps) taken at sign-off"
         + ("; it does NOT include the crew subagents' tokens, so for arm A it is a floor"
            if arm == "A" else "")
-        + ". `trial collect` stores it with cost_basis=recorded-snapshot and `trial status` keeps "
-        "it out of the cost comparison. The owner can supply the true figure from the session's "
-        "final usage with `watermill trial collect --cost-usd <bead>=<usd>`.")
+        + ". `trial collect` stores it with cost_basis=recorded-snapshot; cost is compared on "
+        "laptop beads only, so `trial status` keeps it out of the cost comparison (duration, CI, "
+        "landing and escapes still count). The owner may record the true figure from the "
+        "session's final usage with `watermill trial collect --cost-usd <bead>=<usd>`; it is "
+        "stored as owner-supplied (cost_basis=manual) and reported, not compared.")
 
 
 # -- collect ---------------------------------------------------------------
@@ -638,6 +803,7 @@ def _pr_outcome(gh, number: int) -> dict:
 
     owner = sum(1 for c in commits if len(c.get("parents") or [0]) <= 1 and not by_agent(c))
     return {"pr_number": number, "landed": bool(merged_at), "landed_at": merged_at,
+            "landed_sha": pr.get("merge_commit_sha") if merged_at else None,
             "first_push_ci_green": first_green, "owner_corrections": owner}
 
 
@@ -649,6 +815,9 @@ def collect(root: Path, registry: Registry, *, sessions_dir: Path, gh_for=GitHub
     ledger = read_ledger(root)
     starts = started(ledger)
     existing = latest(read_results(root), "collect")
+    unknown = sorted(set(manual_cost or {}) - set(enrolled(ledger)))
+    if unknown:
+        raise TrialError(f"--cost-usd for bead(s) not in the trial: {', '.join(unknown)}")
     clock = now if now is not None else time.time()
     session_use: dict[str, list[str]] = {}
     for s in starts.values():
@@ -664,18 +833,29 @@ def collect(root: Path, registry: Registry, *, sessions_dir: Path, gh_for=GitHub
         recs = _recorded_rows(project.path, bead)
         facts, why = _session_outcome(sessions_dir, starts.get(bead, {}), recs, settle, clock)
         if facts is None:
+            if manual_cost and bead in manual_cost:
+                why += " (the --cost-usd figure was NOT stored: re-run collect when it is ready)"
             waiting.append((bead, why))
             continue
         notes = []
         if len(session_use.get(starts.get(bead, {}).get("session_id"), [])) > 1:
             notes.append("session holds several trial beads: cost not attributable")
             facts["cost_usd_est"], facts["cost_basis"] = None, "none"
+        before = existing.get(bead)
         if manual_cost and bead in manual_cost:
-            facts["cost_usd_est"], facts["cost_basis"] = manual_cost[bead], "manual"
+            facts["cost_usd_est"], facts["cost_basis"] = float(manual_cost[bead]), "manual"
+        elif before and before.get("cost_basis") == "manual":
+            # an owner-supplied figure stays until the owner supplies another: a later
+            # collect must not silently put the snapshot back
+            facts["cost_usd_est"], facts["cost_basis"] = before["cost_usd_est"], "manual"
+        if facts.get("cost_basis") == "manual":
+            facts["cost_supplied_by"] = "owner"
+            notes.append("cost_usd_est supplied by the owner (--cost-usd), not read from a "
+                         "cost-state line")
         number = (prs or {}).get(bead) or next(
             (r["detail"]["pr_number"] for r in reversed(recs)
              if r["detail"].get("pr_number")), None)
-        pr = {"pr_number": None, "landed": False, "landed_at": None,
+        pr = {"pr_number": None, "landed": False, "landed_at": None, "landed_sha": None,
               "first_push_ci_green": None, "owner_corrections": None}
         if number:
             try:
@@ -690,7 +870,6 @@ def collect(root: Path, registry: Registry, *, sessions_dir: Path, gh_for=GitHub
         row = {"type": "collect", "bead": bead, "repo": repo, "arm": enr["arm"],
                "session_id": sid, "surface": starts.get(bead, {}).get("surface"),
                **facts, **pr, "notes": notes}
-        before = existing.get(bead)
         if before and {k: v for k, v in before.items() if k != "collected_at"} == row:
             continue  # nothing changed since the last collect
         new.append({**row, "collected_at": stamp or _now()})
@@ -733,27 +912,41 @@ defect. Findings you cannot trace to this change within the window do not count.
 
 def scorepack(root: Path, tracker_for=None, registry: Registry | None = None,
               today: datetime | None = None) -> str:
-    """The blind scorer's prompt: beads and the rubric, no arm, no label, no ledger."""
+    """The blind scorer's prompt: beads and the rubric, no arm, no label, no ledger.
+
+    Each bead's block is built from fields both arms share in form (id, repo,
+    landing commit and date, title, description), so two beads with the same text
+    give the same block whatever their arm. The PR number is left out on purpose:
+    the PR page shows the branch, the per-commit history (sluice fixups, crew run
+    records) and the authors. The scorer works on `origin/main` with
+    `BLIND_PATHSPEC`, which hides handoffs, run records, findings and `.beads/`.
+    """
     reg = registry or Registry.load(root)
     blocks = []
     for row in due_for_scoring(root, today=today):
         project = reg.get(row["repo"])
         task = (tracker_for or Tracker)(project.path).show(row["bead"]) or {}
         blocks.append(
-            f"### {row['bead']}\nRepo: {project.path}\nPull request: #{row.get('pr_number')}\n"
+            f"### {row['bead']}\nRepo: {project.path}\n"
+            f"Landed commit on main: {row.get('landed_sha') or 'unknown (find it by date)'}\n"
             f"Landed: {(row.get('landed_at') or '')[:10]}\nTitle: {task.get('title', '')}\n\n"
             f"{task.get('description', '')}\n")
     if not blocks:
         return ""
     return (
-        "You are scoring landed pull requests for defects that escaped into the code after "
-        "they merged. For each bead below, work only in its repo (git log, git show, git diff, "
-        "`bd list`/`bd search`/`bd show` for bug beads that cite it) and look for escapes in "
+        "You are scoring landed changes for defects that escaped into the code after "
+        "they merged. For each bead below, work only in its repo and look for escapes in "
         "the 14 days after the landing date.\n\n" + RUBRIC + "\n\n"
-        "Use only evidence about the DEFECT: the bead text, the landed diff, later commits, "
-        "reverts and bug beads. Do not read handoff notes, run records, "
-        "or bead labels and comments, and do not try to work out who or what produced the change; "
-        "that must not influence a score.\n\n"
+        "How to look, and what not to look at:\n"
+        "- Read history on `origin/main` only, and ALWAYS limit git to this pathspec: "
+        f"`git log origin/main {BLIND_PATHSPEC}` (and the same for `git show`, `git diff`, "
+        "`git log -S`). Those excluded paths hold notes and records about how the work was "
+        "done; they are not the work and must not influence a score.\n"
+        "- Do not open the pull requests, branches or commit authors on GitHub, and do not "
+        "run `bd show` on the beads listed below (their text is given here). Find bug beads "
+        "with `bd search <bead id>` / `bd list`, and read those.\n"
+        "- Use only evidence about the DEFECT: the bead text, the landed diff, later commits, "
+        "reverts and bug beads. Do not try to work out who or what produced the change.\n\n"
         "Reply with one JSON object per line, per bead, nothing else:\n"
         '{"bead": "<id>", "escapes": [{"severity": "blocker|bug|test-gap|quality", "kind": '
         '"bug-bead|revert|fix-commit|other", "ref": "<bead id, PR or sha>", "days_after": <int>, '
@@ -823,7 +1016,30 @@ def _cont(label: str, values: dict[str, list[float]], show_p: bool) -> dict:
     return out
 
 
-def status(root: Path) -> dict:
+def _sensitivity(enr: dict, collected: dict, scores: dict, when: datetime) -> tuple[dict, dict]:
+    """Section 4's sensitivity population: every scored bead, plus every bead enrolled at
+    least SENSITIVITY_LAND_DAYS ago that did not land within that many days of enrolment,
+    which counts as a failure (as does a scored bead with a bug-or-worse escape)."""
+    k, n = dict.fromkeys(ARMS, 0), dict.fromkeys(ARMS, 0)
+    limit = timedelta(days=SENSITIVITY_LAND_DAYS)
+    for bead, row in enr.items():
+        arm = row["arm"]
+        got = collected.get(bead) or {}
+        enrolled_at, landed_at = _parse(row.get("enrolled_at")), _parse(got.get("landed_at"))
+        late = (enrolled_at is not None and when - enrolled_at >= limit
+                and (landed_at is None or landed_at - enrolled_at > limit))
+        final = scores.get(bead) if got.get("landed") and bead in scores and not scores[
+            bead].get("early") else None
+        if late:
+            n[arm] += 1
+            k[arm] += 1
+        elif final is not None:
+            n[arm] += 1
+            k[arm] += any(e["severity"] in PRIMARY_SEVERITIES for e in final["escapes"])
+    return k, n
+
+
+def status(root: Path, *, today: datetime | None = None) -> dict:
     ledger = read_ledger(root)
     enr, starts = enrolled(ledger), started(ledger)
     results = read_results(root)
@@ -863,33 +1079,49 @@ def status(root: Path) -> dict:
         return {a: [float(r[field]) for r in rows_arm[a] if r.get(field) is not None
                     and (basis is None or r.get("cost_basis") in basis)] for a in ARMS}
 
+    sens_k, sens_n = _sensitivity(enr, collected, scores, today or datetime.now(UTC))
     metrics = {
         "primary": _prop("beads with an escaped bug-or-worse defect (landed, scored)",
                          primary_k, primary_n, show_p),
+        "sensitivity": _prop(f"escape OR not landed within {SENSITIVITY_LAND_DAYS} days of "
+                             "enrolment (sensitivity, not confirmatory)", sens_k, sens_n, show_p),
         "secondary": [
-            _cont("cost_usd_est (cost-state / manual only)",
-                  vals("cost_usd_est", ("cost-state", "manual")), show_p),
+            _cont(f"cost_usd_est (laptop beads only: cost_basis {'/'.join(COMPARED_COST_BASES)})",
+                  vals("cost_usd_est", COMPARED_COST_BASES), show_p),
             _cont("duration_seconds", vals("duration_seconds"), show_p),
             _prop("first-push CI green", ci_k, ci_n, show_p),
             _prop("landed", landed_k, landed_n, show_p),
         ]}
-    snapshots = sum(1 for r in collected.values() if r.get("cost_basis") == "recorded-snapshot")
+    excluded: dict[str, int] = {}
+    for r in collected.values():
+        if r.get("cost_basis") not in COMPARED_COST_BASES:
+            basis = r.get("cost_basis") or "none"
+            excluded[basis] = excluded.get(basis, 0) + 1
     return {"per_arm": per_arm, "stage": stage, "metrics": metrics,
-            "cost_snapshots_excluded": snapshots,
+            "ledger_problems": ledger_problems(ledger),
+            "cost_compared_bases": list(COMPARED_COST_BASES),
+            "cost_excluded_by_basis": excluded,
+            "cost_snapshots_excluded": excluded.get("recorded-snapshot", 0),
             "seed": master_seed(ledger), "escape_window_days": ESCAPE_WINDOW_DAYS}
 
 
 def render_status(s: dict) -> str:
     lines = [f"Trial status: stage {s['stage']} (interim at {INTERIM_N} scored per arm, final at "
              f"{FINAL_N}; no stopping on p-values)", ""]
+    for problem in s.get("ledger_problems") or []:
+        lines.append(f"LEDGER INCONSISTENT: {problem}")
+    if s.get("ledger_problems"):
+        lines += ["  (protocol failure: enroll/start/brief refuse until the owner resolves it; "
+                  "docs/TRIAL.md section 6)", ""]
     lines.append(f"{'':<6}{'enrolled':>9}{'started':>9}{'in prog.':>9}{'collected':>10}"
                  f"{'landed':>8}{'scored':>8}")
     for a, r in s["per_arm"].items():
         lines.append(f"arm {a:<2}{r['enrolled']:>9}{r['started']:>9}{r['in_progress']:>9}"
                      f"{r['collected']:>10}{r['landed']:>8}{r['scored']:>8}")
     lines.append("")
-    for m in [s["metrics"]["primary"], *s["metrics"]["secondary"]]:
-        tag = "PRIMARY " if m is s["metrics"]["primary"] else "secondary"
+    for m in [s["metrics"]["primary"], s["metrics"]["sensitivity"], *s["metrics"]["secondary"]]:
+        tag = ("PRIMARY " if m is s["metrics"]["primary"] else
+               "sensitiv." if m is s["metrics"]["sensitivity"] else "secondary")
         n = f"n A={m['n']['A']} B={m['n']['B']}"
         if "rate" in m:
             body = f"A {m['rate']['A']:.0%} vs B {m['rate']['B']:.0%}"
@@ -900,9 +1132,12 @@ def render_status(s: dict) -> str:
         p = f"  p={m['p_value']}" if m["p_value"] is not None else ""
         note = f"  [{m['note']}]" if m["note"] else ""
         lines.append(f"{tag}  {m['metric']}: {n}  {body}{p}{note}")
-    if s["cost_snapshots_excluded"]:
-        lines.append(f"\n{s['cost_snapshots_excluded']} bead(s) have only a recorded-snapshot "
-                     "cost (cloud): excluded from the cost comparison, see docs/TRIAL.md.")
+    lines.append("\nCost is compared on laptop beads only (the session's own final cost-state); "
+                 "cloud beads keep duration, CI, landing and escapes.")
+    if s["cost_excluded_by_basis"]:
+        parts = ", ".join(f"{n} {b}" for b, n in sorted(s["cost_excluded_by_basis"].items()))
+        lines.append(f"Excluded from the cost comparison: {parts} (manual = owner-supplied, "
+                     "reported descriptively; see docs/TRIAL.md section 8).")
     return "\n".join(lines) + "\n"
 
 
