@@ -22,6 +22,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from . import (
+    agentcompare,
     agentlog,
     crewlog,
     knowledge,
@@ -875,6 +876,8 @@ def cmd_agents(args) -> int:
     is reported, never an error.
     """
     root = factory_root(args.root)
+    if args.action == "compare":
+        return _compare(root, args)
     records, missing = crewlog.collect(root)
     total = 0
     for project, found in sorted(records.items()):
@@ -891,6 +894,23 @@ def cmd_agents(args) -> int:
     if not args.no_sessions:
         total += _sweep_sessions(root, args, records)
     print(f"{'dry run -- nothing written; ' if args.dry_run else ''}{total} record(s) new")
+    return 0
+
+
+def _compare(root: Path, args) -> int:
+    """`agents compare`: two groups, metric by metric; see agentcompare."""
+    if bool(args.kind) != bool(args.vs):
+        print("--kind and --vs go together (or give neither for the default comparisons)",
+              file=sys.stderr)
+        return 2
+    pairs = [(args.kind, args.vs)] if args.kind else None
+    result = agentcompare.compare(
+        root, pairs, since=args.since, min_n=args.min_n,
+        include_inferred=args.include_inferred, seed=args.seed)
+    if args.json:
+        print(json.dumps(result, indent=2))
+    else:
+        print(agentcompare.render(result), end="")
     return 0
 
 
@@ -1122,8 +1142,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_publish)
 
     p = sub.add_parser("agents", help="agent performance log (runs/agents.jsonl)")
-    p.add_argument("action", choices=["sweep"],
-                   help="sweep: backfill mill crew history from handoffs and bead JSONL")
+    p.add_argument("action", choices=["sweep", "compare"],
+                   help="sweep: backfill mill crew history from handoffs and bead JSONL; "
+                        "compare: crew vs other agents with honest statistics")
+    p.add_argument("--since", metavar="DATE", help="compare: only work ended on/after YYYY-MM-DD")
+    p.add_argument("--kind", help="compare: group A: crew, crew:<role>, subagent, session or an "
+                                  "exact agent_kind (default: crew vs subagent, crew vs session)")
+    p.add_argument("--vs", help="compare: group B (same names as --kind)")
+    p.add_argument("--min-n", type=int, default=agentcompare.DEFAULT_MIN_N,
+                   help="compare: fewest usable values per group before a p-value is printed "
+                        "(default %(default)s; do not lower it to get a result)")
+    p.add_argument("--include-inferred", action="store_true",
+                   help="compare: keep values parsed from prose (fields_inferred)")
+    p.add_argument("--seed", type=int, default=0, help="compare: bootstrap seed (default 0)")
+    p.add_argument("--json", action="store_true", help="compare: machine-readable output")
     p.add_argument("--dry-run", action="store_true",
                    help="count what would be appended, write nothing")
     p.add_argument("--sessions-dir", default=sessionlog.DEFAULT_DIR,
