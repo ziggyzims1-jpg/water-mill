@@ -30,7 +30,7 @@
       "id": 1,
       "type": "timeseries",
       "title": "Records per kind per week",
-      "description": "Count of agents.jsonl records by bucketed agent_kind (mill-crew, session, subagent, other), filed on the day the work ended. Unlanded crew beads are not shipped, so they are not counted. Compares nothing field-level, so nothing is excluded beyond that.",
+      "description": "Count of agents.jsonl records by bucketed agent_kind (mill-crew, session, subagent, other), filed on the day the work ended (7-day rolling window). mill-crew counts ONLY the handoff record (one per bead): EXCLUDES transcript records of crew role runs (detail.crew_key links them to the bead), so a bead is not counted once per millstone/sluice/tailrace run. Unlanded crew beads are not shipped, so they are not counted.",
       "datasource": {
         "type": "loki",
         "uid": "${datasource}"
@@ -54,7 +54,17 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "sum by (agent_kind) (count_over_time({job=\"watermill\", source=\"agent\"}[7d]))",
+          "expr": "sum by (agent_kind) (count_over_time({job=\"watermill\", source=\"agent\", agent_kind!=\"mill-crew\"}[7d]))",
+          "legendFormat": "{{agent_kind}}",
+          "queryType": "range"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (agent_kind) (count_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | source_extracted=\"handoff\" [7d]))",
           "legendFormat": "{{agent_kind}}",
           "queryType": "range"
         }
@@ -88,7 +98,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "sum(count_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | outcome=\"landed\" [7d]))",
+          "expr": "sum(count_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | source_extracted=\"handoff\" | outcome=\"landed\" [7d]))",
           "legendFormat": "landed",
           "queryType": "range"
         }
@@ -98,7 +108,7 @@
       "id": 3,
       "type": "timeseries",
       "title": "Sluice rounds per bead (weekly mean)",
-      "description": "Mean detail.sluice_rounds over mill-crew beads shipped that week. Crew only. Counted from handoff notes (the Sluice sections); beads with no note section count 0.",
+      "description": "Mean and max detail.sluice_rounds over mill-crew beads shipped that week (7-day rolling window). Crew only, handoff records only. Counted from handoff notes (the Sluice sections); beads with no Sluice section count 0. Grouped by agent_kind so it is one series, not one per bead.",
       "datasource": {
         "type": "loki",
         "uid": "${datasource}"
@@ -122,7 +132,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "avg_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | detail_sluice_rounds != \"\" | unwrap detail_sluice_rounds | __error__=\"\" [7d])",
+          "expr": "avg_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | source_extracted=\"handoff\" | detail_sluice_rounds != \"\" | unwrap detail_sluice_rounds | __error__=\"\" [7d]) by (agent_kind)",
           "legendFormat": "mean rounds",
           "queryType": "range"
         },
@@ -132,7 +142,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "max_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | detail_sluice_rounds != \"\" | unwrap detail_sluice_rounds | __error__=\"\" [7d])",
+          "expr": "max_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | source_extracted=\"handoff\" | detail_sluice_rounds != \"\" | unwrap detail_sluice_rounds | __error__=\"\" [7d]) by (agent_kind)",
           "legendFormat": "max rounds",
           "queryType": "range"
         }
@@ -176,7 +186,7 @@
       "id": 5,
       "type": "timeseries",
       "title": "Cost and tokens by kind (weekly sums)",
-      "description": "Sum of cost_usd and of detail.tokens_total per bucketed kind. EXCLUDES records where the field is null or absent (cost is null on all mill-crew records for now; tokens_total is only present on kinds built from transcripts, once those ship it). A kind with no line has no data, not zero spend.",
+      "description": "Sum of cost_usd, detail.input_tokens and detail.output_tokens per bucketed kind (7-day rolling window). EXCLUDES records where the field is null or absent: cost is null on every mill-crew handoff record; token counts exist only on transcript records (sessions, subagents, and crew role runs). Cache tokens (detail.cache_creation_tokens, detail.cache_read_tokens) are EXCLUDED. A kind with no line has no data, not zero spend.",
       "datasource": {
         "type": "loki",
         "uid": "${datasource}"
@@ -210,8 +220,18 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "sum by (agent_kind) (sum_over_time({job=\"watermill\", source=\"agent\"} | json | detail_tokens_total != \"\" | unwrap detail_tokens_total | __error__=\"\" [7d]))",
-          "legendFormat": "tokens {{agent_kind}}",
+          "expr": "sum by (agent_kind) (sum_over_time({job=\"watermill\", source=\"agent\"} | json | detail_input_tokens != \"\" | unwrap detail_input_tokens | __error__=\"\" [7d]))",
+          "legendFormat": "input tokens {{agent_kind}}",
+          "queryType": "range"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (agent_kind) (sum_over_time({job=\"watermill\", source=\"agent\"} | json | detail_output_tokens != \"\" | unwrap detail_output_tokens | __error__=\"\" [7d]))",
+          "legendFormat": "output tokens {{agent_kind}}",
           "queryType": "range"
         }
       ]
@@ -219,8 +239,8 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Crew keep rate (landed without sluice fixes)",
-      "description": "Of mill-crew beads that went through a Sluice review (detail.sluice_pushed_fixes is true or false), the share landed with no fixes pushed. EXCLUDES beads with no Sluice section (field null) and rests on an inferred field (fields_inferred lists detail.sluice_pushed_fixes), so treat it as indicative. Crew only.",
+      "title": "Crew first-pass approval rate (one Sluice round, no fixes)",
+      "description": "NOT the keep rate of docs/OBSERVABILITY.md (completed tasks / all tasks). Of landed mill-crew beads that went through a Sluice review (detail.sluice_pushed_fixes is true or false), the share that landed after exactly one Sluice round (detail.sluice_rounds = 1) with no fixes pushed by Sluice. EXCLUDES beads with no Sluice section (field null) and transcript records; rests on inferred fields (fields_inferred lists detail.sluice_pushed_fixes), so treat it as indicative. Crew only.",
       "datasource": {
         "type": "loki",
         "uid": "${datasource}"
@@ -244,8 +264,8 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "sum(count_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | outcome=\"landed\" | detail_sluice_pushed_fixes=\"false\" [7d])) / sum(count_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | outcome=\"landed\" | detail_sluice_pushed_fixes=~\"true|false\" [7d]))",
-          "legendFormat": "keep rate",
+          "expr": "sum(count_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | source_extracted=\"handoff\" | outcome=\"landed\" | detail_sluice_rounds=\"1\" | detail_sluice_pushed_fixes=\"false\" [7d])) / sum(count_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | source_extracted=\"handoff\" | outcome=\"landed\" | detail_sluice_pushed_fixes=~\"true|false\" [7d]))",
+          "legendFormat": "first-pass approval rate",
           "queryType": "range"
         }
       ]

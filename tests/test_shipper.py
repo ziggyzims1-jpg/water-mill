@@ -387,18 +387,52 @@ def _exprs():
     return [t["expr"] for panel in data["panels"] for t in panel["targets"]]
 
 
-def test_dashboard_queries_use_only_labels_the_shipper_emits():
+#: Every stream label an agent line carries, read off a real payload rather than
+#: ALLOWED_LABELS: `outcome` and `env` are allowed labels but no agent stream has
+#: them, so a selector on them would silently match nothing.
+_MATCHER = r"(\w+)\s*(=~|!~|!=|=)\s*\""
+
+
+def _agent_stream_labels(tmp_path):
+    _agent(tmp_path)
+    payload = shipper.ship(tmp_path, dry_run=True)["payload"]
+    return {k for s in payload["streams"] for k in s["stream"]}
+
+
+def _check_dashboard_labels(exprs, emitted):
+    for expr in exprs:
+        selectors = re.findall(r"\{([^{}]*)\}", expr)
+        assert selectors, expr
+        for selector in selectors:
+            matchers = re.findall(_MATCHER, selector)
+            # every comma-separated matcher was parsed, whatever its operator
+            assert len(matchers) == len([m for m in selector.split(",") if m.strip()]), selector
+            assert {k for k, _ in matchers} <= emitted, (expr, matchers)
+            assert ("source", "=") in matchers, expr
+        for group in re.findall(r"\b(?:by|without)\s*\(([^)]*)\)", expr):
+            for key in (k.strip() for k in group.split(",") if k.strip()):
+                assert key in emitted, (expr, key)
+
+
+def test_dashboard_queries_use_only_labels_the_shipper_emits(tmp_path):
+    emitted = _agent_stream_labels(tmp_path)
+    assert emitted == {"job", "project", "source", "agent_kind"}
     exprs = _exprs()
     assert exprs
+    _check_dashboard_labels(exprs, emitted)
     for expr in exprs:
-        for selector in re.findall(r"\{([^{}]*)\}", expr):
-            keys = re.findall(r"(\w+)\s*=~?\s*\"", selector)
-            assert keys, selector
-            assert set(keys) <= shipper.ALLOWED_LABELS, (expr, keys)
-        for group in re.findall(r"by \(([^)]*)\)", expr):
-            for key in (k.strip() for k in group.split(",")):
-                assert key in shipper.ALLOWED_LABELS, (expr, key)
         assert 'source="agent"' in expr
+
+
+@pytest.mark.parametrize("bad", [
+    '{job="watermill", source="agent", bogus!="x"}[7d]',     # negative matcher
+    '{job="watermill", source="agent", outcome="landed"}[7d]',  # allowed, never on agents
+    'sum by(bogus) (count_over_time({job="watermill", source="agent"}[7d]))',
+    'sum without (bogus) (count_over_time({job="watermill", source="agent"}[7d]))',
+])
+def test_the_dashboard_label_check_catches_an_unknown_label(tmp_path, bad):
+    with pytest.raises(AssertionError):
+        _check_dashboard_labels([bad], _agent_stream_labels(tmp_path))
 
 
 def test_dashboard_label_values_are_in_the_closed_set():
@@ -412,5 +446,46 @@ def test_dashboard_panels_say_what_they_exclude():
     assert data["templating"]["list"][0]["type"] == "datasource"
     for panel in data["panels"]:
         assert panel["datasource"]["uid"] == "${datasource}"
-        if "duration" in panel["title"] or "Cost" in panel["title"] or "keep" in panel["title"]:
+        if any(w in panel["title"] for w in ("duration", "Cost", "approval", "Records")):
             assert "EXCLUDES" in panel["description"], panel["title"]
+
+
+def test_the_dashboard_does_not_call_a_second_metric_keep_rate():
+    # docs/OBSERVABILITY.md defines keep rate (completed / all tasks); one name,
+    # one meaning.
+    for panel in json.loads(DASHBOARD.read_text())["panels"]:
+        assert "keep rate" not in panel["title"].lower()
+        for target in panel["targets"]:
+            assert "keep" not in target["legendFormat"].lower()
+
+
+def test_unwrapped_crew_aggregations_are_grouped_not_one_series_per_bead():
+    # `| json` makes every record its own label set; an unwrapped range
+    # aggregation with no `by` returns one series per bead, not a mean.
+    for expr in _exprs():
+        for fn in ("avg_over_time", "max_over_time", "quantile_over_time"):
+            for tail in expr.split(fn + "(")[1:]:
+                assert re.search(r"\[7d\]\)\s*by\s*\(", tail), expr
+
+
+def test_a_line_older_than_its_stream_already_holds_is_filed_at_the_floor(tmp_path, send):
+    rec = send()
+    _agent(tmp_path, key="crew:new", ended_at="2026-09-10T00:00:00+00:00")
+    shipper.ship(tmp_path, url="http://loki:3100")
+    # a bead that ended earlier lands later, into the same stream
+    _agent(tmp_path, key="crew:old", ended_at="2026-09-01T00:00:00+00:00")
+    shipper.ship(tmp_path, url="http://loki:3100")
+    stamp, line = rec.payload["streams"][0]["values"][0]
+    assert int(stamp) == int(shipper.to_nanos("2026-09-10T00:00:00+00:00"))
+    assert json.loads(line)["ended_at"] == "2026-09-01T00:00:00+00:00"   # truth kept in the line
+    # a fresh stream is not floored by another stream's mark
+    _agent(tmp_path, key="s:1", kind="session", ended_at="2026-08-01T00:00:00+00:00")
+    shipper.ship(tmp_path, url="http://loki:3100")
+    assert rec.payload["streams"][0]["values"][0][0] == shipper.to_nanos("2026-08-01T00:00:00+00:00")
+
+
+def test_a_malformed_agents_or_newest_mark_does_not_crash(tmp_path, send):
+    send()
+    _agent(tmp_path)
+    (tmp_path / shipper.STATE_FILENAME).write_text('{"agents": 3, "newest": "x"}')
+    assert shipper.ship(tmp_path, url="http://loki:3100")["shipped"] == 1

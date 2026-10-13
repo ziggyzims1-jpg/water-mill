@@ -145,30 +145,54 @@ Rules that make it trustworthy:
 
 ## Shipping agent work to Loki (`source="agent"`)
 
+**Before the first ship after this lands, raise `reject_old_samples_max_age` on
+the Loki side** (`limits_config`, default 1 week; it must exceed the age of the
+oldest record in `runs/agents.jsonl`, months for the crew backfill). Agent lines
+are filed at the work's end, so with the default Loki answers 400 to the
+backfill, the mark does not move, and **every** later `watermill ship` fails on
+the same lines -- runs and tasks included, since they go in the same push. Run
+`watermill ship --dry-run` first to see the oldest timestamp you are about to
+send.
+
 `watermill ship` also sends `runs/agents.jsonl`, and `docs/grafana/agent-performance.json`
-is an importable dashboard over it (Grafana: Dashboards, Import, upload the file;
-the Loki datasource is a variable you pick on import).
+is an importable dashboard over it (Grafana: Dashboards, Import, upload the
+file; the Loki datasource is the dashboard's `datasource` variable, picked from
+the drop-down at the top of the dashboard).
 
 - **Labels.** `job`, `project`, `source="agent"` and `agent_kind`, bucketed to a
   closed set: `mill-crew`, `session`, `subagent`, `other` (anything unknown). The
   full kind (`subagent:builder`) stays in the line. `key` and every per-record
-  value are refused as labels, as before.
+  value are refused as labels, as before. The record's own `source`
+  (`handoff`, `transcript`) collides with the stream label, so after `| json`
+  it is `source_extracted`.
 - **Timestamp is the work's end**: `ended_at`, else `detail.landed_at`, else
   `started_at`; `recorded_at` (sweep time) only as a last resort. History lands
-  on the day it happened. Loki rejects samples older than `reject_old_samples_max_age`
-  (default 1 week), so the first backfill needs that raised on the Loki side.
+  on the day it happened -- except a line older than the newest its stream
+  already holds in Loki (a bead that lands after a newer one, transcript
+  records backfilled into the `mill-crew` stream). That line is filed at the
+  stream's newest instant instead, because Loki refuses it otherwise; its JSON
+  keeps the true `ended_at`. The per-stream newest instant is `newest` in
+  `runs/.shipped.json`.
 - **The mark is per key, not a line count.** `agents.jsonl` re-appends a record
   whose content changed, so line N is not stable work. The shipper folds with
   `agentlog.read()` and records shipped keys in `runs/.shipped.json` under
   `agents`; a key ships once. A `mill-crew` record with `outcome="unlanded"` is
-  held back until it lands, so one bead is never two works. A shipped record
-  that later changes is not re-sent (`--resend` after a rebuild). State files
-  without `agents` ship everything once; the `runs`/`tasks` marks are untouched.
-- **Panels say what they exclude.** `cost_usd` and `duration_seconds` are null on
-  every crew record today, so the duration and cost panels draw no crew line and
-  are empty, not zero. The tokens series reads `detail.tokens_total`, which no
-  schema-v1 kind emits yet (it is there for transcript-built kinds); confirm the
-  name when they ship it. The keep-rate panel uses inferred fields.
+  held back until it lands, so one bead is never two works (an abandoned bead
+  therefore never reaches Loki). A shipped record that later changes is not
+  re-sent (`--resend` after a rebuild). State files without `agents` ship
+  everything once; the `runs`/`tasks` marks are untouched. The key list grows by
+  one short string per piece of work, forever; `runs/` is not committed.
+- **Panels say what they exclude.** Crew outcome panels read only handoff
+  records (`source_extracted="handoff"`), one per bead; transcript records of
+  crew role runs are excluded from counts so a bead is not counted three times.
+  `cost_usd` and `duration_seconds` are null on every crew handoff record, so
+  the crew duration/cost lines come only from transcript records, if any; an
+  empty line is no data, not zero. Tokens read `detail.input_tokens` and
+  `detail.output_tokens` from the transcript sweep (cache tokens excluded).
+- **"First-pass approval rate" is not the keep rate.** The keep rate above is
+  completed tasks over all tasks. The crew panel is: landed crew beads with
+  exactly one Sluice round and no Sluice-pushed fixes, over landed crew beads
+  that had a Sluice review. It rests on fields parsed from handoff prose.
 
 ## What this does not cover
 
