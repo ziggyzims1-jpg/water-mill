@@ -295,6 +295,23 @@ outside.
   go stale (the "Settings tab" wording survived the move until the reviewer
   caught it). 229 findings now name the cell.
 
+- **`hillel-programming` round eleven (2026-10-13).** Five beads, five pull
+  requests, three millstones at once and then two. Three tabs: Shabbat
+  Sign-ups for every signed-in role (the first routes `interns` and `gboard`
+  may call, under a new `any_login_required`), Previous Engagements and a
+  Coffee Chat List for interns and admins, three tables, eleven routes, and a
+  "Send reminder" button that is deliberately dormant until SMTP is proven
+  (hpt-qt8.6, deferred, with the owner's decisions listed). Every review
+  found something the suite let through: a `date.today()` bypass passes
+  when the frozen day is the real day, a broken MIGRATIONS entry passes
+  because SCHEMA built the table first, a reload that reads the filter at
+  POST time rather than reload time. Each is now a test in the cell and a
+  finding here, and the migration one became a bead for a generic check
+  (hpt-qt8.8). The cell has no `main`: the contract's base branch is the
+  session's branch, landings go through the GitHub MCP tools on the exact
+  head sha, and the graph commits sit on water-mill's session branch too.
+  263 findings now name the cell.
+
 ## Counters
 
 Every number that should be climbing and is currently zero.
@@ -310,7 +327,7 @@ Every number that should be climbing and is currently zero.
 | Cells sold | **0** |
 | Tasks with a recorded root cause | **0** -- the gap that matters |
 | Contract notes carried into a prompt | **0** |
-| Findings in the context graph | **444** |
+| Findings in the context graph | **479** |
 | Recall calls made by a real agent | **1** (run `20260830-090740`) |
 | Monthly knowledge sweeps recorded | **0** |
 | Tier-1 tasks queued and ready | **48** |
