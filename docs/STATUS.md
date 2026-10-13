@@ -143,9 +143,12 @@ outside.
 
 - **`cheme-solver` registered (2026-10-13), vendored contract.** Already crewed
   (18 mill handoffs, 57 transcript runs) but unregistered until the owner asked;
-  contract in `projects/cheme-solver.yaml`, gate `make verify`, no CI of its own.
-  Fence covers deploy files and runbooks, auth/config/db/migrations and env
-  files. Registering links 53 more crew transcripts to beads (67 to 120).
+  contract in `projects/cheme-solver.yaml`, gate `make verify`. **No CI**, so
+  the contract declares no `review` block and `watermill land` refuses for it:
+  `gh pr checks` there always answers "no checks reported" (exit 1), which
+  `land` would report as a failed verify after already opening the PR.
+  Landing is supervised, on a local `make verify` of the branch. Fence covers
+  deploy files and runbooks, auth/config/db/migrations and env files. Registering links 53 more crew transcripts to beads (67 to 120).
 
 - **The third registered project is `hillel-programming` (2026-10-06).** Hillel
   Program Tracker, stamped from the cell template and built in one session

@@ -34,10 +34,22 @@ git:
   target: branch
   remote: origin
 
-review:
-  create: gh pr create --base {base} --head {branch} --title {title} --body {body}
-  verify: gh pr checks {branch} --watch --fail-fast
-  merge: gh pr merge {branch} --squash --delete-branch
+# No `review` block, on purpose: cheme-solver has no CI (.github/workflows/
+# does not exist), so the zim-dashboard verify step `gh pr checks {branch}
+# --watch --fail-fast` can never go green here. It exits 1 at once with "no
+# checks reported on the '<branch>' branch" (--watch does not wait for checks
+# that never register), `watermill land` retries it for its 90 s settle window,
+# then reports a failed verify and never merges -- after `create` has already
+# opened a pull request. Omitting the block makes `land` refuse up front
+# instead (exit 3, "declares no review.create"), which is the honest answer:
+# landing here is supervised -- sluice/tailrace run `make verify` on the branch
+# locally and a person or the lander merges. Restore this block, unchanged,
+# in the same PR that adds a workflow running `make verify`:
+#
+# review:
+#   create: gh pr create --base {base} --head {branch} --title {title} --body {body}
+#   verify: gh pr checks {branch} --watch --fail-fast
+#   merge: gh pr merge {branch} --squash --delete-branch
 
 queue:
   kind: beads
@@ -77,13 +89,18 @@ fence:
     - docs/DEPLOY-AZURE.md
     # CREDENTIAL / SECRET PATHS. Settings (invite code, cookie secure flag,
     # session days) come from environment variables in config.py; the real
-    # .env lives only on the host and is gitignored. Fence the reader, the
-    # password-hashing and session code, and the env files in case one is
-    # ever dropped in the tree.
+    # .env lives only on the host, at the checkout root (DEPLOY.md:
+    # `cp deploy/env.example .env`; the unit's EnvironmentFile). NOTE: the
+    # repo's .gitignore does NOT list .env, so the fence is the only thing
+    # keeping an agent's commit from carrying one. Fence the reader, the
+    # password-hashing and session code, and every env-file spelling.
+    # (The session check that enforces sign-in lives in app.py, which is
+    # left open because every new router is registered there.)
     - backend/cheme/config.py
     - backend/cheme/auth.py
     - backend/cheme/routes/auth.py
     - .env
+    - ".env.*"
     - "*.env"
     - .beads-credential-key
     # The schema: SQLite migrations are append-only and run against real
@@ -103,8 +120,11 @@ notes:
     No Gurobi licence or other licence file exists in the repo; the
     env-only rule for licences still applies if one is ever added.
   - >-
-    No .github/workflows/ yet, so `gh pr checks` has nothing to watch: the
-    review.verify step may find no checks. Local `make verify` is the gate.
+    No CI: there is no .github/workflows/, so a pull request here never has
+    checks and `gh pr checks` always fails with "no checks reported". That is
+    not a pass. The contract declares no review block, so `watermill land`
+    refuses; verify a branch by running `make verify` on it locally before
+    anyone merges.
 
 caps:
   max_tasks: 5
