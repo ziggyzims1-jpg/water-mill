@@ -59,12 +59,14 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 | `watermill/agentlog.py` | `runs/agents.jsonl`: one line per unit of agent work, any agent kind. The schema is its docstring |
 | `watermill/crewlog.py` | Mill crew history recovered from handoffs and bead JSONL, for `watermill agents sweep`. A reader |
 | `watermill/recorded.py` | An agent's own sign-off facts (`agents record`), one tracked line per run in `knowledge/agent-runs/`; the one record that survives a cloud container |
+| `watermill/trial.py` | The crew-vs-default-Claude trial: ledger, balanced randomisation, briefs, collect, blind scoring, status. Protocol and pre-registered analysis: `docs/TRIAL.md`. A reader of sessions and PRs, never part of a run |
 | `watermill/usage.py` | What agents asked the graph and what it could not answer. Never readable by an agent |
 | `watermill/land.py` | The pull request: create, verify, merge. Never part of a run |
 | `watermill/shipper.py` | Ships both to Loki. A reader, never part of a run |
 | `watermill/publish.py` | Assembles a status snapshot of every project and PUTs it to Zimmy. A reader, never part of a run; unknown is omitted, never zeroed |
 | `projects/` | Vendored contracts for projects that carry none yet |
 | `docs/calibration/` | One findings record per project. The method is `docs/CALIBRATION.md` |
+| `docs/TRIAL.md` | The trial protocol and its analysis plan, written before data. Amend only by dated amendment |
 | `docs/OBSERVABILITY.md` | Shipping to Loki, and the LogQL worth pinning |
 | `docs/KNOWLEDGE.md` | The context graph: why it is queried and never loaded, and the monthly sweep |
 | `docs/` | Contract spec, safety model, onboarding, calibration. **`STATUS.md` is where things actually are; `PLAN.md` is what is being built and why** |
