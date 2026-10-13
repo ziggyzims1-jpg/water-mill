@@ -260,3 +260,157 @@ def test_an_http_error_becomes_a_ShipError_carrying_the_status(tmp_path, send):
     with pytest.raises(shipper.ShipError) as exc:
         shipper.ship(tmp_path, url="http://loki:3100")
     assert "400" in str(exc.value)
+
+
+# -- agent records (runs/agents.jsonl) --------------------------------------
+
+
+import re  # noqa: E402
+
+from watermill import agentlog  # noqa: E402
+
+
+def _agent(root, key="crew:demo-1", kind="mill-crew", outcome="landed",
+           ended_at="2026-09-01T10:00:00+00:00", **over):
+    rec = agentlog.make_record(
+        key=key, agent_kind=kind, source="handoff", project="demo",
+        outcome=outcome, ended_at=ended_at,
+        detail={"sluice_rounds": 2, "landed_at": "2026-09-01"},
+    )
+    rec.update(over)
+    path = root / agentlog.AGENTLOG_FILENAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as fh:
+        fh.write(json.dumps(rec, sort_keys=True) + "\n")
+
+
+def test_agent_kind_is_bucketed_to_a_closed_set():
+    b = shipper.agent_kind_bucket
+    assert b("mill-crew") == "mill-crew" and b("session") == "session"
+    assert b("subagent:builder") == "subagent" and b("subagent") == "subagent"
+    assert b("brand-new-kind") == "other" and b(None) == "other"
+
+
+def test_an_agent_kind_outside_the_closed_set_is_refused_as_a_label():
+    with pytest.raises(shipper.ShipError):
+        shipper.build_payload([({"agent_kind": "subagent:builder"}, {"recorded_at": ""})])
+    # and a per-record label is still refused
+    with pytest.raises(shipper.ShipError):
+        shipper.build_payload([({"key": "crew:x"}, {"recorded_at": ""})])
+
+
+def test_agent_lines_are_filed_at_the_work_end_not_sweep_time():
+    row = {"recorded_at": "2026-10-13T00:00:00+00:00",
+           "ended_at": "2026-09-01T10:00:00+00:00"}
+    out = shipper.build_payload([({"source": "agent"}, row)])
+    assert out["streams"][0]["values"][0][0] == shipper.to_nanos("2026-09-01T10:00:00+00:00")
+    # a task still uses recorded_at
+    out = shipper.build_payload([({"source": "task"}, row)])
+    assert out["streams"][0]["values"][0][0] == shipper.to_nanos(row["recorded_at"])
+
+
+def test_agent_time_falls_back_to_landed_at_then_started_at():
+    row = {"recorded_at": "2026-10-13", "ended_at": None,
+           "detail": {"landed_at": "2026-09-02"}}
+    assert shipper.line_time({"source": "agent"}, row) == "2026-09-02"
+    row = {"recorded_at": "2026-10-13", "started_at": "2026-08-30"}
+    assert shipper.line_time({"source": "agent"}, row) == "2026-08-30"
+
+
+def test_agents_ship_with_bucketed_label_and_full_kind_in_the_line(tmp_path, send):
+    rec = send()
+    _agent(tmp_path, key="s:1", kind="subagent:builder")
+    _agent(tmp_path)
+    shipper.ship(tmp_path, url="http://loki:3100")
+    streams = {s["stream"]["agent_kind"]: s for s in rec.payload["streams"]}
+    assert set(streams) == {"mill-crew", "subagent"}
+    assert streams["subagent"]["stream"]["source"] == "agent"
+    assert json.loads(streams["subagent"]["values"][0][1])["agent_kind"] == "subagent:builder"
+
+
+def test_a_resweep_does_not_ship_a_work_twice(tmp_path, send):
+    send()
+    _agent(tmp_path)
+    assert shipper.ship(tmp_path, url="http://loki:3100")["shipped"] == 1
+    # same content, and a changed-content re-append of the same key
+    _agent(tmp_path)
+    _agent(tmp_path, title="renamed")
+    assert shipper.ship(tmp_path, url="http://loki:3100")["shipped"] == 0
+
+
+def test_unlanded_then_landed_ships_once_when_it_lands(tmp_path, send):
+    rec = send()
+    _agent(tmp_path, outcome="unlanded", ended_at=None)
+    assert shipper.ship(tmp_path, url="http://loki:3100")["shipped"] == 0
+    assert not rec.calls
+    _agent(tmp_path, outcome="landed")
+    assert shipper.ship(tmp_path, url="http://loki:3100")["shipped"] == 1
+    line = json.loads(rec.payload["streams"][0]["values"][0][1])
+    assert line["outcome"] == "landed"
+    assert shipper.ship(tmp_path, url="http://loki:3100")["shipped"] == 0
+
+
+def test_an_old_state_file_without_agents_still_works(tmp_path, send):
+    send()
+    _run(tmp_path)
+    shipper.ship(tmp_path, url="http://loki:3100")
+    state = shipper.read_state(tmp_path)
+    state.pop("agents", None)
+    shipper.write_state(tmp_path, state)
+    _agent(tmp_path)
+    summary = shipper.ship(tmp_path, url="http://loki:3100")
+    assert summary["shipped"] == 1          # the run/task marks were kept
+
+
+def test_a_failed_push_does_not_mark_agents_shipped(tmp_path, send):
+    send(status=500)
+    _agent(tmp_path)
+    with pytest.raises(shipper.ShipError):
+        shipper.ship(tmp_path, url="http://loki:3100")
+    send()
+    assert shipper.ship(tmp_path, url="http://loki:3100")["shipped"] == 1
+
+
+def test_dry_run_shows_agent_payload_and_records_nothing(tmp_path, send):
+    rec = send()
+    _agent(tmp_path)
+    summary = shipper.ship(tmp_path, url="http://loki:3100", dry_run=True)
+    assert summary["payload"]["streams"][0]["stream"]["source"] == "agent"
+    assert not rec.calls and shipper.read_state(tmp_path) == {}
+
+
+DASHBOARD = Path(__file__).resolve().parent.parent / "docs/grafana/agent-performance.json"
+
+
+def _exprs():
+    data = json.loads(DASHBOARD.read_text())
+    return [t["expr"] for panel in data["panels"] for t in panel["targets"]]
+
+
+def test_dashboard_queries_use_only_labels_the_shipper_emits():
+    exprs = _exprs()
+    assert exprs
+    for expr in exprs:
+        for selector in re.findall(r"\{([^{}]*)\}", expr):
+            keys = re.findall(r"(\w+)\s*=~?\s*\"", selector)
+            assert keys, selector
+            assert set(keys) <= shipper.ALLOWED_LABELS, (expr, keys)
+        for group in re.findall(r"by \(([^)]*)\)", expr):
+            for key in (k.strip() for k in group.split(",")):
+                assert key in shipper.ALLOWED_LABELS, (expr, key)
+        assert 'source="agent"' in expr
+
+
+def test_dashboard_label_values_are_in_the_closed_set():
+    for expr in _exprs():
+        for value in re.findall(r'agent_kind="([^"]+)"', expr):
+            assert value in shipper.AGENT_KIND_BUCKETS
+
+
+def test_dashboard_panels_say_what_they_exclude():
+    data = json.loads(DASHBOARD.read_text())
+    assert data["templating"]["list"][0]["type"] == "datasource"
+    for panel in data["panels"]:
+        assert panel["datasource"]["uid"] == "${datasource}"
+        if "duration" in panel["title"] or "Cost" in panel["title"] or "keep" in panel["title"]:
+            assert "EXCLUDES" in panel["description"], panel["title"]

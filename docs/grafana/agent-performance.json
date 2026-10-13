@@ -1,0 +1,254 @@
+{
+  "title": "Agent performance",
+  "uid": "wm-agent-performance",
+  "schemaVersion": 39,
+  "version": 1,
+  "description": "Crew vs other agents, from runs/agents.jsonl shipped by `watermill ship`. See docs/OBSERVABILITY.md.",
+  "tags": [
+    "watermill",
+    "agents"
+  ],
+  "time": {
+    "from": "now-90d",
+    "to": "now"
+  },
+  "refresh": "",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Loki",
+        "type": "datasource",
+        "query": "loki",
+        "current": {},
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Records per kind per week",
+      "description": "Count of agents.jsonl records by bucketed agent_kind (mill-crew, session, subagent, other), filed on the day the work ended. Unlanded crew beads are not shipped, so they are not counted. Compares nothing field-level, so nothing is excluded beyond that.",
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (agent_kind) (count_over_time({job=\"watermill\", source=\"agent\"}[7d]))",
+          "legendFormat": "{{agent_kind}}",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Crew beads landed per week",
+      "description": "Mill-crew records with outcome=landed, by landing week. Crew only; other kinds define their own outcome vocabulary and are not compared here.",
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(count_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | outcome=\"landed\" [7d]))",
+          "legendFormat": "landed",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Sluice rounds per bead (weekly mean)",
+      "description": "Mean detail.sluice_rounds over mill-crew beads shipped that week. Crew only. Counted from handoff notes (the Sluice sections); beads with no note section count 0.",
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource}"
+          },
+          "expr": "avg_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | detail_sluice_rounds != \"\" | unwrap detail_sluice_rounds | __error__=\"\" [7d])",
+          "legendFormat": "mean rounds",
+          "queryType": "range"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource}"
+          },
+          "expr": "max_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | detail_sluice_rounds != \"\" | unwrap detail_sluice_rounds | __error__=\"\" [7d])",
+          "legendFormat": "max rounds",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Median duration by kind (seconds)",
+      "description": "Median duration_seconds per bucketed kind. EXCLUDES every record whose duration_seconds is null or non-numeric -- today that is every mill-crew record (duration is only filled when stated), so the crew line is empty until a source supplies it. Do not read a missing line as zero.",
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource}"
+          },
+          "expr": "quantile_over_time(0.5, {job=\"watermill\", source=\"agent\"} | json | duration_seconds != \"\" | unwrap duration_seconds | __error__=\"\" [7d]) by (agent_kind)",
+          "legendFormat": "{{agent_kind}}",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Cost and tokens by kind (weekly sums)",
+      "description": "Sum of cost_usd and of detail.tokens_total per bucketed kind. EXCLUDES records where the field is null or absent (cost is null on all mill-crew records for now; tokens_total is only present on kinds built from transcripts, once those ship it). A kind with no line has no data, not zero spend.",
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (agent_kind) (sum_over_time({job=\"watermill\", source=\"agent\"} | json | cost_usd != \"\" | unwrap cost_usd | __error__=\"\" [7d]))",
+          "legendFormat": "cost_usd {{agent_kind}}",
+          "queryType": "range"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource}"
+          },
+          "expr": "sum by (agent_kind) (sum_over_time({job=\"watermill\", source=\"agent\"} | json | detail_tokens_total != \"\" | unwrap detail_tokens_total | __error__=\"\" [7d]))",
+          "legendFormat": "tokens {{agent_kind}}",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Crew keep rate (landed without sluice fixes)",
+      "description": "Of mill-crew beads that went through a Sluice review (detail.sluice_pushed_fixes is true or false), the share landed with no fixes pushed. EXCLUDES beads with no Sluice section (field null) and rests on an inferred field (fields_inferred lists detail.sluice_pushed_fixes), so treat it as indicative. Crew only.",
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource}"
+          },
+          "expr": "sum(count_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | outcome=\"landed\" | detail_sluice_pushed_fixes=\"false\" [7d])) / sum(count_over_time({job=\"watermill\", source=\"agent\", agent_kind=\"mill-crew\"} | json | outcome=\"landed\" | detail_sluice_pushed_fixes=~\"true|false\" [7d]))",
+          "legendFormat": "keep rate",
+          "queryType": "range"
+        }
+      ]
+    }
+  ]
+}
