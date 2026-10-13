@@ -879,14 +879,14 @@ def cmd_agents(args) -> int:
     or changed, so it is safe to cron. A checkout that is not on this machine
     is reported, never an error.
     """
+    if args.json and args.action != "compare":
+        print(f"agents {args.action}: --json is a compare-only flag", file=sys.stderr)
+        return 2
     if args.action == "whoami":
         print(sessionlog.new_tag())
         return 0
     if args.action == "record":
         return _record(args)
-    if args.json and args.action != "compare":
-        print(f"agents {args.action}: --json is a compare-only flag", file=sys.stderr)
-        return 2
     root = factory_root(args.root)
     if args.action == "compare":
         return _compare(root, args)

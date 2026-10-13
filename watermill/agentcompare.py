@@ -39,7 +39,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from watermill import agentlog, pricing, stats
+from watermill import agentlog, pricing, sessionlog, stats
 
 DEFAULT_MIN_N = 8
 MULTIPLE_WARNING_AFTER = 5
@@ -156,9 +156,12 @@ def _collect(records: list[dict], group: str, metric: Metric, since: str | None,
                 kept.append(r)
         pool = kept
     values: list = []
-    nulls = inferred = admitted = 0
+    nulls = inferred = admitted = floors = 0
+    floor_metric = bool(set(metric.fields) & set(sessionlog.FLOOR_FIELDS))
     for r in pool:
         v = metric.value(r)
+        if floor_metric and v is not None and (r.get("detail") or {}).get("output_tokens_floor"):
+            floors += 1  # excluded or (with --include-inferred) admitted: render says which
         hit = set(metric.fields) & set(r.get("fields_inferred") or [])
         if v is None:
             nulls += 1
@@ -172,7 +175,8 @@ def _collect(records: list[dict], group: str, metric: Metric, since: str | None,
             values.append(v)
     return {"group": group, "source": source, "records": len(pool), "values": values,
             "n": len(values), "excluded_null": nulls, "excluded_inferred": inferred,
-            "excluded_undated": undated, "admitted_verdict_derived": admitted}
+            "excluded_undated": undated, "admitted_verdict_derived": admitted,
+            "floor_runs": floors}
 
 
 # -- one metric, two groups ------------------------------------------------
@@ -194,7 +198,7 @@ def compare_metric(records, metric, a, b, *, since, min_n, include_inferred, see
     for g in (ga, gb):
         row = {k: g[k] for k in ("group", "records", "n", "excluded_null",
                                   "excluded_inferred", "excluded_undated",
-                                  "admitted_verdict_derived")}
+                                  "admitted_verdict_derived", "floor_runs")}
         vals = g["values"]
         if metric.kind == "proportion":
             k = sum(1 for v in vals if v)
@@ -327,6 +331,15 @@ def render(result: dict) -> str:
                 lines.append(f"      {tag}  n={g['n']:<4} {stat}"
                              + (f"  {_ci(g, m['unit'], prop)}" if g["n"] else "")
                              + f"   [{g['records']} records; {excl}]")
+            floors = [g.get("floor_runs", 0) for g in m["groups"]]
+            if any(floors):
+                counts = ", ".join(f"{tag} {n}" for tag, n in zip("AB", floors, strict=True))
+                lines.append(
+                    f"      (output_tokens FLOOR runs: {counts} -- a subagent transcript keeps "
+                    "only the first streamed chunk of most messages (water-mill-658); "
+                    + ("INCLUDED here, so this favours the subagent side by measurement)"
+                       if result["include_inferred"] else
+                       "excluded here as inferred, not because they are missing)"))
             if m["metric"] == "cost_usd_est":
                 lines.append(
                     "      (cost_usd_est is an API-equivalent ESTIMATE at list prices as of "

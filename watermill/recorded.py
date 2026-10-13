@@ -27,7 +27,7 @@ import json
 import re
 from pathlib import Path
 
-from . import agentlog, landed
+from . import agentlog, landed, sessionlog
 from .registry import Registry, RegistryError
 
 RECORDED_DIR = "knowledge/agent-runs"
@@ -76,7 +76,10 @@ def build(
             source=agentlog.RECORDED, recorded_at=agentlog._now(), project=project,
             subject=subject or base.get("subject"), outcome=outcome, title=None,
             agent_kind="mill-crew" if role != "solo" else base["agent_kind"],
-            fields_inferred=[])
+            # the flags replace prose guesses, but a floor stays a floor
+            # (water-mill-658): `agents compare` must still exclude it
+            fields_inferred=list(sessionlog.FLOOR_FIELDS)
+            if (base.get("detail") or {}).get("output_tokens_floor") else [])
         record["detail"] = {**base["detail"], **facts}
     if subject and role != "solo":
         record["detail"]["crew_key"] = f"crew:{subject}"

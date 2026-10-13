@@ -232,20 +232,25 @@ checkout.
   excluded, and a crew run lives on the cache: the dogfood millstone run (340 s,
   30 tool calls) shows `tokens_total` 363 against 2.4 M `cache_read_tokens` and
   109 k `cache_creation_tokens`. A record taken at sign-off also misses the
-  turns after it, and a subagent transcript under-counts streamed output (next item). Never rank or price runs by `tokens_total`; use the next two fields.
+  turns after it, and a subagent transcript under-counts streamed output (next
+  item). Never rank or price runs by `tokens_total`; use the next two fields.
 - **`output_tokens` is a floor for subagent runs; true for sessions** (water-mill-658,
   measured 2026-10-13 on 16 sessions and 201 subagent runs, counts only).
   A top-level session writes the final `usage` on every line of a message, so
   the largest per `message.id` is the true total (1 211 of 1 213 messages carry
-  a `stop_reason`; per no-subagent session it lands within 1-4% of the
-  session's own `cost-state` outputTokens, the rest being side calls). A
+  a `stop_reason`; per no-subagent session it lands within 0-6% of the
+  session's own `cost-state` outputTokens for the main model, the rest being
+  side calls such as the haiku title call). A
   subagent transcript is written live and never finalised: 63% of its messages
   (3 561 of 5 658) have no line with a `stop_reason`, hold the first streamed
   chunk (tens of tokens against thousands of characters of content; about 42 k
   tokens recorded for about 3.3 M characters), and nothing later fixes it --
   the file has only user/attachment/assistant lines, no result or summary line,
   the parent's `toolUseResult` for the Agent call has no usage, and the sidecar
-  `.meta.json` has none. So the total does not exist anywhere on disk for those
+  `.meta.json` has none; an async Agent call's `outputFile`
+  (`<tmp>/<session>/tasks/<agent id>.output`) is a symlink to the same
+  `subagents/` transcript (47 of 47 checked), not a second copy. So the total
+  does not exist anywhere on disk for those
   messages. Records say so: `detail.output_messages_final` /
   `output_messages_partial`, and `detail.output_tokens_floor` (true when over 5%
   of messages are partial), which lists `detail.output_tokens` and
@@ -259,6 +264,29 @@ checkout.
   `--include-inferred` token/cost comparison as crew-flattering. A session's
   `cost-state` line covers its subagents (per-model outputTokens, not split
   per agent), the only independent total, but it is not per run.
+  A recorded line (`agents record`) keeps the floor marking too: its flags
+  replace prose guesses in `fields_inferred`, never `output_tokens_floor`.
+- **The trial's token/cost figure is the session's `cost-state` total**
+  (water-mill-166 design). Each trial bead runs in its OWN top-level session:
+  arm A is an orchestrator session that runs the crew (millstone, sluice,
+  tailrace as subagents) on that one bead, arm B a solo session on it. Then
+  the session-level `cost-state` line, which folds the subagents in, is the
+  true per-bead figure for both arms, and the subagent floor never enters the
+  comparison. Checked 2026-10-13 on the 7 sessions with subagents and a
+  `cost-state` line (counts only): `cost-state` outputTokens exceeds both the
+  session's own max-per-id sum and that sum plus every subagent's floor in all
+  7 (e.g. 455 k against 85 k own + 47 k subagent floors), and its input side
+  (input + cache read + cache write, exact even in a first chunk) is at least
+  own + subagents in all 7 (within 2-4% in three; 7-30% over in four, the
+  excess not traced: side calls, compaction or transcripts no longer on disk),
+  so the subagents are in it, not beside it. Its
+  limits, which the trial protocol must respect: the line is written when a
+  session ends (a live session has none, so read it after exit), it is
+  cumulative per session (one session that ran on with more lines carried
+  both snapshots; take the last), it also counts side calls (both arms pay
+  those), and it is per session, so a session must hold exactly one trial
+  bead -- an orchestrator session that runs several beads cannot be split.
+  Duration, tool calls and landed rate still come from the records.
 - **API-equivalent cost estimate and the cache-inclusive total** (water-mill-cdi).
   `detail.cost_usd_est` is an **API-equivalent estimate**: what a run's tokens
   would cost at Anthropic's first-party API list prices. On a Claude

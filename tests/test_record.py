@@ -243,3 +243,20 @@ def test_the_recorded_directory_is_only_read_for_recorded_lines(tmp_path):
                                   project="p", outcome="landed")
     (d / "a.jsonl").write_text(json.dumps(forged) + "\nnot json\n")
     assert recorded.read_dir(d) == []
+
+
+def test_a_recorded_floor_run_stays_inferred_for_compare(tmp_path):
+    # water-mill-658: the flags replace prose guesses, never the floor marking
+    rc, out = _record(tmp_path, "--role", "millstone", "--bead", "demo-qyz",
+                      "--transcript", str(SUB / "agent-cmill.jsonl"))
+    assert rc == 0
+    (r,) = _lines(out)
+    assert r["detail"]["output_tokens_floor"] is True
+    assert set(sessionlog.FLOOR_FIELDS) <= set(r["fields_inferred"])
+
+
+@pytest.mark.parametrize("action", ["whoami", "record"])
+def test_json_is_rejected_off_compare(tmp_path, capsys, action):
+    rc = cli.main(["agents", action, "--json", "--out-dir", str(tmp_path / "out")])
+    assert rc == 2 and "--json is a compare-only flag" in capsys.readouterr().err
+    assert not (tmp_path / "out").exists()

@@ -51,7 +51,7 @@ derives them from these counters (see pricing).
 * **`output_tokens` is only trustworthy for a message that has a line with a
   `stop_reason`** (water-mill-658, measured on 16 sessions / 201 subagent runs,
   counts only). A top-level session writes the final `usage` on every line of a
-  message, so max-per-id is the true total (within 1-4% of the session's
+  message, so max-per-id is the true total (within 0-6% of the session's
   `cost-state` outputTokens, which also counts side calls). A subagent
   transcript is written live: the lines of a message grow 1 -> N, and 63% of
   its messages never get a line with `stop_reason` or the final `usage` at all
@@ -99,6 +99,8 @@ CREW_ROLES = ("millstone", "sluice", "tailrace")
 # run is a FLOOR when more than this share of its messages are like that; a
 # session's last message may be cut off mid-stream, which is not a bias.
 PARTIAL_SHARE = 0.05
+# What a floor run lists in fields_inferred (recorded.build keeps these too).
+FLOOR_FIELDS = ("detail.output_tokens", "detail.tokens_total")
 _BEAD_TOKEN = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9.]+)+$")
 _USAGE_FIELDS = (
     ("input_tokens", "input_tokens"),
@@ -321,7 +323,7 @@ def _record(
     duration: float | None, cost: float | None, inferred: list[str], detail: dict,
 ) -> dict:
     if stats["output_tokens_floor"]:  # compare excludes these unless --include-inferred
-        inferred = [*inferred, "detail.output_tokens", "detail.tokens_total"]
+        inferred = [*inferred, *FLOOR_FIELDS]
     return agentlog.make_record(
         key=key, agent_kind=agent_kind, source=SOURCE, project=project,
         subject=subject, title=title, outcome=None,
