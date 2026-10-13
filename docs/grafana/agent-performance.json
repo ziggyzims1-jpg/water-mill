@@ -152,7 +152,7 @@
       "id": 4,
       "type": "timeseries",
       "title": "Median duration by kind (seconds)",
-      "description": "Median duration_seconds per bucketed kind. EXCLUDES every record whose duration_seconds is null or non-numeric -- today that is every mill-crew record (duration is only filled when stated), so the crew line is empty until a source supplies it. Do not read a missing line as zero.",
+      "description": "Median duration_seconds per bucketed kind, per agent RUN: transcript records only (source_extracted=\"transcript\"; one per session, subagent, or crew millstone/sluice/tailrace run). EXCLUDES handoff records (one per crew bead, duration null) and every record whose duration_seconds is null or non-numeric. A missing line is no data, not zero.",
       "datasource": {
         "type": "loki",
         "uid": "${datasource}"
@@ -176,7 +176,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "quantile_over_time(0.5, {job=\"watermill\", source=\"agent\"} | json | duration_seconds != \"\" | unwrap duration_seconds | __error__=\"\" [7d]) by (agent_kind)",
+          "expr": "quantile_over_time(0.5, {job=\"watermill\", source=\"agent\"} | json | source_extracted=\"transcript\" | duration_seconds != \"\" | unwrap duration_seconds | __error__=\"\" [7d]) by (agent_kind)",
           "legendFormat": "{{agent_kind}}",
           "queryType": "range"
         }
@@ -186,7 +186,7 @@
       "id": 5,
       "type": "timeseries",
       "title": "Cost and tokens by kind (weekly sums)",
-      "description": "Sum of cost_usd, detail.input_tokens and detail.output_tokens per bucketed kind (7-day rolling window). EXCLUDES records where the field is null or absent: cost is null on every mill-crew handoff record; token counts exist only on transcript records (sessions, subagents, and crew role runs). Cache tokens (detail.cache_creation_tokens, detail.cache_read_tokens) are EXCLUDED. A kind with no line has no data, not zero spend.",
+      "description": "Sum of cost_usd and of detail.tokens_total (input + output tokens, cache excluded; cache tokens are detail.cache_creation_tokens / detail.cache_read_tokens) per bucketed kind, per agent RUN (7-day rolling window). Transcript records only (source_extracted=\"transcript\"): EXCLUDES handoff records and any record where the field is null or absent (cost is only set from a session's own cost line). A kind with no line has no data, not zero spend.",
       "datasource": {
         "type": "loki",
         "uid": "${datasource}"
@@ -210,7 +210,7 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "sum by (agent_kind) (sum_over_time({job=\"watermill\", source=\"agent\"} | json | cost_usd != \"\" | unwrap cost_usd | __error__=\"\" [7d]))",
+          "expr": "sum by (agent_kind) (sum_over_time({job=\"watermill\", source=\"agent\"} | json | source_extracted=\"transcript\" | cost_usd != \"\" | unwrap cost_usd | __error__=\"\" [7d]))",
           "legendFormat": "cost_usd {{agent_kind}}",
           "queryType": "range"
         },
@@ -220,18 +220,8 @@
             "type": "loki",
             "uid": "${datasource}"
           },
-          "expr": "sum by (agent_kind) (sum_over_time({job=\"watermill\", source=\"agent\"} | json | detail_input_tokens != \"\" | unwrap detail_input_tokens | __error__=\"\" [7d]))",
-          "legendFormat": "input tokens {{agent_kind}}",
-          "queryType": "range"
-        },
-        {
-          "refId": "C",
-          "datasource": {
-            "type": "loki",
-            "uid": "${datasource}"
-          },
-          "expr": "sum by (agent_kind) (sum_over_time({job=\"watermill\", source=\"agent\"} | json | detail_output_tokens != \"\" | unwrap detail_output_tokens | __error__=\"\" [7d]))",
-          "legendFormat": "output tokens {{agent_kind}}",
+          "expr": "sum by (agent_kind) (sum_over_time({job=\"watermill\", source=\"agent\"} | json | source_extracted=\"transcript\" | detail_tokens_total != \"\" | unwrap detail_tokens_total | __error__=\"\" [7d]))",
+          "legendFormat": "tokens {{agent_kind}}",
           "queryType": "range"
         }
       ]

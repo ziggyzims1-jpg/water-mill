@@ -489,3 +489,43 @@ def test_a_malformed_agents_or_newest_mark_does_not_crash(tmp_path, send):
     _agent(tmp_path)
     (tmp_path / shipper.STATE_FILENAME).write_text('{"agents": 3, "newest": "x"}')
     assert shipper.ship(tmp_path, url="http://loki:3100")["shipped"] == 1
+
+
+def _panels():
+    return json.loads(DASHBOARD.read_text())["panels"]
+
+
+#: Panels that count crew *works* (one per bead) versus panels about agent
+#: *runs*. Crew transcript records (one per millstone/sluice/tailrace run) share
+#: agent_kind mill-crew with the per-bead handoff records, so each side filters
+#: on the record's own source -- `source_extracted` after `| json`, because the
+#: record field collides with the stream label `source`.
+_WORK_PANELS = ("Records per kind", "landed per week", "Sluice rounds", "first-pass")
+_RUN_PANELS = ("duration", "Cost")
+
+
+def test_crew_work_panels_count_handoff_records_and_run_panels_read_transcripts():
+    seen_work = seen_run = 0
+    for panel in _panels():
+        exprs = [t["expr"] for t in panel["targets"]]
+        if any(w in panel["title"] for w in _WORK_PANELS):
+            seen_work += 1
+            for expr in exprs:
+                # every crew selector filters to handoff records; a non-crew
+                # selector has no handoff records to double-count
+                for part in expr.split("{")[1:]:
+                    if 'agent_kind!="mill-crew"' in part.split("}")[0]:
+                        continue
+                    assert '| json | source_extracted="handoff"' in part, (panel["title"], expr)
+        if any(w in panel["title"] for w in _RUN_PANELS):
+            seen_run += 1
+            for expr in exprs:
+                for part in expr.split("{")[1:]:
+                    assert '| json | source_extracted="transcript"' in part, (panel["title"], expr)
+    assert seen_work == 4 and seen_run == 2
+
+
+def test_no_query_filters_the_record_source_by_its_shadowed_name():
+    # after `| json`, `source=` is the stream label ("agent"), never handoff/transcript
+    for expr in _exprs():
+        assert not re.search(r'\|\s*source\s*=~?\s*"(handoff|transcript)', expr), expr

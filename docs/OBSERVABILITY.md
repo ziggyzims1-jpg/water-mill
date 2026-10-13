@@ -182,13 +182,15 @@ the drop-down at the top of the dashboard).
   re-sent (`--resend` after a rebuild). State files without `agents` ship
   everything once; the `runs`/`tasks` marks are untouched. The key list grows by
   one short string per piece of work, forever; `runs/` is not committed.
-- **Panels say what they exclude.** Crew outcome panels read only handoff
-  records (`source_extracted="handoff"`), one per bead; transcript records of
-  crew role runs are excluded from counts so a bead is not counted three times.
-  `cost_usd` and `duration_seconds` are null on every crew handoff record, so
-  the crew duration/cost lines come only from transcript records, if any; an
-  empty line is no data, not zero. Tokens read `detail.input_tokens` and
-  `detail.output_tokens` from the transcript sweep (cache tokens excluded).
+- **Works versus runs.** Crew transcript records (one per millstone, sluice or
+  tailrace run) share `agent_kind="mill-crew"` with the per-bead handoff
+  records. Panels that count crew *works* (records per kind, landed per week,
+  Sluice rounds, first-pass rate) filter `| json | source_extracted="handoff"`;
+  panels about *runs* (duration, cost, tokens) filter
+  `source_extracted="transcript"`. Never `| json | source="handoff"`: that is
+  the stream label and is always `agent`. Tokens read `detail.tokens_total`
+  (input + output, cache excluded), which the transcript sweep emits. An empty
+  line is no data, not zero. Each panel's description says what it excludes.
 - **"First-pass approval rate" is not the keep rate.** The keep rate above is
   completed tasks over all tasks. The crew panel is: landed crew beads with
   exactly one Sluice round and no Sluice-pushed fixes, over landed crew beads
