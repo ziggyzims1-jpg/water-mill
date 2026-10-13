@@ -56,6 +56,8 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 | `watermill/mcp.py` | The graph as a tool the agent calls mid-task. The only seam that runs *during* a task |
 | `watermill/review.py` | The monthly sweep, and the check that notices the sweep stopped happening or a landed bead went unrecorded |
 | `watermill/landed.py` | Beads the mill landed, read from `**LANDED**` handoffs in registered checkouts. A reader |
+| `watermill/agentlog.py` | `runs/agents.jsonl`: one line per unit of agent work, any agent kind. The schema is its docstring |
+| `watermill/crewlog.py` | Mill crew history recovered from handoffs and bead JSONL, for `watermill agents sweep`. A reader |
 | `watermill/usage.py` | What agents asked the graph and what it could not answer. Never readable by an agent |
 | `watermill/land.py` | The pull request: create, verify, merge. Never part of a run |
 | `watermill/shipper.py` | Ships both to Loki. A reader, never part of a run |

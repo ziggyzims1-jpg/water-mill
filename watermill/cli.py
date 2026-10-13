@@ -20,6 +20,8 @@ from datetime import date, datetime
 from pathlib import Path
 
 from . import (
+    agentlog,
+    crewlog,
     knowledge,
     land,
     ledger,
@@ -862,6 +864,31 @@ def cmd_publish(args) -> int:
     return 0
 
 
+def cmd_agents(args) -> int:
+    """`agents sweep`: backfill runs/agents.jsonl with mill crew history.
+
+    A reader of handoffs and bead JSONL that appends only records that are new
+    or changed, so it is safe to cron. A checkout that is not on this machine
+    is reported, never an error.
+    """
+    root = factory_root(args.root)
+    records, missing = crewlog.collect(root)
+    total = 0
+    for project, found in sorted(records.items()):
+        fresh = (
+            agentlog.unseen(root, found) if args.dry_run
+            else agentlog.append_new(root, found)
+        )
+        total += len(fresh)
+        kept = sum(1 for r in found if r["outcome"] == "landed")
+        print(f"{project:<28} {len(found):>4} read ({kept:>3} landed)  {len(fresh):>4} "
+              f"{'would append' if args.dry_run else 'appended'}")
+    for name in missing:
+        print(f"{name:<28} checkout or handoff directory not found, skipped")
+    print(f"{'dry run -- nothing written; ' if args.dry_run else ''}{total} record(s) new")
+    return 0
+
+
 # -- parser ----------------------------------------------------------------
 
 
@@ -1068,6 +1095,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", metavar="FILE", help="with --dry-run, write the document here")
     p.add_argument("--project", help="only this project (default: every registered one)")
     p.set_defaults(func=cmd_publish)
+
+    p = sub.add_parser("agents", help="agent performance log (runs/agents.jsonl)")
+    p.add_argument("action", choices=["sweep"],
+                   help="sweep: backfill mill crew history from handoffs and bead JSONL")
+    p.add_argument("--dry-run", action="store_true",
+                   help="count what would be appended, write nothing")
+    p.set_defaults(func=cmd_agents)
 
     p = sub.add_parser("release", help="hand a stuck task back to the queue")
     p.add_argument("project")
