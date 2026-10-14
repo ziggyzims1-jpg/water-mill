@@ -194,17 +194,22 @@ def pause_state(ledger: list[dict]) -> dict | None:
 
 
 def _refuse_trial_session(ledger: list[dict], kind: str, session_id: str | None) -> None:
-    """Pause/resume are the owner's (docs/TRIAL.md section 6): refuse a session that is bound
-    to a trial bead. `trial start` is every trial session's first action and records
-    CLAUDE_CODE_SESSION_ID, so the ledger itself is the marker: nothing for a brief to leak
-    and nothing the owner's own terminal ever carries. A session that skipped `start` is not
-    caught; that is the brief's job (it forbids these commands)."""
+    """Pause/resume, enroll, score and scorepack are the owner's (docs/TRIAL.md section 6):
+    refuse a session that is bound to a trial bead. `trial start` is every trial session's
+    first action and records CLAUDE_CODE_SESSION_ID, so the ledger itself is the marker:
+    nothing for a brief to leak and nothing the owner's own terminal ever carries. A session that
+    skipped `start` is not caught; that is the brief's job (it forbids these commands)."""
     if session_id and any(r.get("type") == "start" and r.get("session_id") == session_id
                           for r in ledger):
         raise TrialError(f"`trial {kind}` refused: this session ({session_id}) is bound to a trial "
-                         "bead. Pause and resume are the owner's decision, run from the owner's "
-                         "own terminal (docs/TRIAL.md section 6); report the concern in your "
-                         "handoff instead.")
+                         "bead. This command is the owner's (pause, resume, enroll, score, "
+                         "scorepack), run from the owner's own terminal (docs/TRIAL.md section "
+                         "6); report the concern in your handoff instead.")
+
+
+def refuse_trial_session(root: Path, kind: str, session_id: str | None) -> None:
+    """CLI entry for the owner-only commands that take no ledger of their own."""
+    _refuse_trial_session(read_ledger(root), kind, session_id)
 
 
 def _set_pause(root: Path, kind: str, reason: str, now: str | None,
@@ -611,8 +616,9 @@ _OWNER_ONLY = ("Owner-only commands: never run `watermill trial pause`, `trial r
                "enroll`, `trial collect`, `trial score` or `trial scorepack`, and do not edit "
                "knowledge/trial/. Whether a landed blocker or defect should stop the trial is a "
                "human judgement that is the owner's alone; if you think something is wrong, say "
-               "so in your handoff and keep working your bead. (`trial pause`/`resume` also "
-               "refuse a session that ran `trial start`.)")
+               "so in your handoff and keep working your bead. (`trial pause`, `resume`, "
+               "`enroll`, `score` and `scorepack` also refuse a session that ran `trial "
+               "start`.)")
 
 
 def _slug(bead: str, repo: str) -> str:

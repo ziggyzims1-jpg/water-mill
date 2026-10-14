@@ -957,3 +957,55 @@ def test_both_briefs_forbid_the_owner_only_trial_commands(world, arm):
     text = trial.brief(root, bead, registry=reg)
     assert "never run `watermill trial pause`, `trial resume`" in text
     assert "human judgement" in text
+
+
+# -- water-mill-2ez: enroll (not dry run), score and scorepack are owner-only too ----------
+
+
+def _bound_session(world, monkeypatch):
+    root, _, _ = world
+    monkeypatch.setattr(trial, "Tracker", lambda path: FakeTracker([task(f"{Path(path).name}-1")]))
+    enroll(world, "alpha", ["a-1"], FakeTracker([task("a-1")]))
+    trial.start(root, "a-1", session_id="trial-sess", remote=False)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "trial-sess")
+    return root
+
+
+def test_a_trial_bound_session_cannot_enroll_score_or_scorepack(world, monkeypatch, capsys):
+    root = _bound_session(world, monkeypatch)
+    before = trial.read_ledger(root)
+    for argv in (["enroll", "alpha", "--ready"], ["scorepack"], ["score", "a-1", "--none"]):
+        assert cli.main(["--root", str(root), "trial", *argv]) != 0
+        assert "bound to a trial bead" in capsys.readouterr().err, argv
+    assert trial.read_ledger(root) == before
+
+
+def test_a_trial_bound_session_can_still_dry_run_enroll_collect_and_status(world, monkeypatch,
+                                                                         capsys):
+    root = _bound_session(world, monkeypatch)
+    assert cli.main(["--root", str(root), "trial", "enroll", "alpha", "--ready", "--dry-run"]) == 0
+    assert cli.main(["--root", str(root), "trial", "status"]) == 0
+    cli.main(["--root", str(root), "trial", "collect", "--dry-run"])
+    assert "bound to a trial bead" not in capsys.readouterr().err
+
+
+def test_the_owner_terminal_is_never_blocked_from_score_or_scorepack(world, monkeypatch, capsys):
+    root = _bound_session(world, monkeypatch)
+    for env in (None, "someone-else"):
+        if env is None:
+            monkeypatch.delenv("CLAUDE_CODE_SESSION_ID")
+        else:
+            monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", env)
+        assert cli.main(["--root", str(root), "trial", "scorepack"]) == 0
+        cli.main(["--root", str(root), "trial", "score", "a-1", "--none"])
+        assert "bound to a trial bead" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("arm", ["A", "B"])
+def test_both_briefs_name_every_command_the_harness_refuses(world, arm):
+    """The brief's parenthetical tracks the CLI guard (water-mill-2ez)."""
+    root, reg, _ = world
+    enroll(world, "alpha", ["a-1", "a-2"], FakeTracker([task("a-1"), task("a-2")]))
+    bead = next(b for b, r in trial.enrolled(trial.read_ledger(root)).items() if r["arm"] == arm)
+    text = trial.brief(root, bead, registry=reg)
+    assert "`trial pause`, `resume`, `enroll`, `score` and `scorepack` also refuse" in text
