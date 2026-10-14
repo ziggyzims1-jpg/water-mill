@@ -86,3 +86,18 @@ Reviewed PR #54 at `ba32da9` (commits `ce191ce`, `ba32da9`) in a detached worktr
 **Findings:** filed the two millstone lessons not already recorded (bd --parent label inheritance; upstream wayfinder referencing skills outside the set); the other two millstone lessons and sluice/bolter's were already in the graph (f-20261014-01f238, -78ab40, -3cd250, -8e0597).
 
 **For the human:** siblings still differ from canon until the owner runs `watermill sync`. Not run: Claude Code actually loading the skills.
+
+## Tailrace — skills sync PRs (2026-10-14)
+
+**LANDED** all five, one at a time. Each diff was exactly 32 skill files (matched water-mill/.claude/skills) + .claude/watermill-managed.json; verify green; sha-guarded squash merge (`--match-head-commit`).
+
+| Repo | PR | Merge sha |
+|---|---|---|
+| zimmy-life-tracker | #233 | 8004b1a2abc9c0b8a44200d891da9398b6d5a8a2 |
+| zim-dashboard-demo-cell-1b | #36 | df2f0b4bf93b8872b327c37bf11dd721bf31fe3c |
+| cheme-solver | #37 | 848d23035484a64be15070a2e0be500e88a6561a |
+| Hillel-Programming | #67 | ed51267cdc2737a26d49a32af283cc6fbb39c797 |
+| watermill-cell-template | #14 | 03154fd83fd9aa0c57bead56be4f93aba4dc8357 |
+
+Local: pull --ff-only done for zimmy, zim-dashboard, cheme-solver, template (all on main); Hillel-Programming fetch only.
+Failed/odd: Hillel-Programming branch delete returned HTTP 500 on merge; retry DELETE of sync/water-mill-7f59833f produced no error (likely deleted; unverified). Transient 502s on check-runs polling, harmless. No beads closed (no per-PR bead); no graph findings recorded.
