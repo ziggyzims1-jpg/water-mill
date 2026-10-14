@@ -252,7 +252,7 @@ correction is applied, so none is a finding on its own.
 
 Everything goes through `watermill trial` (all state is in
 `knowledge/trial/`, tracked: `ledger.jsonl` and `results.jsonl`, append-only,
-`merge=union`).
+`merge=union`; a cancelled batch is moved whole to `archive/` and is never read).
 
 1. **Enrol** (owner, after reviewing the dry run):
    `watermill trial enroll <repo> <bead>...` (or `--ready`). Commit
@@ -327,4 +327,13 @@ Duration, CI, landing and escapes do not depend on the surface.
 
 ## Amendments
 
-(none)
+**2026-10-14 — first batch cancelled, ledger archived.** The 8 ZIM cell beads
+enrolled under seed 20261013 were never run or scored. The crew is being
+changed (epic `water-mill-fwm`), so arm A would no longer mean the crew this
+trial measures. The ledger moved, unedited, to
+`knowledge/trial/archive/2026-10-14-cancelled.jsonl` with a closing `cancelled`
+line saying why, and the trial labels were removed from those beads. Nothing
+reads `archive/`: the live ledger is `knowledge/trial/ledger.jsonl` only, so
+the next `trial enroll` finds an empty ledger and draws a fresh seed (section 3
+still applies from there). The harness is unchanged and stays live. No
+analysis rule in sections 4 to 7 is altered.
