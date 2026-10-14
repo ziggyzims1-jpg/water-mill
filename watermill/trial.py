@@ -723,8 +723,10 @@ def brief(root: Path, bead: str, *, surface: str = "laptop",
                    + (f"`bd close {bead} --reason \"Merged in PR #<n>\"`, `git -C $REPO pull "
                       "--ff-only`, `bd import .beads/issues.jsonl` (the pull does not import; "
                       "exporting from a stale DB reverts closures and drops beads), `bd export -o "
-                      ".beads/issues.jsonl`, check `git diff .beads/issues.jsonl` changes only "
-                      f"this bead's line (if not, stop and report), commit it (`chore(beads): "
+                      ".beads/issues.jsonl`, check `diff <(git show HEAD:.beads/issues.jsonl | "
+                      "sort) <(sort .beads/issues.jsonl)` shows only this bead's old and new line "
+                      "(sorted: export and beads-sync order lines differently; if not, stop and "
+                      f"report), commit it (`chore(beads): "
                       f"close {bead}`) and push." if surface == "laptop" else
                       f"`BD_DOLT_AUTO_PUSH=false bd close {bead} --reason \"Merged in PR #<n>\"`; "
                       "the close travels as `.beads/issues.jsonl` on $SB via beads-sync (Session "

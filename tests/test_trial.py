@@ -309,14 +309,21 @@ def test_arm_b_laptop_close_imports_between_pull_and_export(world):
     text = trial.brief(world[0], b, surface="laptop", registry=world[1])
     pull, imp, exp = (text.index(x) for x in ("--ff-only", "bd import .beads/issues.jsonl",
                                                "bd export -o .beads/issues.jsonl"))
-    assert pull < imp < exp
-    assert "git diff .beads/issues.jsonl" in text
+    check = text.index("<(sort .beads/issues.jsonl)")
+    assert pull < imp < exp < check < text.index("chore(beads): close")
 
 
 def test_tailrace_close_imports_between_pull_and_export():
     line = next(ln for ln in (Path(__file__).parent.parent / ".claude/agents/tailrace.md")
                 .read_text().splitlines() if ln.startswith("4. **Close the bead**"))
-    assert line.index("pull --ff-only") < line.index("bd import") < line.index("bd export")
+    assert (line.index("pull --ff-only") < line.index("bd import") < line.index("bd export")
+            < line.index("<(sort $REPO/.beads/issues.jsonl)") < line.index("chore(beads)"))
+
+
+def test_tailrace_cloud_export_checks_only_this_bead_changed():
+    line = next(ln for ln in (Path(__file__).parent.parent / ".claude/agents/tailrace.md")
+                .read_text().splitlines() if ln.lstrip().startswith("3. From `$REPO`"))
+    assert line.index("bd export") < line.index('<(sort "$WT/.beads/issues.jsonl")')
 
 
 def test_brief_refuses_an_unenrolled_bead(world):
