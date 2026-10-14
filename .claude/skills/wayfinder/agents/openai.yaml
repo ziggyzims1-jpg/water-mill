@@ -1,0 +1,6 @@
+# managed by water-mill (canon/common/.claude/skills/wayfinder/agents/openai.yaml); edit it there, then run `watermill sync`
+interface:
+  display_name: "Wayfinder"
+  short_description: "Map a large effort as decision tickets"
+policy:
+  allow_implicit_invocation: false

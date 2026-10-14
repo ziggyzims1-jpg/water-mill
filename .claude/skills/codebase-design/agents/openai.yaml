@@ -1,0 +1,4 @@
+# managed by water-mill (canon/common/.claude/skills/codebase-design/agents/openai.yaml); edit it there, then run `watermill sync`
+interface:
+  display_name: "Codebase Design"
+  short_description: "Vocabulary for deep-module design"
