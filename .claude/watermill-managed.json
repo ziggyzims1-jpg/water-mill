@@ -37,7 +37,9 @@
     ".claude/skills/wayfinder/agents/openai.yaml",
     ".claude/skills/wizard/SKILL.md",
     ".claude/skills/wizard/agents/openai.yaml",
-    ".claude/skills/wizard/template.sh"
+    ".claude/skills/wizard/template.sh",
+    ".github/workflows/beads-sync.yml",
+    "scripts/beads_merge.py"
   ],
   "settings": {
     "hooks": {
