@@ -19,8 +19,9 @@ This module is its machinery and holds three promises:
 Ledger lines (`type`): `seed` (the master seed, once), `enroll` (bead, repo, arm,
 seed, block, pos, enrolled_at), `start` (the session that works the bead:
 session_id, surface, started_at), `pause` / `resume` (the harm stop of
-docs/TRIAL.md section 6: reason, at; the latest of the two wins, and `start`
-refuses while the latest is a pause). Results lines: `collect` (outcomes read after
+docs/TRIAL.md section 6: reason, at; a resume lists the pause stamps it
+clears in `resumes`, so a union merge cannot reorder a pause away; `enroll`
+and `start` refuse while any pause is uncleared). Results lines: `collect` (outcomes read after
 the session) and `score` (blind escape scoring).
 
 Privacy: cost-state is read for numbers only; nothing a person or tool wrote
@@ -167,15 +168,29 @@ def master_seed(ledger: list[dict]) -> int | None:
     return None
 
 
-def pause_state(ledger: list[dict]) -> dict | None:
-    """The latest pause line if the trial is paused (a later `resume` clears it), else None."""
-    state = None
+def _open_pauses(ledger: list[dict]) -> list[dict]:
+    """Pause lines no resume has cleared, in ledger order.
+
+    A `resume` names the pauses it clears (`resumes`: their `at` stamps), so the
+    answer does not depend on line order: the ledger is `merge=union`, and a
+    resume written on a stale checkout must not clear a pause it never saw. A
+    resume without `resumes` clears every pause above it.
+    """
+    pauses: list[dict] = []
+    cleared: set = set()
     for row in ledger:
         if row.get("type") == "pause":
-            state = row
+            pauses.append(row)
         elif row.get("type") == "resume":
-            state = None
-    return state
+            cleared.update(row["resumes"] if isinstance(row.get("resumes"), list)
+                           else (p.get("at") for p in pauses))
+    return [p for p in pauses if p.get("at") not in cleared]
+
+
+def pause_state(ledger: list[dict]) -> dict | None:
+    """The latest uncleared pause line if the trial is paused, else None."""
+    still = _open_pauses(ledger)
+    return still[-1] if still else None
 
 
 def _set_pause(root: Path, kind: str, reason: str, now: str | None) -> dict:
@@ -189,8 +204,22 @@ def _set_pause(root: Path, kind: str, reason: str, now: str | None) -> dict:
     if kind == "resume" and not paused:
         raise TrialError("the trial is not paused")
     line = {"type": kind, "reason": reason, "at": now or _now()}
+    if kind == "pause" and any(r.get("type") == "pause" and r.get("at") == line["at"]
+                               for r in ledger):
+        raise TrialError(f"a pause stamped {line['at']} is already in the ledger (a resume "
+                         "names pauses by stamp); try again in a second")
+    if kind == "resume":
+        line["resumes"] = sorted({p.get("at") for p in _open_pauses(ledger)})
     _append(ledger_path(root), [line])
     return line
+
+
+def _refuse_if_paused(ledger: list[dict], what: str) -> None:
+    paused = pause_state(ledger)
+    if paused:
+        raise TrialError(f"the trial is PAUSED since {paused.get('at')}: {paused.get('reason')}. "
+                         f"No new {what} until the owner runs `watermill trial resume --reason "
+                         "...` (docs/TRIAL.md section 6).")
 
 
 def pause(root: Path, reason: str, *, now: str | None = None) -> dict:
@@ -451,6 +480,8 @@ def enroll(root: Path, registry: Registry, repos: list[str], bead_ids: list[str]
     """
     ledger = read_ledger(root)
     _refuse_if_unsound(ledger)
+    if not dry_run:
+        _refuse_if_paused(ledger, "enrolment")
     if bead_ids is not None:
         bead_ids = sorted(set(bead_ids))  # a repeated id must not take two block positions
     have = master_seed(ledger)
@@ -525,11 +556,7 @@ def start(root: Path, bead: str, *, session_id: str | None, remote: bool,
     """Bind the calling top-level session to its trial bead (one bead per session)."""
     ledger = read_ledger(root)
     _refuse_if_unsound(ledger)
-    paused = pause_state(ledger)
-    if paused:
-        raise TrialError(f"the trial is PAUSED since {paused.get('at')}: {paused.get('reason')}. "
-                         "No new start until the owner runs `watermill trial resume --reason ...` "
-                         "(docs/TRIAL.md section 6).")
+    _refuse_if_paused(ledger, "start")
     row = enrolled(ledger).get(bead)
     if row is None:
         raise TrialError(f"{bead} is not enrolled in the trial")

@@ -169,15 +169,18 @@ correction is applied, so none is a finding on its own.
   and written down without reference to the outcome data.
 - **Harm stop (pre-registered 2026-10-14, before any enrolment; water-mill-kt6).**
   Not a p-value stop. *Trigger:* any trial bead, in either arm, that has landed
-  on main and is found to carry a blocker-class escape by the section 7 rubric
+  on main and is found to carry a blocker-class escape by the section 4 rubric
   (would break prod, lose or corrupt data, leak a secret or personal data, or
   bypass auth). Also a trigger: an arm B run that edits a fenced path, ignores a
   READ ONLY / Out of scope mark, or merges with a failing check. The trigger is
   judged on that one defect alone, never on arm counts or rates, so it cannot
   become a look at the outcome. *Effect:* the trial pauses
-  (`watermill trial pause --reason "..."`, a `pause` ledger line); `trial start`
-  refuses and `trial status` prints PAUSED with the reason until the owner
-  writes a resume or stop decision (`trial resume --reason "..."`). Beads
+  (`watermill trial pause --reason "..."`, a `pause` ledger line); `trial enroll`
+  and `trial start` refuse and `trial status` prints PAUSED with the reason until
+  the owner writes a resume or stop decision (`trial resume --reason "..."`).
+  That decision is made on the triggering defect and its handling alone (is it
+  reverted, is its cause understood and closed off), never on `status` counts,
+  rates or intervals, and its reason says so. Beads
   already in their 14-day window keep being observed and scored. The offending
   change is reverted on main right away; the bead stays in the ledger as scored
   (the escape counts), not dropped.
@@ -255,7 +258,9 @@ Everything goes through `watermill trial` (all state is in
 4. **Score**, 14 days after landing: `watermill trial scorepack` ->
    blind scorer -> `watermill trial score <bead> --none | --escape SEV:REF:SUMMARY`.
 5. **Pause / resume** (section 6 harm stop): `watermill trial pause --reason "..."`,
-   `watermill trial resume --reason "..."`; latest ledger line wins.
+   `watermill trial resume --reason "..."`. A resume line lists the pauses it
+   clears (`resumes`), so a union merge of two checkouts cannot reorder a
+   pause away.
 6. **Status** at any time: `watermill trial status [--json]`.
 
 ### Cloud sessions: what is missing, plainly
