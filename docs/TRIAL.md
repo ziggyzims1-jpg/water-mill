@@ -346,3 +346,13 @@ four by name. `tests/test_trial.py` pins that both briefs name every agent in
 `canon/`. This is the "crew" arm A means from the next enrolment on; the first
 batch was cancelled before it ran (amendment above), so no scored bead used the
 old three-agent crew. No analysis rule in sections 4 to 7 is altered.
+
+**2026-10-14 — second batch cancelled, ledger archived.** The same 8 ZIM cell
+beads were enrolled from a cloud session under seed 79268003 (two full blocks,
+A=4, B=4), then paused and cancelled by the owner before any `trial start`: the
+trial will be run from a separate repo. The ledger never reached main; it moved,
+unedited, to `knowledge/trial/archive/2026-10-14-cancelled-batch-2.jsonl` with a
+closing `cancelled` line, and the trial labels were removed from those beads.
+As with the first batch, nothing reads `archive/`, the next `trial enroll` finds
+an empty ledger and draws a fresh seed, and no analysis rule in sections 4 to 7
+is altered.
