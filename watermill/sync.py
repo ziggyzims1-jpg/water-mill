@@ -138,6 +138,8 @@ def merge_settings(existing: dict, managed: dict, previous: dict) -> dict:
     Anything not equal to an entry in `previous` is the repo's own and is kept
     in place. Hook entries are whole matcher groups, compared by value.
     """
+    if not isinstance(existing, dict):
+        raise SyncError("settings.json: not a JSON object, refusing to touch it")
     out = json.loads(json.dumps(existing))
 
     hooks = out.get("hooks")
@@ -146,7 +148,10 @@ def merge_settings(existing: dict, managed: dict, previous: dict) -> dict:
     hooks = hooks or {}
     events = set(hooks) | set(managed.get("hooks", {})) | set(previous.get("hooks", {}))
     for event in sorted(events):
-        groups = list(hooks.get(event, []))
+        groups = hooks.get(event, [])
+        if not isinstance(groups, list):
+            raise SyncError(f"settings.json: `hooks.{event}` is not a list")
+        groups = list(groups)
         gone = previous.get("hooks", {}).get(event, [])
         groups = [g for g in groups if g not in gone]
         for group in managed.get("hooks", {}).get(event, []):
@@ -166,7 +171,10 @@ def merge_settings(existing: dict, managed: dict, previous: dict) -> dict:
         raise SyncError("settings.json: `permissions` is not an object")
     perms = perms or {}
     for key in PERMISSION_KEYS:
-        items = list(perms.get(key, []))
+        items = perms.get(key, [])
+        if not isinstance(items, list):
+            raise SyncError(f"settings.json: `permissions.{key}` is not a list")
+        items = list(items)
         gone = previous.get("permissions", {}).get(key, [])
         items = [i for i in items if i not in gone]
         for item in managed.get("permissions", {}).get(key, []):
@@ -266,7 +274,7 @@ def make_plan(root: Path, read: Reader, kind: str, exempt: dict[str, str] | None
         if merged != existing:
             plan.changes.append(
                 Change(SETTINGS_REL, "new" if raw is None else "changed",
-                       (json.dumps(merged, indent=2) + "\n").encode("utf-8"))
+                       (json.dumps(merged, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
             )
     if not _settings_is_empty(managed) or manifest_raw is not None:
         new_manifest = {
@@ -340,6 +348,19 @@ def repo_slug(url: str) -> str:
     return f"{parts[-2]}/{parts[-1]}"
 
 
+def find_pull_request(slug: str, branch: str) -> str:
+    """The URL of a PR (any state) whose head is `branch`, or "" if there is none. REST."""
+    owner = slug.split("/", 1)[0]
+    res = proc.run(
+        ["gh", "api", "-X", "GET", f"repos/{slug}/pulls",
+         "-f", f"head={owner}:{branch}", "-f", "state=all", "--jq", ".[0].html_url // \"\""],
+        cwd=Path.cwd(), tail_lines=0,
+    )
+    if not res.ok:
+        raise SyncError(f"looking up the pull request for {branch} failed: {res.tail.strip()}")
+    return res.tail.strip()
+
+
 def open_pull_request(slug: str, branch: str, base: str, title: str, body: str) -> str:
     """Open the PR over REST (`gh pr create` is GraphQL, which the cloud proxy refuses)."""
     res = proc.run(
@@ -376,6 +397,7 @@ def sync_project(
     exempt: dict[str, str] | None = None,
     dry_run: bool = False,
     open_pr: Callable[..., str] | None = None,
+    find_pr: Callable[[str, str], str] | None = None,
 ) -> Outcome:
     """Plan against the project's remote base, then (unless dry) open a PR."""
     path = Path(path)
@@ -392,29 +414,39 @@ def sync_project(
         out.state = "would-change"
         out.lines.append(f"    would open a PR from {branch} onto {base_branch}")
         return out
+    slug = repo_slug(_git(path, "remote", "get-url", remote).strip())
+    title = "chore(sync): water-mill canon"
+    body = (
+        "Files managed by water-mill (`watermill sync`). Edit the master in "
+        "water-mill's `canon/`, not here.\n\n"
+        + "\n".join(f"- {c.status} `{c.rel}`" for c in plan.changes)
+        + "\n\nThis PR is CI-gated like any other; sync never merges it."
+    )
     if _git(path, "ls-remote", "--heads", remote, branch).strip():
-        out.state = "already-proposed"
-        out.lines.append(f"    {branch} is already on {remote}; nothing to do")
+        # Pushed before. If the PR was never opened (it failed after the
+        # push), open it now rather than reporting a proposal nobody can see.
+        existing = (find_pr or find_pull_request)(slug, branch)
+        if existing:
+            out.state = "already-proposed"
+            out.url = existing
+            out.lines.append(f"    {branch} is already proposed: {existing}")
+            return out
+        out.url = (open_pr or open_pull_request)(slug, branch, base_branch, title, body)
+        out.state = "proposed"
+        out.lines.append(f"    {branch} was pushed but had no PR; opened {out.url}")
         return out
 
     scratch = Path(tempfile.mkdtemp(prefix="wm-sync-"))
     wt = scratch / "wt"
     try:
-        _git(path, "worktree", "add", "-b", branch, str(wt), ref)
+        # -B: a local branch left by a run whose push failed is reset, not an error.
+        _git(path, "worktree", "add", "-B", branch, str(wt), ref)
         apply_plan(wt, plan)
         _git(wt, "add", "-A")
         _git(wt, "commit", "-q", "-m",
              f"chore(sync): water-mill canon ({len(plan.changes)} file(s))\n\n"
              "Managed by water-mill. Edit the canon copy in water-mill, not these files.")
         _git(wt, "push", "-q", "-u", remote, branch)
-        slug = repo_slug(_git(path, "remote", "get-url", remote).strip())
-        body = (
-            "Files managed by water-mill (`watermill sync`). Edit the master in "
-            "water-mill's `canon/`, not here.\n\n"
-            + "\n".join(f"- {c.status} `{c.rel}`" for c in plan.changes)
-            + "\n\nThis PR is CI-gated like any other; sync never merges it."
-        )
-        title = "chore(sync): water-mill canon"
         out.url = (open_pr or open_pull_request)(slug, branch, base_branch, title, body)
         out.state = "proposed"
         out.lines.append(f"    opened {out.url}")

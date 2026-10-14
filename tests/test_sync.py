@@ -65,17 +65,24 @@ def make_project(tmp_path, files=None):
 
 
 class PR:
-    def __init__(self):
+    """The GitHub seam: opening a PR and finding one by head branch."""
+
+    def __init__(self, opened=None):
         self.calls = []
+        self.opened = {} if opened is None else opened  # branch -> url, shared across runs
 
     def __call__(self, slug, branch, base, title, body):
         self.calls.append((slug, branch, base, title, body))
-        return "https://example.test/pr/1"
+        self.opened[branch] = "https://example.test/pr/1"
+        return self.opened[branch]
+
+    def find(self, slug, branch):
+        return self.opened.get(branch, "")
 
 
 def run_sync(root, app, **kw):
-    pr = kw.pop("open_pr", PR())
-    out = sync.sync_project(root, "app", app, "main", open_pr=pr, **kw)
+    pr = kw.pop("open_pr", None) or PR(kw.pop("opened", None))
+    out = sync.sync_project(root, "app", app, "main", open_pr=pr, find_pr=pr.find, **kw)
     return out, pr
 
 
@@ -184,9 +191,45 @@ def test_sync_pushes_a_branch_and_opens_one_pr_leaving_main_alone(tmp_path):
 def test_running_twice_proposes_once(tmp_path):
     root = make_factory(tmp_path)
     app, _ = make_project(tmp_path)
-    run_sync(root, app)
-    out, pr = run_sync(root, app)
+    opened = {}
+    run_sync(root, app, opened=opened)
+    out, pr = run_sync(root, app, opened=opened)
     assert out.state == "already-proposed" and pr.calls == []
+    assert out.url == "https://example.test/pr/1"
+
+
+def test_a_branch_pushed_without_its_pr_gets_the_pr_next_run(tmp_path):
+    """The push landed and opening the PR failed: a rerun must open it, not call it proposed."""
+    root = make_factory(tmp_path)
+    app, remote = make_project(tmp_path)
+
+    def broken(*_a):
+        raise sync.SyncError("opening the pull request failed: 502")
+
+    with pytest.raises(sync.SyncError):
+        sync.sync_project(root, "app", app, "main", open_pr=broken, find_pr=lambda s, b: "")
+    assert "sync/water-mill-" in git(remote, "branch")
+    out, pr = run_sync(root, app)
+    assert out.state == "proposed" and len(pr.calls) == 1
+
+
+def test_a_local_branch_left_by_a_failed_push_does_not_block_the_next_run(tmp_path):
+    root = make_factory(tmp_path)
+    app, _ = make_project(tmp_path)
+    branch = "sync/water-mill-" + sync.make_plan(
+        root, sync.git_reader(app, "origin/main"), "project").digest()
+    git(app, "branch", branch)  # what a run whose push was refused leaves behind
+    out, pr = run_sync(root, app)
+    assert out.state == "proposed" and pr.calls[0][1] == branch
+
+
+def test_settings_that_are_not_an_object_are_refused_not_crashed_on(tmp_path):
+    root = make_factory(tmp_path, MANAGED)
+    for raw in (b"[]", b"null", b'{"hooks": {"PreToolUse": {}}}',
+                b'{"permissions": {"allow": "Bash"}}'):
+        with pytest.raises(sync.SyncError):
+            sync.make_plan(root, lambda rel, raw=raw: raw if rel == sync.SETTINGS_REL else None,
+                           "project")
 
 
 def test_a_synced_project_is_up_to_date(tmp_path):
@@ -216,6 +259,15 @@ def test_a_file_that_left_canon_is_removed_only_if_we_put_it_there(tmp_path):
     plan = sync.make_plan(root, lambda rel: present.get(rel, "").encode() or None, "project")
     removed = [c.rel for c in plan.changes if c.status == "removed"]
     assert removed == [".claude/agents/old.md"]  # theirs.md is absent; theirs-own.md unlisted
+
+
+def test_a_file_we_put_there_is_kept_once_the_project_is_exempt_from_it(tmp_path):
+    root = make_factory(tmp_path, MANAGED)
+    manifest = json.dumps({"files": [".claude/agents/old.md"], "settings": MANAGED})
+    present = {".claude/agents/old.md": "x", sync.MANIFEST_REL: manifest}
+    plan = sync.make_plan(root, lambda rel: present.get(rel, "").encode() or None, "project",
+                          {".claude/agents/old.md": "kept by hand"})
+    assert [c.rel for c in plan.changes if c.status == "removed"] == []
 
 
 def test_slug_forms():
