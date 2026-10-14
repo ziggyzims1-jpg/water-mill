@@ -32,11 +32,11 @@ Record shape (envelope in `agentlog`): `source` "transcript", `outcome` null
 (a transcript does not say whether the work was good; the last message is not
 evidence), `cost_usd` only from a session's own `cost-state` line, and a
 subagent's `duration_seconds` as last minus first timestamp. `agent_kind` is
-`session`, `mill-crew` (agentType millstone/sluice/tailrace) or
+`session`, `mill-crew` (agentType millstone/bolter/sluice/tailrace) or
 `subagent:<agentType>`.
 
 `detail` (all kinds): `transcript` (path relative to the sessions dir),
-`session_id`, `role` (millstone|sluice|tailrace|null), `model`, `models`,
+`session_id`, `role` (millstone|bolter|sluice|tailrace|null), `model`, `models`,
 `input_tokens`, `output_tokens`, `tokens_total` (input + output; cache reads
 and writes are excluded, they are reported on their own),
 `cache_creation_tokens`, `cache_read_tokens`, `cache_creation_5m_tokens` /
@@ -93,7 +93,7 @@ SOURCE = "transcript"
 TITLE_CAP = 60
 SHORT_CAP = 80
 DEFAULT_DIR = Path("~/.claude/projects")
-CREW_ROLES = ("millstone", "sluice", "tailrace")
+CREW_ROLES = agentlog.CREW_ROLES
 # A message whose every streamed line lacks `stop_reason` never had its final
 # usage written, so its output_tokens is the first chunk (see the docstring). A
 # run is a FLOOR when more than this share of its messages are like that; a

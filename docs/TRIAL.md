@@ -196,7 +196,7 @@ correction is applied, so none is a finding on its own.
   stay open. The owner's terminal has no such session, so it is never
   blocked. Crew subagents inherit the orchestrator's `CLAUDE_CODE_SESSION_ID`
   (checked 2026-10-14: a sluice subagent's value equals its parent session's
-  transcript id), so in arm A the guard binds millstone, sluice and tailrace
+  transcript id), so in arm A the guard binds millstone, bolter, sluice and tailrace
   too. The guard does not catch a session that skipped `trial start` or that
   unsets the variable; it stops mistakes, not a determined session, and the
   brief covers the rest. The crew prompt (arm A) never names these commands;
@@ -337,3 +337,12 @@ reads `archive/`: the live ledger is `knowledge/trial/ledger.jsonl` only, so
 the next `trial enroll` finds an empty ledger and draws a fresh seed (section 3
 still applies from there). The harness is unchanged and stays live. No
 analysis rule in sections 4 to 7 is altered.
+
+**2026-10-14 — arm A is millstone -> bolter -> sluice -> tailrace (`water-mill-fwm.4`).**
+The crew gained a standards reviewer, bolter (report-only, never pushes); sluice
+reviews the spec and is the only reviewer that pushes. The arm A brief names the
+four in that order and passes the trial tag to each; the arm B brief forbids all
+four by name. `tests/test_trial.py` pins that both briefs name every agent in
+`canon/`. This is the "crew" arm A means from the next enrolment on; the first
+batch was cancelled before it ran (amendment above), so no scored bead used the
+old three-agent crew. No analysis rule in sections 4 to 7 is altered.

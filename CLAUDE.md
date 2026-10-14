@@ -48,7 +48,7 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 | `watermill/contract.py` | The coupling surface. Read first |
 | `watermill/registry.py` | Which repositories the factory drives |
 | `watermill/sync.py` | `canon/` and its distribution: `sync` (a PR per repo, settings merge, workshop direct) and the drift check `validate` runs. Edit `canon/`, never a synced copy |
-| `canon/` | The one master of every file projects share (today the three crew agents); layout in `canon/README.md` |
+| `canon/` | The one master of every file projects share (today the four crew agents); layout in `canon/README.md` |
 | `watermill/preflight.py` | Everything that must hold before a run starts |
 | `watermill/engine.py` | The run loop |
 | `watermill/caps.py` | Six caps and their counting rules |
@@ -217,6 +217,19 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
   project's idiosyncrasies, and this orchestrator's whole claim is that it is
   repo-agnostic. Until the second sighting a lesson lives in that project's
   contract and its calibration record, which is where it is true.
+
+## Auto-mill follow-ups (owner's rule, 2026-10-14)
+
+The crew is millstone, then bolter (standards review, report-only), then sluice
+(spec review, the only reviewer that pushes), then tailrace. Sluice files a bead
+for a clearly-defined smell (file, smell, concrete fix) labelled `auto-mill`,
+P3, in the same repo; the orchestrator that landed the parent runs it through
+the full crew right after. **Depth 1** (a smell found while working an
+`auto-mill` bead is filed normally and never auto-run), **at most 2 per parent**,
+**never auto-run anything touching the fence, security code, schema or CI**. The
+workshop copy is `canon/workshop/CLAUDE.md`. Handoffs for the crew live in
+`HANDOFF-mill/` here, not `brain/handoffs/mill/`; the crew files read the
+location from this file.
 
 ## Where things are
 
