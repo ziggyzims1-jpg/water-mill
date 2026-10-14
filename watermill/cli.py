@@ -99,42 +99,45 @@ def cmd_projects(args) -> int:
     return 0
 
 
-def _crew_drift_lines(root, targets) -> tuple[list[str], int]:
-    """Report-lines and failure count for crew-file drift (water-mill-mb6)."""
-    from .crewdrift import compare
+def _drift_lines(root, targets) -> tuple[list[str], int]:
+    """Report-lines and failure count for canon drift in every synced file (fwm.2).
+
+    Water-mill is checked too: its own `.claude/agents` are rendered copies of
+    canon, and an edit made there instead of in `canon/` is drift.
+    """
+    from . import sync
 
     lines: list[str] = []
     failed = 0
-    for project in targets:
-        if not project.exists or project.path == root:
-            continue
-        drift = compare(root, project.path, project.name)
+    seen = [("water-mill", root, {})] + [
+        (p.name, p.path, p.sync_exempt) for p in targets
+        if p.exists and p.path != root
+    ]
+    for name, path, exempt in seen:
+        drift = sync.check(root, path, name, "project", exempt)
+        for rel, why in drift.exempt:
+            lines.append(f"{name}: {rel} exempt from sync: {why}")
         if drift.clean:
-            lines.append(f"{project.name}: crew files identical to water-mill's")
-        elif project.crew_exempt:
-            lines.append(
-                f"{project.name}: crew files DIFFER ({', '.join(drift.differing)}) "
-                f"-- exempt: {project.crew_exempt}"
-            )
+            lines.append(f"{name}: synced files match canon")
         else:
             lines.append(
-                f"{project.name}: crew files DIFFER from water-mill's: "
-                f"{', '.join(drift.differing)}"
+                f"{name}: synced files DIFFER from canon: {', '.join(drift.differing)} "
+                f"(watermill sync {name})"
             )
             failed += 1
     return lines, failed
 
 
-def _report_only_crew(root, paths) -> list[str]:
-    """Crew drift for paths outside the registry (e.g. the workshop copy): report only."""
-    from .crewdrift import compare
+def _report_only_paths(root, paths) -> list[str]:
+    """Drift for paths outside the registry (e.g. the workshop folder): report only."""
+    from . import sync
 
     out = []
     for raw in paths or []:
-        drift = compare(root, Path(raw).expanduser().resolve(), raw)
+        drift = sync.check(root, Path(raw).expanduser().resolve(), raw, "workshop")
         out.append(
-            f"{raw}: crew files identical to water-mill's" if drift.clean
-            else f"{raw}: crew files DIFFER ({', '.join(drift.differing)}) "
+            f"{raw}: synced files match canon" if drift.clean
+            else f"{raw}: synced files DIFFER ({', '.join(drift.differing)}) "
             "-- unregistered, report only"
         )
     return out
@@ -166,8 +169,8 @@ def cmd_validate(args) -> int:
             print("    note:    no backup_check -- this project cannot prove it is recoverable")
         if not contract.fence.paths:
             print("    note:    no fenced paths -- nothing is protected from a bad task")
-    drift_lines, drift_failed = _crew_drift_lines(factory_root(args.root), targets)
-    extra = _report_only_crew(factory_root(args.root), getattr(args, "crew_path", None))
+    drift_lines, drift_failed = _drift_lines(factory_root(args.root), targets)
+    extra = _report_only_paths(factory_root(args.root), getattr(args, "sync_path", None))
     for line in drift_lines + extra:
         print(line)
     return 1 if (failed or drift_failed) else 0
@@ -202,7 +205,65 @@ def cmd_add(args) -> int:
     path.write_text(updated, encoding="utf-8")
     print(f"registered {args.name} -> {stored}")
     print(f"Next:  watermill validate {args.name}")
+    if args.no_sync:
+        return 0
+    # Last, so a failure here never un-registers: the project is registered
+    # either way and `watermill sync <name>` repeats this step.
+    print(f"\nsyncing canon into {args.name} ...")
+    try:
+        code = _sync_one(root, Registry.load(root), args.name, dry_run=False)
+    except WatermillError as exc:
+        print(f"sync did not run: {exc}\nRun it later:  watermill sync {args.name}")
+        return 1
+    return code
+
+
+def _sync_one(root, registry, target, dry_run) -> int:
+    from . import sync
+
+    if target == "workshop":
+        outcomes = [sync.sync_workshop(root, dry_run)]
+    elif target == "water-mill":
+        outcomes = [_sync_self(root, dry_run)]
+    else:
+        project = registry.get(target)
+        c = project.load_contract()
+        outcomes = [sync.sync_project(
+            root, project.name, project.path, c.git.base_branch, c.git.remote,
+            project.sync_exempt, dry_run)]
+    for o in outcomes:
+        print(f"{o.target}: {o.state}")
+        for line in o.lines:
+            print(line)
     return 0
+
+
+def _sync_self(root, dry_run):
+    from . import sync
+
+    # The factory's own checkout: base branch and remote come from git, since
+    # water-mill carries no contract naming itself.
+    base = "main"
+    return sync.sync_project(root, "water-mill", root, base, "origin", None, dry_run)
+
+
+def cmd_sync(args) -> int:
+    root = factory_root(args.root)
+    registry = Registry.load(root)
+    if args.all:
+        names = ["water-mill"] + [p.name for p in registry.active] + ["workshop"]
+    elif args.target:
+        names = [args.target]
+    else:
+        raise WatermillError("name a project, 'water-mill', 'workshop', or pass --all")
+    worst = 0
+    for name in names:
+        try:
+            _sync_one(root, registry, name, args.dry_run)
+        except WatermillError as exc:
+            print(f"{name}: FAILED -- {exc}")
+            worst = max(worst, exc.exit_code)
+    return worst
 
 
 def cmd_init(args) -> int:
@@ -1210,7 +1271,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("name")
     p.add_argument("path")
     p.add_argument("--contract", help="vendored contract path, if the project has none")
+    p.add_argument("--no-sync", action="store_true",
+                   help="register only; do not open the canon sync PR")
     p.set_defaults(func=cmd_add)
+
+    p = sub.add_parser("sync", help="distribute canon/ to a project (PR), or the workshop (direct)")
+    p.add_argument("target", nargs="?",
+                   help="a registered project, 'water-mill', or 'workshop' (laptop only)")
+    p.add_argument("--all", action="store_true", help="water-mill, each project, then the workshop")
+    p.add_argument("--dry-run", action="store_true", help="show what would change; write nothing")
+    p.set_defaults(func=cmd_sync)
 
     p = sub.add_parser("init", help="write a starter contract into a project")
     p.add_argument("path")
@@ -1220,8 +1290,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("validate", help="parse and explain a project's contract")
     p.add_argument("project", nargs="?")
-    p.add_argument("--crew-path", action="append", metavar="DIR",
-                   help="also report crew-file drift for DIR (unregistered; never fails)")
+    p.add_argument("--sync-path", "--crew-path", action="append", metavar="DIR", dest="sync_path",
+                   help="also report canon drift for DIR, e.g. the workshop folder "
+                        "(unregistered; never fails)")
     p.set_defaults(func=cmd_validate)
 
     p = sub.add_parser("doctor", help="run the preflight checks without working")
