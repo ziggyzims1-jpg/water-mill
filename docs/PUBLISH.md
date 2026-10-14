@@ -85,7 +85,9 @@ failure in one does not affect the other's data. Neither should be chained onto
 3. `watermill publish` sends `PUT <ZIMMY_URL>/api/watermill` with
    `Content-Type: application/json` and the key as `X-API-Key: <key>` -- one of
    the two spellings Zimmy's `presented_key` accepts, and the one that cannot
-   collide with a session's own `Authorization` header.
+   collide with a session's own `Authorization` header. It also sends
+   `User-Agent: watermill/<version>`: Cloudflare's Browser Integrity Check in
+   front of Zimmy 403s urllib's default `Python-urllib/3.x` (error 1010).
 4. Zimmy stores the snapshot and answers 2xx with a JSON body carrying its `id`.
    The **Work → Water Mill** tab renders the latest one.
 
