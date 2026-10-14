@@ -328,15 +328,21 @@ def apply_plan(base: Path, plan: Plan) -> None:
 # -- git ---------------------------------------------------------------------
 
 
-def _git(repo: Path, *args: str, check: bool = True, text: bool = True):
-    """Run git; stdout as str (bytes with text=False); None if check=False and it failed."""
+def _git(repo: Path, *args: str, check: bool = True, text: bool = True,
+         input: str | None = None, ok: tuple[int, ...] = (0,)):
+    """Run git; stdout as str (bytes with text=False).
+
+    `input` is fed on stdin (none otherwise). Exit codes in `ok` count as success;
+    any other returns None when check=False and raises SyncError when it is True.
+    """
     import subprocess
 
     done = subprocess.run(
         ["git", "-C", str(repo), *args], capture_output=True, text=False,
-        stdin=subprocess.DEVNULL,
+        input=None if input is None else input.encode(),
+        stdin=subprocess.DEVNULL if input is None else None,
     )
-    if done.returncode != 0:
+    if done.returncode not in ok:
         if not check:
             return None
         err = done.stderr.decode("utf-8", "replace").strip()
@@ -350,18 +356,12 @@ def gitignored(repo: Path, rels: list[str]) -> list[tuple[str, str]]:
     A path another rule re-includes (`!pattern`) is not ignored. Asked of the
     worktree the PR is built in, so it sees the project's own .gitignore.
     """
-    import subprocess
-
     if not rels:
         return []
-    done = subprocess.run(
-        ["git", "-C", str(repo), "check-ignore", "-v", "--stdin"], input="\n".join(rels),
-        capture_output=True, text=True,
-    )
-    if done.returncode not in (0, 1):
-        raise SyncError(f"git check-ignore failed in {repo}: {done.stderr.strip()}")
+    # exit 1 means "none ignored"; anything else but 0 is a real failure
+    stdout = _git(repo, "check-ignore", "-v", "--stdin", input="\n".join(rels), ok=(0, 1))
     out = []
-    for line in done.stdout.splitlines():
+    for line in stdout.splitlines():
         rule, _, rel = line.partition("\t")
         if rule.split(":", 2)[-1].startswith("!"):
             continue

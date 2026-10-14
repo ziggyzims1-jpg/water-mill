@@ -498,3 +498,32 @@ def test_validate_flags_a_settings_hook_pointing_at_a_missing_file(tmp_path, cap
     hooks.mkdir()
     (hooks / "block-dangerous-git.py").write_text("#!/usr/bin/env python3\n")
     assert main(["--root", str(root), "validate"]) == 0
+
+
+# The _git seam (water-mill-faw): stdin and accepted exit codes, so gitignored() does
+# not need its own subprocess call. check-ignore exits 1 for "nothing ignored" and 128
+# for a real failure; check=False alone cannot tell them apart.
+def test_git_feeds_input_on_stdin(tmp_path):
+    git(tmp_path, "init", "-q")
+    (tmp_path / ".gitignore").write_text("a\n")
+    # only "a" is ignored, so the output proves git read the paths from stdin
+    out = sync._git(tmp_path, "check-ignore", "--stdin", input="a\nb\n", ok=(0, 1))
+    assert out == "a\n"
+    # nothing ignored: exit 1 is accepted and gives empty stdout
+    assert sync._git(tmp_path, "check-ignore", "--stdin", input="b\n", ok=(0, 1)) == ""
+
+
+def test_git_accepts_only_the_listed_exit_codes(tmp_path):
+    git(tmp_path, "init", "-q")
+    (tmp_path / ".gitignore").write_text("x\n")
+    assert sync._git(tmp_path, "check-ignore", "x", ok=(0, 1)) == "x\n"
+    with pytest.raises(sync.SyncError, match="check-ignore"):
+        sync._git(tmp_path / "no-such-dir", "check-ignore", "x", ok=(0, 1))  # exit 128
+    with pytest.raises(sync.SyncError):
+        sync._git(tmp_path, "check-ignore", "y")  # exit 1 is not in the default (0,)
+
+
+def test_gitignored_raises_when_git_itself_fails(tmp_path):
+    # exit 128 (not a repo) is a real failure, not "nothing ignored"
+    with pytest.raises(sync.SyncError, match="check-ignore"):
+        sync.gitignored(tmp_path / "no-such-dir", ["x"])
