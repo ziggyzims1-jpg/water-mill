@@ -18,7 +18,7 @@ the contract migrates into the project once it has proven right.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -30,6 +30,18 @@ REGISTRY_FILENAME = "projects.yaml"
 REGISTRY_VERSION = 1
 
 
+def _sync_exempt(path, name, raw) -> dict:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) and v.strip() for k, v in raw.items()
+    ):
+        raise RegistryError(
+            f"{path}: {name}: sync_exempt must map a canon path glob to a non-empty reason"
+        )
+    return {k: v.strip() for k, v in raw.items()}
+
+
 @dataclass(frozen=True)
 class Project:
     """One registered target."""
@@ -39,7 +51,8 @@ class Project:
     contract_path: Path | None
     enabled: bool
     root: Path
-    crew_exempt: str = ""  # reason the crew-file drift check only reports
+    #: canon path glob -> reason; `watermill sync` skips these and validate reports them
+    sync_exempt: dict = field(default_factory=dict)
 
     @property
     def exists(self) -> bool:
@@ -117,7 +130,7 @@ class Registry:
         for index, entry in enumerate(entries):
             if not isinstance(entry, dict):
                 raise RegistryError(f"{path}: projects[{index}] must be a mapping")
-            allowed = {"name", "path", "contract", "enabled", "crew_exempt"}
+            allowed = {"name", "path", "contract", "enabled", "sync_exempt"}
             entry_unknown = sorted(set(entry) - allowed)
             if entry_unknown:
                 raise RegistryError(
@@ -144,7 +157,7 @@ class Registry:
                     path=project_path,
                     contract_path=contract_path,
                     enabled=bool(entry.get("enabled", True)),
-                    crew_exempt=str(entry.get("crew_exempt") or "").strip(),
+                    sync_exempt=_sync_exempt(path, name, entry.get("sync_exempt")),
                     root=root,
                 )
             )
