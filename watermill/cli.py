@@ -125,6 +125,9 @@ def _drift_lines(root, targets) -> tuple[list[str], int]:
                 f"(watermill sync {name})"
             )
             failed += 1
+        for rel in sync.missing_hook_files(path):
+            lines.append(f"{name}: settings hook points at a missing file: {rel}")
+            failed += 1
     return lines, failed
 
 

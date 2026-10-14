@@ -8,6 +8,7 @@ seam replaced is the one that talks to GitHub (`open_pr`).
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -411,3 +412,89 @@ def test_add_runs_sync_last_and_no_sync_skips_it(tmp_path, monkeypatch, capsys):
     assert len(seen) == 1
     out = capsys.readouterr().out
     assert out.index("registered app") < out.index("app: proposed")
+
+
+# -- fwm.9: a settings hook must never point at a file the PR does not ship --
+# Seen 2026-10-14 in zimmy (#228/#229/#230): .gitignore had `.claude/*`, so the sync
+# PR carried settings.json but not the hook script; python3 on a missing script
+# exits 2, which Claude Code reads as "block", so every Bash call was refused.
+
+HOOK_CANON = REPO_ROOT / "canon/common/.claude/hooks/block-dangerous-git.py"
+DENY_STDIN = json.dumps({"tool_input": {"command": "git stash"}})
+OK_STDIN = json.dumps({"tool_input": {"command": "git status"}})
+
+
+def managed_hook_command():
+    data = json.loads((REPO_ROOT / "canon/settings.managed.json").read_text())
+    return data["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+
+
+def run_hook(project_dir, stdin):
+    # The command string exactly as settings.json carries it, through a real shell.
+    return subprocess.run(
+        ["sh", "-c", managed_hook_command()], input=stdin, capture_output=True, text=True,
+        env={"PATH": os.environ["PATH"], "CLAUDE_PROJECT_DIR": str(project_dir)})
+
+
+def test_sync_refuses_when_a_file_it_writes_is_gitignored_and_opens_no_pr(tmp_path):
+    root = make_factory(tmp_path, MANAGED)  # settings.json ships, the agent does not: zimmy's case
+    ignore = ".claude/*\n!.claude/settings.json\n"
+    app, remote = make_project(tmp_path, {".gitignore": ignore})
+    with pytest.raises(sync.SyncRefusal) as err:
+        run_sync(root, app)
+    assert ".gitignore:1:.claude/*" in str(err.value)
+    assert ".claude/agents/crew.md" in str(err.value)
+    assert ".claude/settings.json" not in str(err.value)  # re-included by `!`, so not ignored
+    assert git(remote, "branch", "--format=%(refname:short)").split() == ["main"]
+    assert git(app, "branch", "--format=%(refname:short)").split() == ["main"]
+    assert git(app, "worktree", "list").count("\n") == 1
+
+
+
+def test_a_refusal_keeps_a_local_sync_branch_it_did_not_create(tmp_path):
+    # A branch left by an earlier run whose push failed is not the refusal's to delete.
+    root = make_factory(tmp_path, MANAGED)
+    app, _ = make_project(tmp_path, {".gitignore": ".claude/*\n!.claude/settings.json\n"})
+    git(app, "fetch", "-q", "origin", "main")
+    plan = sync.make_plan(root, sync.git_reader(app, "origin/main"), "project", None)
+    branch = f"sync/water-mill-{plan.digest()}"
+    git(app, "branch", branch)
+    with pytest.raises(sync.SyncRefusal):
+        run_sync(root, app)
+    assert branch in git(app, "branch", "--format=%(refname:short)").split()
+
+def test_sync_is_not_refused_when_the_gitignore_re_includes_what_it_writes(tmp_path):
+    root = make_factory(tmp_path)
+    app, _ = make_project(tmp_path, {".gitignore": ".claude/*\n!.claude/agents/\n"})
+    out, pr = run_sync(root, app)
+    assert out.state == "proposed" and len(pr.calls) == 1
+
+
+def test_the_managed_hook_fails_open_when_its_script_is_missing(tmp_path):
+    res = run_hook(tmp_path, DENY_STDIN)
+    assert (res.returncode, res.stdout) == (0, "")
+
+
+def test_the_managed_hook_still_denies_through_its_json_when_the_script_exists(tmp_path):
+    hooks = tmp_path / ".claude/hooks"
+    hooks.mkdir(parents=True)
+    (hooks / "block-dangerous-git.py").write_bytes(HOOK_CANON.read_bytes())
+    denied = run_hook(tmp_path, DENY_STDIN)
+    assert denied.returncode == 0
+    assert json.loads(denied.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+    allowed = run_hook(tmp_path, OK_STDIN)
+    assert (allowed.returncode, allowed.stdout) == (0, "")
+
+
+def test_validate_flags_a_settings_hook_pointing_at_a_missing_file(tmp_path, capsys):
+    root, app = factory_with_app(tmp_path)
+    (app / ".claude/settings.json").write_text(json.dumps({"hooks": {"PreToolUse": [
+        {"matcher": "Bash", "hooks": [{"type": "command", "command": managed_hook_command()}]}
+    ]}}))
+    assert main(["--root", str(root), "validate"]) == 1
+    assert "app: settings hook points at a missing file: .claude/hooks/block-dangerous-git.py" \
+        in capsys.readouterr().out
+    hooks = app / ".claude/hooks"
+    hooks.mkdir()
+    (hooks / "block-dangerous-git.py").write_text("#!/usr/bin/env python3\n")
+    assert main(["--root", str(root), "validate"]) == 0
