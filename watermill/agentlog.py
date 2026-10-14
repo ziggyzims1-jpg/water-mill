@@ -90,7 +90,8 @@ RECORDED = "recorded"
 #: The mill crew in pipeline order: millstone builds, bolter reviews standards (report-only),
 #: sluice reviews the spec and is the only reviewer that pushes, tailrace lands. Exactly the
 #: agents in `canon/common/.claude/agents/` (pinned by tests/test_bolter.py); the one list every
-#: reader of roles (sessionlog, agentcompare, recorded, trial briefs) imports.
+#: reader of roles (sessionlog, agentcompare, recorded) imports; the trial briefs name the crew in
+#: prose, pinned against canon by tests/test_trial.py.
 CREW_ROLES = ("millstone", "bolter", "sluice", "tailrace")
 
 

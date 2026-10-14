@@ -71,3 +71,29 @@ def test_no_crew_file_hardcodes_the_handoff_directory_for_every_repo():
         for line in text.splitlines():
             if "brain/handoffs/mill" in line:
                 assert "`$HANDOFFS` is where the repo keeps" in line, (p.name, line[:80])
+
+
+def test_a_handoff_record_carries_its_bolter_rounds(tmp_path):
+    """Through the record seam, not the helper: a re-review adds a second Bolter round."""
+    note = tmp_path / "abc.md"
+    note.write_text("# Handoff -- demo-abc\n\n## Millstone (2026-10-14)\n\nPR #7\n\n"
+                    "## Bolter (2026-10-14)\n\nBlocking: none\n\n"
+                    "## Sluice (2026-10-14)\n\n**Verdict: do_not_merge.**\n\n"
+                    "## Bolter (2026-10-15)\n\nBlocking: none\n\n"
+                    "## Sluice (2026-10-15)\n\n**Verdict: approve.**\n")
+    rec = crewlog.parse_record(note, "demo", {}, {})
+    assert rec["detail"]["bolter_rounds"] == 2
+    assert rec["detail"]["sluice_rounds"] == 2
+
+
+def test_the_auto_mill_limits_read_the_same_in_every_copy():
+    """Owner rule 2026-10-14: depth 1, at most 2 per parent, never fence/security/schema/CI,
+    P3 in the same repo. Each copy of the rule must carry every limit, or the copies drift."""
+    copies = [AGENTS / "sluice.md", AGENTS / "tailrace.md",
+              ROOT / "canon" / "workshop" / "CLAUDE.md", ROOT / "CLAUDE.md"]
+    limits = [r"depth 1", r"at most 2 per parent", r"fence, security code, (the )?schema or ci",
+              r"\bp3\b", r"same repo"]
+    for path in copies:
+        text = re.sub(r"[*`\s]+", " ", path.read_text()).lower()
+        for limit in limits:
+            assert re.search(limit, text), (path.name, limit)
