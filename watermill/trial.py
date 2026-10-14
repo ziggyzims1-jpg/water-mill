@@ -701,11 +701,14 @@ def brief(root: Path, bead: str, *, surface: str = "laptop",
             "controlled trial of the mill crew; do not take any other bead in this session.",
             where, sess,
             "Run the crew as subagents, one after another, never in parallel and never "
-            "skipping a step: millstone (implements, opens the PR), then sluice (reviews it), "
-            "then tailrace (verifies CI and lands it) only after sluice approves. Do not "
+            "skipping a step: millstone (implements, opens the PR), then bolter (standards review, "
+            "report-only), then sluice (spec review; gets bolter's report in its prompt, and is "
+            "the only reviewer that pushes), then tailrace (verifies CI and lands it) only after "
+            "sluice approves. Do not "
             "implement or review the change yourself.",
-            "Put this line VERBATIM into the prompt of EACH crew agent (millstone, sluice and "
-            "tailrace), after the bead id: \"" + crew + "\" Do not edit the crew definition files.",
+            "Put this line VERBATIM into the prompt of EACH crew agent (millstone, bolter, "
+            "sluice and tailrace), after the bead id: \"" + crew + "\" "
+            "Do not edit the crew definition files.",
             "Everything else follows the crew agents' own definitions, including their handoffs "
             "and (in a cloud session) their cloud mode. " + branch,
             landing + " (tailrace does this, with the message above.)",
@@ -741,8 +744,8 @@ def brief(root: Path, bead: str, *, surface: str = "laptop",
             f"Read the bead (`bd show {bead}`, in full including Out of scope and any READ ONLY "
             "marks) and the repo's CLAUDE.md files, and obey the repo's fence. Do the work in "
             "your own git worktree, never the main checkout. " + branch + " Do NOT use the "
-            "millstone, sluice or tailrace agents, and do not delegate review to another agent; "
-            "you may run tests and reread your own diff.",
+            "millstone, bolter, sluice or tailrace agents, and do not delegate review to another "
+            "agent; you may run tests and reread your own diff.",
             "Implement, add the tests the bead asks for, run the repo's gate (`make verify` in "
             "the worktree) until green, then open a pull request whose body names the bead and "
             "says how you verified it.",

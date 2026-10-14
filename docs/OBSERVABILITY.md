@@ -105,7 +105,7 @@ configuration problem rather than a project problem:
 ## `runs/agents.jsonl`: every agent's work, one schema
 
 `runs/tasks.jsonl` only gets a line when `watermill run` works a task. Crew work
-dispatched from Claude Code sessions (millstone -> sluice -> tailrace through
+dispatched from Claude Code sessions (millstone -> bolter -> sluice -> tailrace through
 the Agent tool) never reached it, so `runs/agents.jsonl` is the record that
 does not care who dispatched the work. It is append-only and, like the rest of
 `runs/`, gitignored. Beads `61r` (transcripts), `qam` (Loki) and `pu9` (compare)
@@ -122,7 +122,7 @@ One JSON object per line. Envelope (every agent kind): `schema` (1), `key`
 `recorded_at`, `project`, `subject` (normalised bead id), `title`, `outcome`
 (`landed` / `unlanded`), `started_at`, `ended_at`, `cost_usd`,
 `duration_seconds`, `fields_inferred`, and a kind-specific `detail` object. For
-`mill-crew`, `detail` holds `handoff`, `pr_number`, `landed_at`, `sluice_rounds`,
+`mill-crew`, `detail` holds `handoff`, `pr_number`, `landed_at`, `bolter_rounds`, `sluice_rounds`,
 `sluice_verdict`, `sluice_pushed_fixes`, `findings_count`, `findings_waived` and
 `bead_created_at`.
 
@@ -160,7 +160,7 @@ and field list: the docstring of `watermill/sessionlog.py`.
   position of a fixture and asserts it appears nowhere in any record.
 - **Keys and kinds.** `session:<session id>` (`agent_kind: session`) and
   `session:<session id>:agent-<id>` (`mill-crew` when `agentType` starts with
-  millstone/sluice/tailrace, else `subagent:<agentType>`). `outcome` is always
+  millstone/bolter/sluice/tailrace, else `subagent:<agentType>`). `outcome` is always
   `null`: a transcript does not say whether the work was good.
 - **Tokens are per message, not per line.** A message is written once per
   content block with partial `usage`; the record takes the largest value per
@@ -173,7 +173,7 @@ and field list: the docstring of `watermill/sessionlog.py`.
   four times. The rule for every reader (stats, dashboards):
   - **per bead** (outcome, one row per piece of work): `source == "handoff"`,
     key `crew:<bead>`;
-  - **per run** (tokens, duration, one row per millstone/sluice/tailrace
+  - **per run** (tokens, duration, one row per millstone/bolter/sluice/tailrace
     dispatch): `source == "transcript"`.
 
   A transcript record carries `detail.crew_key` (and `subject`) when its label
@@ -268,7 +268,7 @@ checkout.
   replace prose guesses in `fields_inferred`, never `output_tokens_floor`.
 - **The trial's token/cost figure is the session's `cost-state` total**
   (water-mill-166 design). Each trial bead runs in its OWN top-level session:
-  arm A is an orchestrator session that runs the crew (millstone, sluice,
+  arm A is an orchestrator session that runs the crew (millstone, bolter, sluice,
   tailrace as subagents) on that one bead, arm B a solo session on it. Then
   the session-level `cost-state` line, which folds the subagents in, is the
   true per-bead figure for both arms, and the subagent floor never enters the
@@ -362,7 +362,7 @@ the drop-down at the top of the dashboard).
   re-sent (`--resend` after a rebuild). State files without `agents` ship
   everything once; the `runs`/`tasks` marks are untouched. The key list grows by
   one short string per piece of work, forever; `runs/` is not committed.
-- **Works versus runs.** Crew transcript records (one per millstone, sluice or
+- **Works versus runs.** Crew transcript records (one per millstone, bolter, sluice or
   tailrace run) share `agent_kind="mill-crew"` with the per-bead handoff
   records. Panels that count crew *works* (records per kind, landed per week,
   Sluice rounds, first-pass rate) filter `| json | source_extracted="handoff"`;
@@ -399,7 +399,7 @@ agents, or is that noise?" with small-sample statistics written in stdlib
 ./bin/watermill agents compare --kind crew --vs session --json
 ```
 
-Groups: `crew` (`mill-crew`), `crew:<role>` (`millstone` / `sluice` / `tailrace`),
+Groups: `crew` (`mill-crew`), `crew:<role>` (`millstone` / `bolter` / `sluice` / `tailrace`),
 `subagent` (every `subagent:*`), `session`, or any exact `agent_kind`. `--since`
 keeps work whose end date (else start, else landing date) is on or after it;
 undated records are dropped and counted. `--min-n` (default 8) and `--seed`

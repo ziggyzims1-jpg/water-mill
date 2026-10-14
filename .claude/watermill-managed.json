@@ -1,6 +1,7 @@
 {
   "managed_by": "water-mill",
   "files": [
+    ".claude/agents/bolter.md",
     ".claude/agents/millstone.md",
     ".claude/agents/sluice.md",
     ".claude/agents/tailrace.md",

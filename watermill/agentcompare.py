@@ -6,7 +6,7 @@ arithmetic. Three rules decide what is counted, and the output prints the
 grouping so nobody has to guess:
 
 * **Works vs runs.** `agent_kind == "mill-crew"` alone counts a bead several
-  times (its handoff record plus a transcript record per millstone / sluice /
+  times (its handoff record plus a transcript record per millstone / bolter / sluice /
   tailrace dispatch). Per-bead outcome metrics (landed, sluice rounds,
   first-pass approval) use `source == "handoff"` records only; per-run metrics
   (duration, tokens, tool calls, cost, cost_usd_est) use `source == "transcript"`
@@ -44,7 +44,7 @@ from watermill import agentlog, pricing, sessionlog, stats
 DEFAULT_MIN_N = 8
 MULTIPLE_WARNING_AFTER = 5
 DEFAULT_PAIRS = [("crew", "subagent"), ("crew", "session")]
-CREW_ROLES = ("millstone", "sluice", "tailrace")
+CREW_ROLES = agentlog.CREW_ROLES
 
 
 # -- groups ----------------------------------------------------------------

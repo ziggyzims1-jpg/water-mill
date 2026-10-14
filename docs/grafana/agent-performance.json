@@ -30,7 +30,7 @@
       "id": 1,
       "type": "timeseries",
       "title": "Records per kind per week",
-      "description": "Count of agents.jsonl records by bucketed agent_kind (mill-crew, session, subagent, other), filed on the day the work ended (7-day rolling window). mill-crew counts ONLY the handoff record (one per bead): EXCLUDES transcript records of crew role runs (detail.crew_key links them to the bead), so a bead is not counted once per millstone/sluice/tailrace run. Unlanded crew beads are not shipped, so they are not counted.",
+      "description": "Count of agents.jsonl records by bucketed agent_kind (mill-crew, session, subagent, other), filed on the day the work ended (7-day rolling window). mill-crew counts ONLY the handoff record (one per bead): EXCLUDES transcript records of crew role runs (detail.crew_key links them to the bead), so a bead is not counted once per millstone/bolter/sluice/tailrace run. Unlanded crew beads are not shipped, so they are not counted.",
       "datasource": {
         "type": "loki",
         "uid": "${datasource}"
@@ -152,7 +152,7 @@
       "id": 4,
       "type": "timeseries",
       "title": "Median duration by kind (seconds)",
-      "description": "Median duration_seconds per bucketed kind, per agent RUN: transcript records only (source_extracted=\"transcript\"; one per session, subagent, or crew millstone/sluice/tailrace run). EXCLUDES handoff records (one per crew bead, duration null) and every record whose duration_seconds is null or non-numeric. A missing line is no data, not zero.",
+      "description": "Median duration_seconds per bucketed kind, per agent RUN: transcript records only (source_extracted=\"transcript\"; one per session, subagent, or crew millstone/bolter/sluice/tailrace run). EXCLUDES handoff records (one per crew bead, duration null) and every record whose duration_seconds is null or non-numeric. A missing line is no data, not zero.",
       "datasource": {
         "type": "loki",
         "uid": "${datasource}"

@@ -1,7 +1,7 @@
 """Canon: the one copy of what every project shares, and how it reaches them.
 
 `canon/` in water-mill holds the files that are kept identical everywhere (today
-the three crew agents; later skills, a git guardrail hook, a workshop
+the four crew agents; later skills, a git guardrail hook, a workshop
 CLAUDE.md). `watermill sync <project>` distributes them; `watermill validate`
 checks they have not drifted. Layout, chosen over making `.claude/agents` the
 canon because the canon must also hold things that are not agents (skills,
