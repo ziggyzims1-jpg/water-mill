@@ -7,10 +7,12 @@ disagree, the file is right and this page is stale. Vocabulary is
 [`CONTEXT.md`](../CONTEXT.md); the position is [`STATUS.md`](STATUS.md).
 
 `watermill validate` prints a WARNING (never a failure) when a crew agent or a
-skill that canon distributes is not named on this page, so a new agent or skill
-cannot ship without being described here (`watermill/sync.py`,
+skill that canon distributes is not named on this page (`watermill/sync.py`,
 `unmentioned_in_ai_doc`; a name counts as mentioned when it appears here as a
-whole word, case-insensitively).
+whole word, case-insensitively). What stops a new agent or skill from shipping
+undescribed is the gate: `tests/test_sync.py`,
+`test_the_real_factorys_ai_doc_names_every_agent_and_skill`, fails `make verify`
+for water-mill's own copy of this page.
 
 Contents: 1 Harnesses, 2 The crew, 3 Rules and where they live, 4 Skills,
 5 The context graph, 6 Agent-run tracking, 7 Observability, 8 Cloud constraints,
@@ -37,9 +39,10 @@ be confused:
 The workshop folder `~/Documents/code` holds the repos and a shared `.claude/`
 (`CONTEXT.md`, "Workshop"). Its `CLAUDE.md` is mastered in
 `canon/workshop/CLAUDE.md` and written there by `watermill sync workshop`, which
-is laptop-only (section 9). Each repo has its own `CLAUDE.md`, and the crew agents
-additionally read the `CLAUDE.md` of every subfolder they touch (`millstone.md`,
-step 4).
+is laptop-only (section 9). Each repo has its own `CLAUDE.md`; millstone additionally reads the `CLAUDE.md`
+of every subfolder it touches (`millstone.md`, step 4), and bolter counts the
+`CLAUDE.md` conventions of the folders a diff touches as documented standards
+(`bolter.md`, step 2).
 
 ### Claude Code in cloud sessions
 
@@ -101,8 +104,10 @@ Four single-purpose agents take one bead to a landed change, **in this order**:
 millstone, bolter, sluice, tailrace (ADR-0001, `CLAUDE.md` "Auto-mill follow-ups").
 The definitions are mastered in `canon/common/.claude/agents/<name>.md` and
 rendered into `.claude/agents/` of every target; edit canon, never the copy.
-All four are told to work in their own git worktree, to write a handoff before
-signing off even when blocked, and to stop and report **BLOCKED** (quoting the
+Millstone, bolter and sluice are told to work in their own git worktree (tailrace
+makes one only to resolve a merge conflict, step 3, or in cloud mode for its
+post-merge commits); all four are told to write a handoff before signing off even
+when blocked, and to stop and report **BLOCKED** (quoting the
 denial) rather than retry when a tool call is denied (ADR-0011).
 
 | Agent | Job | Writes to the branch? |
@@ -122,9 +127,10 @@ another, never in parallel and never skipping a step" (`watermill/trial.py`,
 Role detail lives in the agent files; this page does not duplicate it. Things
 worth knowing without opening them:
 
-- Millstone, bolter and sluice start with `watermill recall` (owner rule f-20260925-aa9b36),
-  gets a `wm-run-...` tag from `watermill agents whoami` early, and runs
-  `watermill agents record ... --pr <n>` only at sign-off (section 6).
+- Millstone, bolter and sluice start with `watermill recall` (owner rule
+  f-20260925-aa9b36). All four get a `wm-run-...` tag from `watermill agents
+  whoami` early and run `watermill agents record ... --pr <n>` only at sign-off
+  (section 6).
 - The fence (`fence.paths` in the contract) is off limits to the crew unless the
   bead itself directs the fenced change (`millstone.md`, step 4).
 - `millstone.md` forbids `git stash` and gives the patch-file alternative.
@@ -156,7 +162,7 @@ A rule is only as good as the place it is enforced. `CLAUDE.md` ranks the
 destinations for a lesson: the **gate** (unignorable) and `fence.paths` (checked
 against the diff) first; `notes` in the contract only for what neither can express
 (it reaches the prompt as advice and is never checked); the **context graph** last
-and weakest (`CLAUDE.md`, "Knowledge has four destinations"; ADR-0014).
+and weakest (`CLAUDE.md`, "Knowledge has four destinations"; ADR-0007).
 
 | Where | What it holds | Enforced by |
 |---|---|---|
@@ -181,9 +187,9 @@ repo-specific and each repo's `CLAUDE.md` says where: `HANDOFF-mill/` here,
 to the latter). On the laptop a handoff is never part of the PR; in cloud mode it
 is committed on the session branch and reaches main through the orchestrator's one
 session docs PR (`CONTEXT.md`, "Handoff"). Session-level handoffs by an
-orchestrator are a different file: `HANDOFF.md` here (overwritten), and dated
-snapshots such as `HANDOFF-2026-08-28.md` and `HANDOFF-2026-10-13.md` in the repo
-root, each saying at the top what supersedes it. The rule for all of them: say
+orchestrator are different files in the repo root: `HANDOFF.md` (the first
+session's snapshot, whose top points at the newer `HANDOFF-2026-08-28.md`) and
+dated snapshots such as `HANDOFF-2026-08-28.md` and `HANDOFF-2026-10-13.md`. The rule for all of them: say
 what failed, name files and functions, no diffs, one page.
 
 **Beads in git (ADR-0003).** Any session or agent that creates, updates, closes or
@@ -260,10 +266,13 @@ What the factory has learned, queried rather than loaded. Full treatment:
 - **Write:** `watermill remember <cell> {failure|lesson|measurement|success}
   "<one sentence>" --cause <bucket> --tag <t> [--path P] [--task BEAD]
   [--supersedes ID --why ...] [--on DATE] [--destination fence|gate|note|record]`.
-  `--cause` is required; `pending` leaves it to the owner. An agent may only
-  *propose*: a proposal is quarantined and never returned to any agent until a
-  person runs `watermill proposals --promote` (or `--reject`). Crew roles file
-  with their role as a tag (bolter: `--tag bolter`); a trial session tags
+  `--cause` is required; `pending` leaves it to the owner. The crew agents run
+  `watermill remember` directly (`bolter.md` step 5, `sluice.md` step 5a,
+  `tailrace.md` step 5), so their findings are live at once. Quarantine applies
+  only to the MCP `propose` tool an agent under `watermill run` calls mid-task:
+  a proposal is never returned to any agent until a person runs `watermill
+  proposals --promote` (or `--reject`) (`KNOWLEDGE.md`). Tags: bolter always adds
+  `--tag bolter`; sluice and tailrace tag by topic; a trial session tags
   `trial:A` or `trial:B` (section 10). `watermill confirm <id>` says a finding
   still holds; a belief that changed is superseded, never edited.
 - **Who writes what:** millstone does not write to the graph (its handoff's
@@ -362,7 +371,8 @@ agent's "Cloud mode" section is the operative text (`canon/common/.claude/agents
   checks `diff <(git show HEAD:.beads/issues.jsonl | sort) <(sort .beads/issues.jsonl)`
   shows only the one bead's old and new line (export and beads-sync order lines
   differently). Anything else: do not commit, report NEEDS_MANUAL
-  (`tailrace.md`, step 4 and its cloud mode).
+  (`tailrace.md`, step 4; it is the laptop rule too, and the cloud mode adds the
+  first-agent `bd import`).
 - **Handoffs and agent-run records are committed on `$SB`**; the container is
   thrown away. After the merges the orchestrator opens one docs-only PR with them
   and resets `$SB` to main with `--force-with-lease` only after that PR merged
@@ -588,7 +598,8 @@ check. It is judged on that one defect alone, never on arm counts or rates.
 one session. That ledger line is the marker the guards use:
 
 - **Refused from a session that ran `trial start`** (exit non-zero, in
-  `trial._refuse_trial_session`, called from `cmd_trial`): `pause`, `resume`,
+  `trial._refuse_trial_session`, reached from `cmd_trial` for enroll, score and
+  scorepack and from `trial._set_pause` for pause and resume): `pause`, `resume`,
   `enroll` (not `--dry-run`), `score` and `scorepack`.
 - **Open to every session:** `collect`, `status`, `brief`, `start` and
   `enroll --dry-run`. (The briefs still tell a session never to run

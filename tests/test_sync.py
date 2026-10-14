@@ -556,8 +556,9 @@ def test_an_agent_or_skill_missing_from_ai_doc_is_listed(tmp_path):
 
 
 def test_a_name_inside_a_longer_name_is_not_a_mention(tmp_path):
-    # `beta` must not count because `beta-tester` or `alpha-skill-2` appear.
-    root = ai_factory(tmp_path, "crew, beta-tester and alpha-skill-2\n")
+    # `beta` must not count because `beta-tester` or `pre-beta` appear, nor
+    # `alpha-skill` because `alpha-skill-2` or `my-alpha-skill` do: both sides.
+    root = ai_factory(tmp_path, "crew, beta-tester, pre-beta, alpha-skill-2 and my-alpha-skill\n")
     assert sync.unmentioned_in_ai_doc(root) == ["skill alpha-skill", "skill beta"]
 
 
