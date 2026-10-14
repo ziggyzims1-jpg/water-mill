@@ -193,11 +193,27 @@ def pause_state(ledger: list[dict]) -> dict | None:
     return still[-1] if still else None
 
 
-def _set_pause(root: Path, kind: str, reason: str, now: str | None) -> dict:
+def _refuse_trial_session(ledger: list[dict], kind: str, session_id: str | None) -> None:
+    """Pause/resume are the owner's (docs/TRIAL.md section 6): refuse a session that is bound
+    to a trial bead. `trial start` is every trial session's first action and records
+    CLAUDE_CODE_SESSION_ID, so the ledger itself is the marker: nothing for a brief to leak
+    and nothing the owner's own terminal ever carries. A session that skipped `start` is not
+    caught; that is the brief's job (it forbids these commands)."""
+    if session_id and any(r.get("type") == "start" and r.get("session_id") == session_id
+                          for r in ledger):
+        raise TrialError(f"`trial {kind}` refused: this session ({session_id}) is bound to a trial "
+                         "bead. Pause and resume are the owner's decision, run from the owner's "
+                         "own terminal (docs/TRIAL.md section 6); report the concern in your "
+                         "handoff instead.")
+
+
+def _set_pause(root: Path, kind: str, reason: str, now: str | None,
+               session_id: str | None = None) -> dict:
     reason = (reason or "").strip()
     if not reason:
         raise TrialError(f"{kind} needs a non-empty --reason")
     ledger = read_ledger(root)
+    _refuse_trial_session(ledger, kind, session_id)
     paused = pause_state(ledger)
     if kind == "pause" and paused:
         raise TrialError(f"the trial is already paused ({paused.get('reason')}); resume it first")
@@ -222,14 +238,17 @@ def _refuse_if_paused(ledger: list[dict], what: str) -> None:
                          "...` (docs/TRIAL.md section 6).")
 
 
-def pause(root: Path, reason: str, *, now: str | None = None) -> dict:
-    """Harm stop (docs/TRIAL.md section 6): no new `trial start` until `resume`."""
-    return _set_pause(root, "pause", reason, now)
+def pause(root: Path, reason: str, *, now: str | None = None,
+          session_id: str | None = None) -> dict:
+    """Harm stop (docs/TRIAL.md section 6): no new `trial start` until `resume`.
+    `session_id` is the caller's session; a trial-bound one is refused."""
+    return _set_pause(root, "pause", reason, now, session_id)
 
 
-def resume(root: Path, reason: str, *, now: str | None = None) -> dict:
-    """The owner's written resume decision."""
-    return _set_pause(root, "resume", reason, now)
+def resume(root: Path, reason: str, *, now: str | None = None,
+           session_id: str | None = None) -> dict:
+    """The owner's written resume decision (same session guard as `pause`)."""
+    return _set_pause(root, "resume", reason, now, session_id)
 
 
 def ledger_problems(ledger: list[dict]) -> list[str]:
@@ -588,6 +607,14 @@ _DENIED = ("If the permission system or the auto-mode classifier denies a tool c
            "command and the reason verbatim.")
 
 
+_OWNER_ONLY = ("Owner-only commands: never run `watermill trial pause`, `trial resume`, `trial "
+               "enroll`, `trial collect`, `trial score` or `trial scorepack`, and do not edit "
+               "knowledge/trial/. Whether a landed blocker or defect should stop the trial is a "
+               "human judgement that is the owner's alone; if you think something is wrong, say "
+               "so in your handoff and keep working your bead. (`trial pause`/`resume` also "
+               "refuse a session that ran `trial start`.)")
+
+
 def _slug(bead: str, repo: str) -> str:
     """The bead id with its project prefix removed, as the handoff paths spell it."""
     return landed.normalise(bead).removeprefix(landed.normalise(repo) + "-")
@@ -676,7 +703,7 @@ def brief(root: Path, bead: str, *, surface: str = "laptop",
             "Everything else follows the crew agents' own definitions, including their handoffs "
             "and (in a cloud session) their cloud mode. " + branch,
             landing + " (tailrace does this, with the message above.)",
-            know, secret, _DENIED,
+            know, secret, _DENIED, _OWNER_ONLY,
             "Your own sign-off, as the last things you do: write a short orchestrator handoff "
             "(where things stand, what failed, lessons, open questions); then, as its own tool "
             f"call earlier in the run, you will have run `{wm}/bin/watermill agents whoami` and "
@@ -711,7 +738,7 @@ def brief(root: Path, bead: str, *, surface: str = "laptop",
             end,
             "Your handoff: write `brain/handoffs/solo/" + slug + ".md` in the repo (where things "
             "stand, what you tried that failed, lessons, look-here-first, open questions).",
-            know, secret, _DENIED,
+            know, secret, _DENIED, _OWNER_ONLY,
             f"Sign-off: earlier, as its own tool call, run `{wm}/bin/watermill agents whoami` and "
             f"keep the tag; at the very end, with the outcome known, run `{wm}/bin/watermill "
             f"agents record --transcript auto --run-tag <tag> --role solo --arm B --bead {bead} "
