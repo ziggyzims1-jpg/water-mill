@@ -304,6 +304,21 @@ def test_arm_b_end_point_is_one_switch(world, monkeypatch):
         assert "--match-head-commit" not in text and "pulls/<n>/merge" not in text
 
 
+def test_arm_b_laptop_close_imports_between_pull_and_export(world):
+    _, b = enrolled_pair(world)
+    text = trial.brief(world[0], b, surface="laptop", registry=world[1])
+    pull, imp, exp = (text.index(x) for x in ("--ff-only", "bd import .beads/issues.jsonl",
+                                               "bd export -o .beads/issues.jsonl"))
+    assert pull < imp < exp
+    assert "git diff .beads/issues.jsonl" in text
+
+
+def test_tailrace_close_imports_between_pull_and_export():
+    line = next(ln for ln in (Path(__file__).parent.parent / ".claude/agents/tailrace.md")
+                .read_text().splitlines() if ln.startswith("4. **Close the bead**"))
+    assert line.index("pull --ff-only") < line.index("bd import") < line.index("bd export")
+
+
 def test_brief_refuses_an_unenrolled_bead(world):
     with pytest.raises(trial.TrialError):
         trial.brief(world[0], "nope", registry=world[1])
