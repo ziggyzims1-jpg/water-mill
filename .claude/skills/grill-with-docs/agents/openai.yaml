@@ -1,0 +1,6 @@
+# managed by water-mill (canon/common/.claude/skills/grill-with-docs/agents/openai.yaml); edit it there, then run `watermill sync`
+interface:
+  display_name: "Grill with Docs"
+  short_description: "Grill a design and write its docs"
+policy:
+  allow_implicit_invocation: false

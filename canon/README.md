@@ -35,3 +35,19 @@ banned commands). Crew instructions must not tell an agent to run a blocked
 form: tailrace resets a landing worktree with `reset --keep`, not `--hard`. It is Python
 (stdlib only) so it behaves the same on macOS bash 3.2 and the Linux cloud
 image. Adapted from mattpocock-skills 1.2.3 (MIT). Tests: `tests/test_git_guardrail.py`.
+
+## The skills
+
+`common/.claude/skills/` holds 11 skills adapted for beads from mattpocock-skills
+1.2.3 (MIT, Copyright (c) 2026 Matt Pocock): domain-modeling, grill-with-docs,
+grilling, diagnosing-bugs, code-review, tdd, codebase-design, wayfinder, wizard,
+improve-codebase-architecture, to-questionnaire. Each `SKILL.md` carries an
+attribution block (upstream repo, version, license) and points at the one shared
+`MATTPOCOCK-SKILLS-LICENSE`, which sync delivers beside them. Where upstream
+talked to an issue tracker, the skill now says `bd` (wayfinder: the map is an epic
+labelled `wayfinder:map`, tickets are child beads, blocking is `bd dep add`, the
+frontier is `bd ready --parent <map> -u`). Upstream's per-skill `agents/openai.yaml`
+(Codex UI metadata) is carried along untouched. wayfinder, wizard,
+improve-codebase-architecture and to-questionnaire are available, not run by the
+mill. A target's `.gitignore` must not drop `.claude/skills/`, or the files are
+never committed. Tests: `tests/test_skills.py`.
