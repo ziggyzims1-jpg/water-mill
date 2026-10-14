@@ -29,7 +29,7 @@ Rules that came out of the design and are pinned by tests:
 - Git projects receive a pull request, never a push to their base branch. The
   PR branch is named from a digest of the content, so running sync twice
   proposes once. Nothing here merges.
-- Sync refuses (SyncRefusal, no branch, no PR) when the target's .gitignore would
+- Sync refuses (SyncRefusal, no new branch, no PR) when the target's .gitignore would
   keep a file it writes out of the commit, naming the rule; a half-synced PR once
   shipped a settings hook without its script (fwm.9). The managed hook command
   fails open when its script is missing, and `validate` flags any settings hook
@@ -469,6 +469,10 @@ def sync_project(
     scratch = Path(tempfile.mkdtemp(prefix="wm-sync-"))
     wt = scratch / "wt"
     refused = False
+    # A refusal removes only a branch this call created; one left by an earlier
+    # run whose push failed is reset by -B below but kept.
+    had_branch = _git(path, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}",
+                      check=False) is not None
     try:
         # -B: a local branch left by a run whose push failed is reset, not an error.
         _git(path, "worktree", "add", "-B", branch, str(wt), ref)
@@ -491,7 +495,7 @@ def sync_project(
         out.lines.append(f"    opened {out.url}")
     finally:
         _git(path, "worktree", "remove", "--force", str(wt), check=False)
-        if refused:
+        if refused and not had_branch:
             _git(path, "branch", "-D", branch, check=False)
         shutil.rmtree(scratch, ignore_errors=True)
     return out
@@ -538,7 +542,7 @@ class Drift:
         return not self.differing
 
 
-HOOK_FILE = re.compile(r"\$\{?CLAUDE_PROJECT_DIR\}?/([^\s\"';&|<>()$]+)")
+HOOK_FILE_RE = re.compile(r"\$\{?CLAUDE_PROJECT_DIR\}?/([^\s\"';&|<>()$]+)")
 
 
 def missing_hook_files(target: Path) -> list[str]:
@@ -559,7 +563,7 @@ def missing_hook_files(target: Path) -> list[str]:
             entries = group.get("hooks") if isinstance(group, dict) else None
             for entry in entries if isinstance(entries, list) else []:
                 command = entry.get("command") if isinstance(entry, dict) else None
-                for rel in HOOK_FILE.findall(command if isinstance(command, str) else ""):
+                for rel in HOOK_FILE_RE.findall(command if isinstance(command, str) else ""):
                     if not (Path(target) / rel).exists() and rel not in found:
                         found.append(rel)
     return found

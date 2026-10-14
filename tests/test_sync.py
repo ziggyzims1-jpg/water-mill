@@ -8,6 +8,7 @@ seam replaced is the one that talks to GitHub (`open_pr`).
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -430,8 +431,6 @@ def managed_hook_command():
 
 def run_hook(project_dir, stdin):
     # The command string exactly as settings.json carries it, through a real shell.
-    import os
-
     return subprocess.run(
         ["sh", "-c", managed_hook_command()], input=stdin, capture_output=True, text=True,
         env={"PATH": os.environ["PATH"], "CLAUDE_PROJECT_DIR": str(project_dir)})
@@ -445,9 +444,24 @@ def test_sync_refuses_when_a_file_it_writes_is_gitignored_and_opens_no_pr(tmp_pa
         run_sync(root, app)
     assert ".gitignore:1:.claude/*" in str(err.value)
     assert ".claude/agents/crew.md" in str(err.value)
+    assert ".claude/settings.json" not in str(err.value)  # re-included by `!`, so not ignored
     assert git(remote, "branch", "--format=%(refname:short)").split() == ["main"]
+    assert git(app, "branch", "--format=%(refname:short)").split() == ["main"]
     assert git(app, "worktree", "list").count("\n") == 1
 
+
+
+def test_a_refusal_keeps_a_local_sync_branch_it_did_not_create(tmp_path):
+    # A branch left by an earlier run whose push failed is not the refusal's to delete.
+    root = make_factory(tmp_path, MANAGED)
+    app, _ = make_project(tmp_path, {".gitignore": ".claude/*\n!.claude/settings.json\n"})
+    git(app, "fetch", "-q", "origin", "main")
+    plan = sync.make_plan(root, sync.git_reader(app, "origin/main"), "project", None)
+    branch = f"sync/water-mill-{plan.digest()}"
+    git(app, "branch", branch)
+    with pytest.raises(sync.SyncRefusal):
+        run_sync(root, app)
+    assert branch in git(app, "branch", "--format=%(refname:short)").split()
 
 def test_sync_is_not_refused_when_the_gitignore_re_includes_what_it_writes(tmp_path):
     root = make_factory(tmp_path)
