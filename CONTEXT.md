@@ -29,7 +29,7 @@ The section of a bead that an implementer must obey exactly; a file marked READ 
 _Avoid_: non-goals
 
 **Auto-mill bead**:
-A bead sluice files, labelled `auto-mill`, P3, for a clearly-defined smell (file, smell, concrete fix), which the orchestrator then runs through the full crew. Depth 1, at most 2 per parent, never anything touching the fence, security code, schema or CI.
+A bead sluice files, labelled `auto-mill`, P3, for a clearly-defined smell (file, smell, concrete fix), which the orchestrator then runs through the full crew. Limits in ADR-0002.
 _Avoid_: follow-up, tech-debt ticket
 
 ## The crew
@@ -43,7 +43,7 @@ The implementer. Works one bead in its own git worktree, tests at seams, opens o
 _Avoid_: builder, coder
 
 **Bolter**:
-The standards reviewer. Report-only: checks the diff against `CODING_STANDARDS.md`, `docs/adr/`, `CONTEXT.md` and a smell baseline, and never pushes. Blocking means breaking a documented standard; smells are advisory.
+The standards reviewer. Report-only: checks the diff against `CODING_STANDARDS.md`, `docs/adr/`, `CONTEXT.md` and a smell baseline, and never pushes; only a broken documented standard blocks.
 _Avoid_: linter, style reviewer
 
 **Sluice**:
@@ -59,7 +59,7 @@ The top-level session that spawns the crew, carries its handoffs and bead change
 _Avoid_: lead, coordinator
 
 **Handoff**:
-The note an agent writes before signing off, per bead at `HANDOFF-mill/<slug>.md` in this repo, saying where things stand and above all what failed. Never part of the PR.
+The note an agent writes before signing off, per bead at `HANDOFF-mill/<slug>.md` in this repo, saying where things stand and above all what failed. On the laptop never part of the PR; in cloud mode committed on the session branch and carried by the orchestrator's session docs PR.
 _Avoid_: summary, status report
 
 **BLOCKED**:
@@ -85,7 +85,7 @@ _Avoid_: tests, CI check
 _Avoid_: blocklist, protected files
 
 **Contract**:
-A project's `watermill.yaml` (or a vendored `projects/<name>.yaml`): the only coupling surface between a project and the factory. Unknown keys are refused. Spec in `docs/CONTRACT.md`.
+A project's `watermill.yaml` (or a vendored `projects/<name>.yaml`): the only coupling surface between a project and the factory. Spec in `docs/CONTRACT.md`.
 _Avoid_: config, manifest
 
 **Caps**:
@@ -139,7 +139,7 @@ The `canon/` folder: the one master of every file projects share (crew agents, s
 _Avoid_: templates, shared config
 
 **Sync**:
-`watermill sync <project>`: opens a CI-gated PR per repo that renders canon into it (workshop directly) and merges only its own marked entries into `.claude/settings.json`. Never merges its PR. `validate` fails on drift.
+`watermill sync <project>`: opens a CI-gated PR per repo that renders canon into it (workshop directly) and merges only its own marked entries into `.claude/settings.json`. `validate` fails on drift.
 _Avoid_: deploy, push
 
 **Managed header**:
@@ -160,9 +160,9 @@ _Avoid_: note, memory
 The most common kind of finding: a sentence that is always true about a trap or convention. Promoted into Water Mill only after appearing in two repositories.
 _Avoid_: tip, learning
 
-**Context graph / knowledge graph**:
+**Context graph**:
 The findings plus the run and task logs, rebuilt in memory on every call and queried by `recall`, never loaded into a prompt.
-_Avoid_: knowledge base, database
+_Avoid_: knowledge graph, knowledge base, database
 
 **Recall**:
 `watermill recall`: the one budgeted query over the graph, returning a few one-line hits; `--detail <id>` opens one.
@@ -188,9 +188,9 @@ _Avoid_: night (a night is a scheduled run)
 An append-only JSONL history: `runs/index.jsonl` (runs), `runs/tasks.jsonl` (tasks), or the trial ledger `knowledge/trial/ledger.jsonl`.
 _Avoid_: log (a log is the free-form per-run output)
 
-**Sweep**:
-The monthly `watermill review` of the graph, and `review --check` which fails when the sweep stopped happening.
-_Avoid_: audit
+**Knowledge sweep**:
+The monthly `watermill review` of the graph; `review --check` fails when it stopped happening. Not `watermill agents sweep`, which backfills `runs/agents.jsonl` with mill crew history.
+_Avoid_: audit, sweep (alone)
 
 ## Trial
 

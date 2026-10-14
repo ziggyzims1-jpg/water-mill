@@ -44,4 +44,4 @@ Bolter reviews a diff against this file, `docs/adr/` and `CONTEXT.md`.
 - Commit style is conventional commits (`feat:`, `fix:`, `docs:`, `chore(beads):`), matching `git log`.
 - Tests sit at seams, state their expected values from an independent source, and a PR shows the new tests failing on the base ("Red before green"), unless it is docs-only.
 - Beads: `bd` for all task tracking, no markdown TODO lists; commit and push `.beads/issues.jsonl` after any bead write.
-- Crew handoffs go in `HANDOFF-mill/<slug>.md`, never in the PR.
+- Crew handoffs go in `HANDOFF-mill/<slug>.md`, never in the PR on the laptop; in cloud mode they are committed on the session branch and reach main through the orchestrator's session docs PR (water-mill-hix).
