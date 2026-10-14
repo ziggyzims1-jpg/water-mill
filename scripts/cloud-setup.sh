@@ -17,7 +17,11 @@
 # them into main. Finally `make install` for water-mill itself.
 #
 # Idempotent. Does nothing unless CLAUDE_CODE_REMOTE=true (or --force), so the
-# SessionStart hook never touches a laptop's setup or sync config.
+# SessionStart hook never touches a laptop's setup or sync config. Never pass
+# --force on a laptop checkout: the script works on every sibling of the
+# checkout it lives in (~/Documents/code there) and imports each jsonl into
+# that repo's live db. --force is for tests, which copy the script into a temp
+# <parent>/water-mill/scripts/ first (tests/test_cloud_setup.py).
 #
 # The SessionStart hook only fires when the session's cwd is inside a repo that
 # carries it. A routine's orchestrator starts in /home/user (not a repo), so
@@ -71,12 +75,16 @@ bd metrics off >/dev/null 2>&1 || true
 # The bd prefix of a repo: its issue ids are <prefix>-<suffix> where the suffix
 # has no '-' (zimmy-life-tracker-6wo.1 -> zimmy-life-tracker). The most common
 # prefix wins, so one stray id cannot move it. Falls back to the directory name
-# when the jsonl has no issues yet.
+# when the jsonl has no issues yet. Only prefixes bd init accepts as a database
+# name count (a letter or _, then letters, digits, _ or -): zimmy-life-tracker
+# carries 103 zimmy-life-tracker-* ids and 101 newer "Zimmy Life Tracker-*" ones
+# (its laptop db's prefix), and bd init --prefix "Zimmy Life Tracker" fails, so
+# without the filter two more laptop beads would leave its cloud db unbuilt.
 derive_prefix() {
   local jsonl="$1/.beads/issues.jsonl" prefix=""
   if [[ -s "$jsonl" ]]; then
     prefix="$(sed -nE 's/^\{("_type":"issue",)?"id":"([^"]+)".*/\2/p' "$jsonl" \
-      | sed -E 's/-[^-]*$//' | sort | uniq -c | sort -rn | head -1 \
+      | sed -E 's/-[^-]*$//' | { grep -E '^[A-Za-z_][A-Za-z0-9_-]*$' || true; } | sort | uniq -c | sort -rn | head -1 \
       | sed -E 's/^[[:space:]]*[0-9]+ //')"
   fi
   echo "${prefix:-$(basename "$1")}"
@@ -151,8 +159,15 @@ setup_repo() {
 for repo in "$PARENT"/*/; do
   repo="${repo%/}"
   [[ -d "$repo/.beads" && -e "$repo/.git" ]] || continue
-  # One repo failing must not leave the others without beads.
-  ( setup_repo "$repo" ) || log "$(basename "$repo"): setup failed; run it by hand in $repo"
+  # One repo failing must not leave the others without beads. errexit is
+  # switched off around the subshell and back on inside it: bash ignores set -e
+  # in anything run under || or if, so `( setup_repo ) || log` would carry on
+  # past a failed step and never report the failure.
+  set +e
+  ( set -e; setup_repo "$repo" )
+  rc=$?
+  set -e
+  (( rc == 0 )) || log "$(basename "$repo"): setup failed; run it by hand in $repo"
 done
 
 if [[ ! -x "$HERE/.venv/bin/python" ]]; then
