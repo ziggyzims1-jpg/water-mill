@@ -36,3 +36,17 @@
 - **NEEDS_MANUAL (beads commit not made)**: the sorted compare showed three lines, not two: fwm.9 (closed) and faw (new) as expected, plus water-mill-fwm.5 flipped open -> in_progress (started_at 2026-10-14T14:34:05Z), a claim from the parallel PR #54 work. Per rule I did not commit `.beads/issues.jsonl`; it sits modified in the main checkout. Orchestrator: commit it (fwm.5 claim is legitimate) or revert that line first.
 - **auto-mill**: water-mill-faw (P3) Give sync._git an input= kwarg and use it in gitignored(). Within limits (1 of 2, same repo, touches watermill/sync.py, not fence/security/schema/CI).
 - **Findings**: Added two millstone lessons (git add -A skips ignored paths; missing hook script via python3 exits 2). Sluice's f-20261014-a2e85f and f-20261014-3af902 already in the file.
+
+## Tailrace — hook-fix sync PRs (2026-10-14)
+
+**LANDED** all five `watermill sync` PRs (fail-open hook command). Each diff touched only `.claude/settings.json` and `.claude/watermill-managed.json`; a python json compare against base showed exactly one change, `/hooks/PreToolUse/0/hooks/0/command`, equal to the required fail-open string. `verify` completed/success on each head; sha-guarded squash merges; branches deleted.
+
+| PR | Squash sha |
+|---|---|
+| zimmy-life-tracker #232 | 907ab0dfb5919ae974dd4766847dcd7ddaad6644 |
+| zim-dashboard-demo-cell-1b #35 | a7075c36a73045f928e68b8aedf6a50ea5381f4c |
+| cheme-solver #36 | f7a38db1260a2410765690fe74032a1ba9fcd6fd |
+| Hillel-Programming #66 | f4b4ffd250f28558f548a906522ee0f83d897c8c |
+| watermill-cell-template #13 | d5a7cece049c658749b3e5f108ae029dfee5edc4 |
+
+Local: ff-only pulls done for zimmy-life-tracker, zim-dashboard-demo-cell-1b, cheme-solver, watermill-cell-template; Hillel-Programming fetch only (checkout left on its branch). Notes: Hillel's verify took ~6 min to complete (waited). cheme-solver checkout has an unrelated dirty `.beads/interactions.jsonl`. No bead, so no bd close / findings filed.
