@@ -19,6 +19,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 from watermill import sync
 
@@ -42,14 +43,13 @@ UPSTREAM_TRACKER_PHRASES = [
 ]
 
 
-def front_matter(text: str) -> dict[str, str]:
+def front_matter(text: str) -> dict:
+    """Parse the front matter the way a loader does: as YAML, or not at all."""
     m = re.match(r"---\n(.*?)\n---\n", text, re.S)
     assert m, "no front matter"
-    out = {}
-    for line in m.group(1).splitlines():
-        key, _, value = line.partition(":")
-        out[key.strip()] = value.strip()
-    return out
+    data = yaml.safe_load(m.group(1))
+    assert isinstance(data, dict), "front matter is not a YAML mapping"
+    return data
 
 
 def skill_text(name: str) -> str:
@@ -67,17 +67,20 @@ def test_exactly_the_eleven_skills_are_in_canon():
 @pytest.mark.parametrize("name", EXPECTED)
 def test_front_matter_names_the_skill_and_describes_it(name):
     fm = front_matter(skill_text(name))
+    assert set(fm) <= {"name", "description", "disable-model-invocation"}, sorted(fm)
     assert fm["name"] == name
-    assert len(fm["description"].strip('"')) > 20
+    assert isinstance(fm["description"], str) and len(fm["description"]) > 20
 
 
 @pytest.mark.parametrize("name", EXPECTED)
 def test_every_skill_carries_the_attribution_block(name):
-    text = skill_text(name)
-    assert "github.com/mattpocock/skills" in text
-    assert "version 1.2.3" in text
-    assert "MIT" in text and "Matt Pocock" in text
-    assert ".claude/skills/MATTPOCOCK-SKILLS-LICENSE" in text
+    expected = (
+        f"> **Attribution.** Adapted for beads from the `{name}` skill of "
+        "[mattpocock/skills](https://github.com/mattpocock/skills), version 1.2.3, "
+        "MIT License, Copyright (c) 2026 Matt Pocock. "
+        "License text: `.claude/skills/MATTPOCOCK-SKILLS-LICENSE`."
+    )
+    assert expected in skill_text(name).splitlines()
 
 
 def test_the_license_copy_is_the_upstream_mit_text():
@@ -140,9 +143,10 @@ def test_rendered_skills_keep_front_matter_first_and_scripts_keep_their_shebang(
 
 
 def test_water_mills_own_copies_are_committed_not_ignored():
-    paths = [f".claude/skills/{n}/SKILL.md" for n in EXPECTED] + [
-        ".claude/skills/MATTPOCOCK-SKILLS-LICENSE"]
-    done = subprocess.run(["git", "-C", str(ROOT), "check-ignore", *paths],
+    paths = sorted(rel for rel in sync.canon_files(ROOT, "project")
+                   if rel.startswith(".claude/skills/"))
+    assert len(paths) == len(all_skill_files())  # every canon skill file, aux files too
+    done = subprocess.run(["git", "-C", str(ROOT), "check-ignore", "--no-index", *paths],
                           capture_output=True)
     assert done.returncode == 1 and not done.stdout, (
         f"git ignores synced skill files and would drop them: {done.stdout.decode()}")

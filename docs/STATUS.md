@@ -159,6 +159,18 @@ outside.
   role readers (`agentlog.CREW_ROLES`), the trial briefs and the Grafana
   descriptions know bolter. Not yet synced to sibling repos: that is the owner's
   `watermill sync` step.
+- **Skills in canon (2026-10-14, water-mill-fwm.5).** `canon/common/.claude/skills/`
+  ships 11 skills adapted for beads from mattpocock-skills 1.2.3 (MIT, attribution
+  in every `SKILL.md`, licence text beside them): domain-modeling, grill-with-docs,
+  grilling, diagnosing-bugs, code-review, tdd, codebase-design, wayfinder, wizard,
+  improve-codebase-architecture, to-questionnaire. code-review reads its spec with
+  `bd show`; wayfinder's map is an epic labelled `wayfinder:map` with child-bead
+  tickets, `bd dep add` blocking and `bd ready --parent <map> -u` as the frontier
+  (every command exercised on a scratch bd 1.2.2 repo). wayfinder, wizard,
+  improve-codebase-architecture and to-questionnaire are available, not run by the
+  mill. Rendered into water-mill's own `.claude/skills/` only; sibling repos get
+  them on the owner's next `watermill sync`, and a target must not gitignore
+  `.claude/skills/` or sync drops the files.
 - **`cheme-solver` registered (2026-10-13), vendored contract.** Already crewed
   (18 mill handoffs, 57 transcript runs) but unregistered until the owner asked;
   contract in `projects/cheme-solver.yaml`, gate `make verify`. CI landed
