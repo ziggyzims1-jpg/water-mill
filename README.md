@@ -44,7 +44,7 @@ make install                                  # .venv + dependencies
 make verify                                   # the gate: guard, ruff, 373 tests
 
 ./bin/watermill projects                      # what this factory drives
-./bin/watermill validate                      # do the contracts parse; do the crew files match water-mill's? (--crew-path DIR adds a report-only copy)
+./bin/watermill validate                      # do the contracts parse; does every synced file match canon/? (--sync-path DIR adds a report-only copy, e.g. the workshop)
 ./bin/watermill doctor                        # would a run be allowed to start
 ./bin/watermill doctor --gate                 # ...including the project's gate
 ```
@@ -53,8 +53,17 @@ Adding a project:
 
 ```bash
 ./bin/watermill init ../my-project            # writes a starter watermill.yaml
-./bin/watermill add my-project ../my-project  # registers it here
+./bin/watermill add my-project ../my-project  # registers it, then opens the canon sync PR (--no-sync to skip)
 ./bin/watermill validate my-project
+```
+
+Keeping every project's shared files identical (`canon/`, see `canon/README.md`):
+
+```bash
+./bin/watermill sync my-project --dry-run     # what would change
+./bin/watermill sync my-project               # opens a CI-gated PR in that repo
+./bin/watermill sync --all                    # water-mill, every project, then the workshop
+./bin/watermill sync workshop                 # ~/Documents/code/.claude, direct, laptop only
 ```
 
 Running one:
