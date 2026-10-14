@@ -11,6 +11,12 @@ water-mill" header, and `watermill validate` fails on drift).
 | `workshop/<path>` | `<path>` in the workshop folder only (`~/Documents/code`, override `WATERMILL_WORKSHOP`) |
 | `settings.managed.json` | merged into each target's `.claude/settings.json`; only `hooks` and `permissions`, and only these entries (recorded in `.claude/watermill-managed.json` so a dropped entry is removed and the repo's own are never touched) |
 
+`project/.github/workflows/beads-sync.yml` + `project/scripts/beads_merge.py` land
+the `.beads/issues.jsonl` commits a cloud session pushes on its `claude/*` branch
+onto main (union by issue id, newer `updated_at` wins, never deletes). cheme-solver's
+copy is the master: Hillel's differed only in an unpinned `actions/checkout@v4`.
+Water-mill gets it too: its own cloud sessions push `claude/*` branches the same way.
+
 Why a folder of its own rather than `.claude/agents` as the canon: the canon must also hold skills, hook
 scripts, the managed settings entries and the workshop's files, and water-mill's
 own `.claude/agents` is then simply one more synced target.
