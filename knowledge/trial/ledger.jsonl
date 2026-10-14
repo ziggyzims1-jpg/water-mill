@@ -7,3 +7,4 @@
 {"arm": "A", "bead": "zim-dashboard-demo-cell-1b-e7m.11", "block": 1, "enrolled_at": "2026-10-14T20:01:52+00:00", "pos": 1, "repo": "zim-dashboard-demo-cell-1b", "seed": 79268003, "type": "enroll"}
 {"arm": "A", "bead": "zim-dashboard-demo-cell-1b-e7m.8", "block": 1, "enrolled_at": "2026-10-14T20:01:52+00:00", "pos": 2, "repo": "zim-dashboard-demo-cell-1b", "seed": 79268003, "type": "enroll"}
 {"arm": "B", "bead": "zim-dashboard-demo-cell-1b-ptk.1", "block": 1, "enrolled_at": "2026-10-14T20:01:52+00:00", "pos": 3, "repo": "zim-dashboard-demo-cell-1b", "seed": 79268003, "type": "enroll"}
+{"at": "2026-10-14T20:07:23+00:00", "reason": "Owner stopped this batch before any session started; the trial will be run from a separate repo. Labels removed from the 8 ZIM cell beads.", "type": "pause"}
