@@ -190,8 +190,10 @@ correction is applied, so none is a finding on its own.
   briefs forbid a trial session from running them (or the other ledger-writing
   subcommands), and the harness refuses them from a session that ran
   `trial start`: that command records `CLAUDE_CODE_SESSION_ID` in the ledger,
-  and `pause`/`resume` exit non-zero when the caller's session id is one of those
-  (water-mill-mnn). The owner's terminal has no such session, so it is never
+  and `pause`/`resume`, `enroll` (not `--dry-run`), `score` and `scorepack` exit
+  non-zero when the caller's session id is one of those (water-mill-mnn,
+  water-mill-2ez). `collect`, `status`, `brief`, `start` and `enroll --dry-run`
+  stay open. The owner's terminal has no such session, so it is never
   blocked. Crew subagents inherit the orchestrator's `CLAUDE_CODE_SESSION_ID`
   (checked 2026-10-14: a sluice subagent's value equals its parent session's
   transcript id), so in arm A the guard binds millstone, sluice and tailrace
