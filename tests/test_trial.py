@@ -849,3 +849,44 @@ def test_only_blocker_and_bug_are_primary_escapes(tmp_path):
         {"type": "score", "bead": "alpha-A0", "early": False, "escapes": [{"severity": "test-gap"}]},
         {"type": "score", "bead": "alpha-A1", "early": False, "escapes": [{"severity": "blocker"}]}])
     assert trial.status(tmp_path)["metrics"]["primary"]["k"] == {"A": 1, "B": 0}
+
+
+# -- harm stop (water-mill-kt6) ---------------------------------------------
+
+
+def test_pause_blocks_start_status_shows_it_and_resume_clears_it(world, capsys):
+    root, _, _ = world
+    enroll(world, "alpha", ["a-1"], FakeTracker([task("a-1")]))
+    assert trial.pause_state(trial.read_ledger(root)) is None
+    trial.pause(root, "blocker landed in a-9", now="2026-10-20T00:00:00+00:00")
+    with pytest.raises(trial.TrialError, match="PAUSED.*blocker landed in a-9"):
+        trial.start(root, "a-1", session_id="s1", remote=False)
+    with pytest.raises(trial.TrialError, match="already paused"):
+        trial.pause(root, "again")
+    s = trial.status(root)
+    assert s["paused"]["reason"] == "blocker landed in a-9"
+    assert "PAUSED" in trial.render_status(s) and "blocker landed in a-9" in trial.render_status(s)
+    assert trial.ledger_problems(trial.read_ledger(root)) == []
+    trial.resume(root, "reverted; owner decision")
+    assert "PAUSED" not in trial.render_status(trial.status(root))
+    assert trial.start(root, "a-1", session_id="s1", remote=False)["bead"] == "a-1"
+    with pytest.raises(trial.TrialError, match="not paused"):
+        trial.resume(root, "x")
+    with pytest.raises(trial.TrialError, match="reason"):
+        trial.pause(root, "  ")
+    # append-only: pause, resume, both kept
+    kinds = [r["type"] for r in trial.read_ledger(root)]
+    assert kinds.count("pause") == 1 and kinds.count("resume") == 1
+
+
+def test_cli_start_on_a_paused_ledger_exits_nonzero_with_the_reason(world, capsys):
+    root, _, _ = world
+    enroll(world, "alpha", ["a-1"], FakeTracker([task("a-1")]))
+    assert cli.main(["--root", str(root), "trial", "pause", "--reason", "harm x"]) == 0
+    assert cli.main(["--root", str(root), "trial", "pause"]) != 0  # reason required
+    capsys.readouterr()
+    rc = cli.main(["--root", str(root), "trial", "start", "a-1", "--session-id", "s1"])
+    out = capsys.readouterr()
+    assert rc != 0 and "harm x" in (out.err + out.out)
+    assert cli.main(["--root", str(root), "trial", "resume", "--reason", "ok"]) == 0
+    assert cli.main(["--root", str(root), "trial", "start", "a-1", "--session-id", "s1"]) == 0
