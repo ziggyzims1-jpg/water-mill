@@ -1081,7 +1081,8 @@ def cmd_trial(args) -> int:
         if not args.reason:
             print(f"{act}: --reason is required", file=sys.stderr)
             return 2
-        line = (trial.pause if act == "pause" else trial.resume)(root, args.reason)
+        line = (trial.pause if act == "pause" else trial.resume)(
+            root, args.reason, session_id=trial.env_session_id())
         print(f"{act}d: {line['reason']} ({line['at']})" if act == "resume"
               else f"paused: {line['reason']} ({line['at']})")
         return 0
