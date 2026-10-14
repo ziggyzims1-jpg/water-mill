@@ -47,8 +47,8 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 |---|---|
 | `watermill/contract.py` | The coupling surface. Read first |
 | `watermill/registry.py` | Which repositories the factory drives |
-| `watermill/sync.py` | `canon/` and its distribution: `sync` (a PR per repo, settings merge, workshop direct) and the drift check `validate` runs. Edit `canon/`, never a synced copy |
-| `canon/` | The one master of every file projects share (today the five crew agents, the git guardrail hook and 11 skills); layout in `canon/README.md` |
+| `watermill/sync.py` | `canon/` and its distribution: `sync` (a PR per repo, settings merge, workshop direct) and the drift check `validate` runs, plus `unmentioned_in_ai_doc`, the `docs/AI.md` mention check `validate` prints as a WARNING. Edit `canon/`, never a synced copy |
+| `canon/` | The one master of every file projects share (today the four crew agents, the git guardrail hook and 11 skills); layout in `canon/README.md` |
 | `watermill/preflight.py` | Everything that must hold before a run starts |
 | `watermill/engine.py` | The run loop |
 | `watermill/caps.py` | Six caps and their counting rules |
@@ -77,6 +77,7 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 | `docs/TRIAL.md` | The trial protocol and its analysis plan, written before data. Amend only by dated amendment |
 | `docs/OBSERVABILITY.md` | Shipping to Loki, and the LogQL worth pinning |
 | `docs/KNOWLEDGE.md` | The context graph: why it is queried and never loaded, and the monthly sweep |
+| `docs/AI.md` | Every AI adaptation in the mill, for the owner and a collaborator: harnesses, the crew, rules and where they live, skills, cloud constraints, the sync model, the trial harness, adding a project. `watermill validate` warns if a synced agent or skill is not named in it |
 | `docs/` | Contract spec, safety model, onboarding, calibration. **`STATUS.md` is where things actually are; `PLAN.md` is what is being built and why** |
 | `runs/` | Per-run logs. Gitignored, **never pruned automatically** |
 | `knowledge/` | `findings.jsonl` -- **committed**, unlike `runs/`. See `docs/KNOWLEDGE.md` |

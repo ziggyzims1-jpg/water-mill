@@ -527,3 +527,60 @@ def test_gitignored_raises_when_git_itself_fails(tmp_path):
     # exit 128 (not a repo) is a real failure, not "nothing ignored"
     with pytest.raises(sync.SyncError, match="check-ignore"):
         sync.gitignored(tmp_path / "no-such-dir", ["x"])
+
+
+# -- docs/AI.md must name every synced agent and skill (water-mill-fwm.7) ------
+
+
+def ai_factory(tmp_path, ai_text):
+    """A factory whose canon holds one agent (crew) and two skills (alpha-skill, beta)."""
+    root = make_factory(tmp_path)
+    for skill in ("alpha-skill", "beta"):
+        d = root / "canon/common/.claude/skills" / skill
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text("---\nname: x\n---\n")
+    if ai_text is not None:
+        (root / "docs").mkdir()
+        (root / "docs/AI.md").write_text(ai_text)
+    return root
+
+
+def test_every_agent_and_skill_named_in_ai_doc_is_documented(tmp_path):
+    root = ai_factory(tmp_path, "The crew agent, with alpha-skill and Beta.\n")
+    assert sync.unmentioned_in_ai_doc(root) == []
+
+
+def test_an_agent_or_skill_missing_from_ai_doc_is_listed(tmp_path):
+    root = ai_factory(tmp_path, "Only the crew agent is described.\n")
+    assert sync.unmentioned_in_ai_doc(root) == ["skill alpha-skill", "skill beta"]
+
+
+def test_a_name_inside_a_longer_name_is_not_a_mention(tmp_path):
+    # `beta` must not count because `beta-tester` or `pre-beta` appear, nor
+    # `alpha-skill` because `alpha-skill-2` or `my-alpha-skill` do: both sides.
+    root = ai_factory(tmp_path, "crew, beta-tester, pre-beta, alpha-skill-2 and my-alpha-skill\n")
+    assert sync.unmentioned_in_ai_doc(root) == ["skill alpha-skill", "skill beta"]
+
+
+def test_a_missing_ai_doc_leaves_everything_unmentioned(tmp_path):
+    root = ai_factory(tmp_path, None)
+    assert sync.unmentioned_in_ai_doc(root) == ["agent crew", "skill alpha-skill", "skill beta"]
+
+
+def test_validate_warns_about_an_undocumented_name_but_still_passes(tmp_path, capsys):
+    root, app = factory_with_app(tmp_path)
+    assert main(["--root", str(root), "validate"]) == 0
+    out = capsys.readouterr().out
+    assert "WARNING: docs/AI.md does not mention: agent crew" in out
+
+
+def test_validate_is_quiet_when_ai_doc_names_everything(tmp_path, capsys):
+    root, app = factory_with_app(tmp_path)
+    (root / "docs").mkdir()
+    (root / "docs/AI.md").write_text("The crew agent.\n")
+    assert main(["--root", str(root), "validate"]) == 0
+    assert "WARNING" not in capsys.readouterr().out
+
+
+def test_the_real_factorys_ai_doc_names_every_agent_and_skill():
+    assert sync.unmentioned_in_ai_doc(REPO_ROOT) == []
