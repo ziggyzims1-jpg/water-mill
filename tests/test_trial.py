@@ -1038,11 +1038,17 @@ def test_both_briefs_name_every_command_the_harness_refuses(world, arm):
 
 def test_the_cancelled_first_batch_is_archived_not_live():
     repo = Path(__file__).resolve().parent.parent
-    assert not trial.ledger_path(repo).exists()
     archive = repo / trial.TRIAL_DIR / "archive" / "2026-10-14-cancelled.jsonl"
     rows = [json.loads(line) for line in archive.read_text().splitlines()]
     assert [r["type"] for r in rows].count("enroll") == 8
     assert rows[-1]["type"] == "cancelled" and "crew" in rows[-1]["reason"]
+    # A closing line is dated after what it closes.
+    assert rows[-1]["at"] >= max(r.get("enrolled_at", "") for r in rows)
+    # The live ledger may hold a later batch (so do not assert it is absent),
+    # but never the cancelled one: not its seed, not its closing line.
+    live = trial.read_ledger(repo)
+    assert trial.master_seed(live) != 20261013
+    assert not any(r.get("type") == "cancelled" for r in live)
 
 
 def test_a_trial_with_an_archived_ledger_starts_fresh(world):
