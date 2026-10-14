@@ -1,0 +1,9 @@
+{"drawn_at": "2026-10-14T20:01:52+00:00", "rule": "balanced blocks of 4 per repo, random.Random('seed:repo:block')", "seed": 79268003, "type": "seed"}
+{"arm": "A", "bead": "zim-dashboard-demo-cell-1b-0h6.1", "block": 0, "enrolled_at": "2026-10-14T20:01:52+00:00", "pos": 0, "repo": "zim-dashboard-demo-cell-1b", "seed": 79268003, "type": "enroll"}
+{"arm": "A", "bead": "zim-dashboard-demo-cell-1b-0h6.10", "block": 0, "enrolled_at": "2026-10-14T20:01:52+00:00", "pos": 1, "repo": "zim-dashboard-demo-cell-1b", "seed": 79268003, "type": "enroll"}
+{"arm": "B", "bead": "zim-dashboard-demo-cell-1b-0h6.6", "block": 0, "enrolled_at": "2026-10-14T20:01:52+00:00", "pos": 2, "repo": "zim-dashboard-demo-cell-1b", "seed": 79268003, "type": "enroll"}
+{"arm": "B", "bead": "zim-dashboard-demo-cell-1b-0h6.8", "block": 0, "enrolled_at": "2026-10-14T20:01:52+00:00", "pos": 3, "repo": "zim-dashboard-demo-cell-1b", "seed": 79268003, "type": "enroll"}
+{"arm": "B", "bead": "zim-dashboard-demo-cell-1b-ai4.6", "block": 1, "enrolled_at": "2026-10-14T20:01:52+00:00", "pos": 0, "repo": "zim-dashboard-demo-cell-1b", "seed": 79268003, "type": "enroll"}
+{"arm": "A", "bead": "zim-dashboard-demo-cell-1b-e7m.11", "block": 1, "enrolled_at": "2026-10-14T20:01:52+00:00", "pos": 1, "repo": "zim-dashboard-demo-cell-1b", "seed": 79268003, "type": "enroll"}
+{"arm": "A", "bead": "zim-dashboard-demo-cell-1b-e7m.8", "block": 1, "enrolled_at": "2026-10-14T20:01:52+00:00", "pos": 2, "repo": "zim-dashboard-demo-cell-1b", "seed": 79268003, "type": "enroll"}
+{"arm": "B", "bead": "zim-dashboard-demo-cell-1b-ptk.1", "block": 1, "enrolled_at": "2026-10-14T20:01:52+00:00", "pos": 3, "repo": "zim-dashboard-demo-cell-1b", "seed": 79268003, "type": "enroll"}
