@@ -19,12 +19,18 @@ make doctor      # preflight every registered project
 ```
 
 In a Claude Code cloud session, run `scripts/cloud-setup.sh` first (it is a
-no-op outside one unless given `--force`): it installs `bd`, bootstraps the
-beads database of water-mill and every sibling checkout with a `.beads/`, and
-runs `make install`. A fresh clone has none of those, so `bd prime` and the
-crew agents fail without it. The SessionStart hook in `.claude/settings.json`
-runs it ahead of `bd prime`, in one command, because hooks for one event may
-run in parallel.
+no-op outside one unless given `--force`): it installs `bd` (pinned 1.2.2; a
+`bd` already on PATH is used as is), forces `BD_DOLT_AUTO_PUSH=false` into
+`CLAUDE_ENV_FILE`, builds the beads database of water-mill and every sibling
+checkout with a `.beads/` from its tracked `issues.jsonl` alone (no Dolt remote,
+no tracked file or commit changed, prefix derived from the repo's issue ids),
+re-imports the jsonl every time, and runs `make install`. A fresh clone has
+none of those, so `bd prime` and the crew agents fail without it. The
+SessionStart hook in `.claude/settings.json` runs it ahead of `bd prime`, in one
+command, because hooks for one event may run in parallel. The hook only fires
+when the session's cwd is inside a repo carrying it: a routine's orchestrator
+starts in `/home/user`, so it must run the script by hand first. Tests:
+`tests/test_cloud_setup.py` (real `bd`, temp clones).
 
 `scripts/sync-factory.sh` fast-forwards this checkout (`pull --ff-only`, only on
 a clean `main`, bounded by a timeout) so the context graph and the crew
