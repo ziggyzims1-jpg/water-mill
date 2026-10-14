@@ -34,3 +34,15 @@
 - Committed .beads/issues.jsonl, sluice's knowledge/findings.jsonl (3 lines) and run records.
 - Owner must confirm: pinned `--force-with-lease=<ref>:<sha>` is allowed (differs from bead wording). Orchestrator: run `watermill sync` per sibling and workshop (not run by me). Hook may now block `git stash`/`reset --hard` in this repo.
 - **Findings:** f-20261014-c4e66a, f-20261014-ff2382 and the drift-mutation finding, all filed by sluice with --task water-mill-fwm.3.
+
+## Tailrace — sync PRs
+
+All five diffs touched only the allowed files; settings.json on main fully preserved (python json compare; template had no prior settings.json). verify green on every head. Sha-guarded squash merges, branches deleted.
+
+1. zimmy-life-tracker #228: merged 49fb60cf226c62af888e4ba0e984dad829560c58 (diff was only .claude/settings.json); local pull ff OK.
+2. zim-dashboard-demo-cell-1b #33: merged d90990fe5cdec0206536ddf3e73e51401f20200b; local pull ff OK.
+3. cheme-solver #34: merged e56849b2b079fd700bf2b456e38818546de218e5; local pull ff OK.
+4. Hillel-Programming #64: merged b5ef071399a953374e460875454d9a56e75e46cc; local checkout is on branch claude/laughing-thompson-1qbanx (37 ahead), so `pull --ff-only` only fetched origin/main and did not update main. Not touched.
+5. watermill-cell-template #11: merged a25a3b99b83c1ebc3f90ed713e0844a2be054b12; local pull ff OK.
+
+No bead writes. Nothing stashed/reset/forced.
