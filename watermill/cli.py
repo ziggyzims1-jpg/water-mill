@@ -176,6 +176,11 @@ def cmd_validate(args) -> int:
     extra = _report_only_paths(factory_root(args.root), getattr(args, "sync_path", None))
     for line in drift_lines + extra:
         print(line)
+    from . import sync
+
+    undocumented = sync.unmentioned_in_ai_doc(factory_root(args.root))
+    if undocumented:  # advisory: a warning never changes the exit code
+        print(f"WARNING: {sync.AI_DOC} does not mention: {', '.join(undocumented)}")
     return 1 if (failed or drift_failed) else 0
 
 
