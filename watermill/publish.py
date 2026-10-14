@@ -44,7 +44,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import ledger, tasklog
+from . import __version__, ledger, tasklog
 from .contract import Contract
 from .errors import WatermillError
 from .queue import WorkQueue, _load_json, _parse_rows
@@ -530,7 +530,13 @@ def push(document: dict, url: str, key: str, timeout: float = DEFAULT_TIMEOUT) -
     body = json.dumps(document, sort_keys=True).encode("utf-8")
     request = urllib.request.Request(  # noqa: S310 - http(s) URL from operator config
         endpoint(url), data=body, method="PUT",
-        headers={"Content-Type": "application/json", "X-API-Key": key},
+        headers={
+            "Content-Type": "application/json",
+            "X-API-Key": key,
+            # urllib's default `Python-urllib/3.x` is rejected by Cloudflare's
+            # Browser Integrity Check (403, error 1010) in front of Zimmy.
+            "User-Agent": f"watermill/{__version__}",
+        },
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310

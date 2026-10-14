@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from watermill import cli, ledger, publish, tasklog
+from watermill import __version__, cli, ledger, publish, tasklog
 from watermill.registry import Project
 
 PROJECT = "demo"
@@ -463,6 +463,7 @@ class _Zimmy(BaseHTTPRequestHandler):
                 "Content-Type": self.headers.get("Content-Type"),
                 "X-API-Key": self.headers.get("X-API-Key"),
                 "Authorization": self.headers.get("Authorization"),
+                "User-Agent": self.headers.get("User-Agent"),
             },
             "body": raw,
         })
@@ -510,6 +511,17 @@ def test_push_is_a_put_with_the_key_as_zimmy_expects(factory, quiet_runner, zimm
     assert "snapshot 42" in out
     assert doc["published_at"] in out
     assert "zk_test_secret" not in out
+
+
+def test_push_sends_a_custom_user_agent_not_pythons_default(factory, quiet_runner, zimmy, monkeypatch):
+    # Cloudflare's Browser Integrity Check 403s `Python-urllib/3.x` (error 1010)
+    # before the request reaches Zimmy; a custom UA passes (water-mill-hjd).
+    url, handler = zimmy
+    monkeypatch.setenv(publish.URL_ENV, url)
+    monkeypatch.setenv(publish.KEY_ENV, "zk_test_secret")
+    assert cli.main(["--root", str(factory), "publish"]) == 0
+    [request] = handler.received
+    assert request["headers"]["User-Agent"] == f"watermill/{__version__}"
 
 
 def test_a_500_is_a_failure_with_the_first_line_of_the_body(factory, quiet_runner, zimmy, monkeypatch, capsys):
