@@ -22,3 +22,7 @@ ignore = [
 # Tests name their scenario in the function name; long, explicit assertions
 # read better than wrapped ones.
 "tests/*" = ["E501"]
+# A synced copy cannot be edited here; its managed header, which names the canon
+# path, runs past 100 columns. The canon master (canon/project/scripts/beads_merge.py)
+# is still width-checked, so do not widen this to all of scripts/.
+"scripts/beads_merge.py" = ["E501"]
