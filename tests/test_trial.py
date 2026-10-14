@@ -1031,3 +1031,32 @@ def test_both_briefs_name_every_command_the_harness_refuses(world, arm):
     bead = next(b for b, r in trial.enrolled(trial.read_ledger(root)).items() if r["arm"] == arm)
     text = trial.brief(root, bead, registry=reg)
     assert "`trial pause`, `resume`, `enroll`, `score` and `scorepack` also refuse" in text
+
+
+# -- a cancelled batch is archived and the next one starts fresh --------------
+
+
+def test_the_cancelled_first_batch_is_archived_not_live():
+    repo = Path(__file__).resolve().parent.parent
+    assert not trial.ledger_path(repo).exists()
+    archive = repo / trial.TRIAL_DIR / "archive" / "2026-10-14-cancelled.jsonl"
+    rows = [json.loads(line) for line in archive.read_text().splitlines()]
+    assert [r["type"] for r in rows].count("enroll") == 8
+    assert rows[-1]["type"] == "cancelled" and "crew" in rows[-1]["reason"]
+
+
+def test_a_trial_with_an_archived_ledger_starts_fresh(world):
+    root = world[0]
+    archive = root / trial.TRIAL_DIR / "archive" / "old.jsonl"
+    archive.parent.mkdir(parents=True)
+    old = [{"type": "seed", "seed": 111}, {"type": "enroll", "bead": "a-1", "repo": "alpha",
+           "arm": "A", "block": 0, "pos": 0, "seed": 111}]
+    trial._append(archive, old)
+    before = archive.read_bytes()
+    assert trial.read_ledger(root) == [] and trial.master_seed([]) is None
+    tr = FakeTracker([task("a-1"), task("a-2")])
+    out = enroll(world, "alpha", ["a-1", "a-2"], tr, seed=222)  # a-1 is not "enrolled" any more
+    assert out["seed"] == 222 and out["seed_is_new"]
+    ledger = trial.read_ledger(root)
+    assert trial.master_seed(ledger) == 222 and set(trial.enrolled(ledger)) == {"a-1", "a-2"}
+    assert archive.read_bytes() == before
