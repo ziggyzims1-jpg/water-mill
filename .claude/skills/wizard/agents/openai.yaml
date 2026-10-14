@@ -1,0 +1,4 @@
+# managed by water-mill (canon/common/.claude/skills/wizard/agents/openai.yaml); edit it there, then run `watermill sync`
+interface:
+  display_name: "Wizard"
+  short_description: "Generate an interactive setup wizard"

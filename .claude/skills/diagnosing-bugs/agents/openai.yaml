@@ -1,0 +1,4 @@
+# managed by water-mill (canon/common/.claude/skills/diagnosing-bugs/agents/openai.yaml); edit it there, then run `watermill sync`
+interface:
+  display_name: "Diagnosing Bugs"
+  short_description: "Diagnose hard bugs and regressions"
