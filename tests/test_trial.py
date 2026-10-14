@@ -849,3 +849,75 @@ def test_only_blocker_and_bug_are_primary_escapes(tmp_path):
         {"type": "score", "bead": "alpha-A0", "early": False, "escapes": [{"severity": "test-gap"}]},
         {"type": "score", "bead": "alpha-A1", "early": False, "escapes": [{"severity": "blocker"}]}])
     assert trial.status(tmp_path)["metrics"]["primary"]["k"] == {"A": 1, "B": 0}
+
+
+# -- harm stop (water-mill-kt6) ---------------------------------------------
+
+
+def test_pause_blocks_start_status_shows_it_and_resume_clears_it(world, capsys):
+    root, _, _ = world
+    enroll(world, "alpha", ["a-1"], FakeTracker([task("a-1")]))
+    assert trial.pause_state(trial.read_ledger(root)) is None
+    trial.pause(root, "blocker landed in a-9", now="2026-10-20T00:00:00+00:00")
+    with pytest.raises(trial.TrialError, match="PAUSED.*blocker landed in a-9"):
+        trial.start(root, "a-1", session_id="s1", remote=False)
+    with pytest.raises(trial.TrialError, match="already paused"):
+        trial.pause(root, "again")
+    s = trial.status(root)
+    assert s["paused"]["reason"] == "blocker landed in a-9"
+    assert "PAUSED" in trial.render_status(s) and "blocker landed in a-9" in trial.render_status(s)
+    assert trial.ledger_problems(trial.read_ledger(root)) == []
+    trial.resume(root, "reverted; owner decision")
+    assert "PAUSED" not in trial.render_status(trial.status(root))
+    assert trial.start(root, "a-1", session_id="s1", remote=False)["bead"] == "a-1"
+    with pytest.raises(trial.TrialError, match="not paused"):
+        trial.resume(root, "x")
+    with pytest.raises(trial.TrialError, match="reason"):
+        trial.pause(root, "  ")
+    # append-only: pause, resume, both kept
+    kinds = [r["type"] for r in trial.read_ledger(root)]
+    assert kinds.count("pause") == 1 and kinds.count("resume") == 1
+
+
+def test_cli_start_on_a_paused_ledger_exits_nonzero_with_the_reason(world, capsys):
+    root, _, _ = world
+    enroll(world, "alpha", ["a-1"], FakeTracker([task("a-1")]))
+    assert cli.main(["--root", str(root), "trial", "pause", "--reason", "harm x"]) == 0
+    assert cli.main(["--root", str(root), "trial", "pause"]) != 0  # reason required
+    capsys.readouterr()
+    rc = cli.main(["--root", str(root), "trial", "start", "a-1", "--session-id", "s1"])
+    out = capsys.readouterr()
+    assert rc != 0 and "harm x" in (out.err + out.out)
+    assert cli.main(["--root", str(root), "trial", "resume", "--reason", "ok"]) == 0
+    assert cli.main(["--root", str(root), "trial", "start", "a-1", "--session-id", "s1"]) == 0
+
+
+def test_enroll_refuses_while_paused_but_a_dry_run_still_works(world):
+    root, _, _ = world
+    trial.pause(root, "harm y")
+    with pytest.raises(trial.TrialError, match="PAUSED.*harm y"):
+        enroll(world, "alpha", ["a-1"], FakeTracker([task("a-1")]))
+    assert trial.enrolled(trial.read_ledger(root)) == {}
+    assert enroll(world, "alpha", ["a-1"], FakeTracker([task("a-1")]), dry_run=True)["rows"]
+    trial.resume(root, "owner: resume")
+    assert enroll(world, "alpha", ["a-1"], FakeTracker([task("a-1")]))["rows"]
+
+
+def test_a_stale_resume_cannot_clear_a_pause_it_never_saw_whatever_the_merge_order(tmp_path):
+    p1 = {"type": "pause", "reason": "first", "at": "2026-10-20T00:00:00+00:00"}
+    r1 = {"type": "resume", "reason": "laptop", "at": "2026-10-21T00:00:00+00:00",
+          "resumes": [p1["at"]]}
+    p2 = {"type": "pause", "reason": "second harm", "at": "2026-10-22T00:00:00+00:00"}
+    # a second checkout, still on the P1 base, also resumed P1 only
+    r2 = {"type": "resume", "reason": "cloud", "at": "2026-10-23T00:00:00+00:00",
+          "resumes": [p1["at"]]}
+    for order in ([p1, r1, p2, r2], [p1, r2, r1, p2], [p1, p2, r1, r2]):
+        assert trial.pause_state(order)["reason"] == "second harm"
+        assert trial.ledger_problems(order) == []
+    # a resume written now clears every open pause, and the ledger line says which
+    trial._append(trial.ledger_path(tmp_path), [p1, p2])
+    line = trial.resume(tmp_path, "owner: both handled")
+    assert line["resumes"] == [p1["at"], p2["at"]]
+    assert trial.pause_state(trial.read_ledger(tmp_path)) is None
+    with pytest.raises(trial.TrialError, match="already in the ledger"):
+        trial.pause(tmp_path, "same second", now=p2["at"])

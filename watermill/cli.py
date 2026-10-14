@@ -1077,6 +1077,14 @@ def cmd_trial(args) -> int:
         result = trial.status(root)
         print(json.dumps(result, indent=2) if args.json else trial.render_status(result), end="")
         return 0
+    if act in ("pause", "resume"):
+        if not args.reason:
+            print(f"{act}: --reason is required", file=sys.stderr)
+            return 2
+        line = (trial.pause if act == "pause" else trial.resume)(root, args.reason)
+        print(f"{act}d: {line['reason']} ({line['at']})" if act == "resume"
+              else f"paused: {line['reason']} ({line['at']})")
+        return 0
     if act == "brief":
         registry = Registry.load(root) if args.surface == "laptop" else None
         print(trial.brief(root, _one(args), surface=args.surface, registry=registry), end="")
@@ -1437,8 +1445,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("trial", help="the crew-vs-default-Claude trial (docs/TRIAL.md)")
     p.add_argument("action", choices=["enroll", "start", "brief", "collect", "status",
-                                      "scorepack", "score"],
-                   help="enroll: randomise beads A/B; start: bind this session to its bead; "
+                                      "scorepack", "score", "pause", "resume"],
+                   help="pause/resume: the harm stop (TRIAL.md s6); "
+                        "enroll: randomise beads A/B; start: bind this session to its bead; "
                         "brief: the session prompt; collect: read outcomes after a session "
                         "ends; status: per-arm counts and the pre-registered looks; scorepack: "
                         "the BLIND escape-scorer prompt; score: file a blind score")
@@ -1460,6 +1469,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--none", action="store_true", help="score: no escape found")
     p.add_argument("--early", action="store_true", help="score: before the 14-day window closes "
                                                        "(provisional, status ignores it)")
+    p.add_argument("--reason", help="pause/resume: why (required; written to the ledger)")
     p.add_argument("--scorer", help="score: free label for who scored")
     p.add_argument("--json", action="store_true", help="status: machine-readable")
     p.set_defaults(func=cmd_trial)
