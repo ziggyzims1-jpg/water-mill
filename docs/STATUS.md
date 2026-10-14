@@ -141,6 +141,13 @@ outside.
   engine do the same job. Both files now say which is which; deleting the bash
   one is an open decision.
 
+- **Canon and `watermill sync` (2026-10-14, water-mill-fwm.2).** `canon/` holds the
+  master of the shared files (today only the three crew agents); `sync <project>`
+  opens a CI-gated PR in that repo, merges only water-mill's marked settings
+  entries, and `validate` now checks every synced file instead of the crew only.
+  Hillel-Programming lost its exemption and is to be synced in full; the cell
+  template is registered. Nobody has run `sync` against a real repo yet: the
+  per-repo PRs and `sync workshop` (laptop) are the owner's next steps.
 - **`cheme-solver` registered (2026-10-13), vendored contract.** Already crewed
   (18 mill handoffs, 57 transcript runs) but unregistered until the owner asked;
   contract in `projects/cheme-solver.yaml`, gate `make verify`. CI landed
