@@ -577,3 +577,33 @@ def check(root: Path, target: Path, label: str, kind: str = "project",
         c.rel if c.status != "new" else f"{c.rel} (missing)" for c in plan.changes
     )
     return Drift(label, differing, tuple(plan.exempt))
+
+
+AI_DOC = "docs/AI.md"
+
+
+def synced_names(root: Path) -> list[tuple[str, str]]:
+    """(kind, name) of every crew agent and skill canon distributes to every target:
+    each `canon/common/.claude/agents/<name>.md` and each directory under
+    `canon/common/.claude/skills/`."""
+    base = Path(root) / CANON_DIR / "common" / ".claude"
+    agents = sorted(p.stem for p in (base / "agents").glob("*.md"))
+    skills = sorted(p.name for p in (base / "skills").iterdir() if p.is_dir()) \
+        if (base / "skills").is_dir() else []
+    return [("agent", n) for n in agents] + [("skill", n) for n in skills]
+
+
+def unmentioned_in_ai_doc(root: Path) -> list[str]:
+    """`"<kind> <name>"` for each synced agent or skill that `docs/AI.md` does not mention.
+
+    Mentioned means the name appears in the file as a whole token, case-insensitively: not
+    as a piece of a longer name (`tdd` does not count because `tdd-loop` appears; letters,
+    digits, `_` and `-` on either side make it part of another word). A missing
+    `docs/AI.md` leaves everything unmentioned. Advisory: `watermill validate` prints it as
+    a WARNING and its exit code does not change."""
+    path = Path(root) / AI_DOC
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    return [
+        f"{kind} {name}" for kind, name in synced_names(root)
+        if not re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", text, re.I)
+    ]

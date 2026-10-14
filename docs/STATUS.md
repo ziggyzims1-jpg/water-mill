@@ -171,6 +171,15 @@ outside.
   mill. Rendered into water-mill's own `.claude/skills/` only; sibling repos get
   them on the owner's next `watermill sync`, and a target must not gitignore
   `.claude/skills/` or sync drops the files.
+- **`docs/AI.md` (2026-10-14, water-mill-fwm.7).** One document for the owner and
+  a collaborator on every AI adaptation in the mill (harnesses and hooks, the
+  crew, rules and where they live, the 11 skills, context graph, agent-run
+  tracking, observability, cloud constraints, the sync model, the trial harness in
+  depth with how to start a new trial, adding a project). Linked from `README.md`,
+  `CLAUDE.md` and `canon/workshop/CLAUDE.md`. `watermill validate` now prints a
+  `WARNING` (exit code unchanged) when a canon crew agent or skill is not named in
+  it (`sync.unmentioned_in_ai_doc`). The workshop `CLAUDE.md` gained a pointer, so
+  the owner runs `watermill sync workshop` on the laptop to deliver it.
 - **`cheme-solver` registered (2026-10-13), vendored contract.** Already crewed
   (18 mill handoffs, 57 transcript runs) but unregistered until the owner asked;
   contract in `projects/cheme-solver.yaml`, gate `make verify`. CI landed
