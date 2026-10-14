@@ -1098,6 +1098,8 @@ def cmd_trial(args) -> int:
         return 0
     registry = Registry.load(root)
     if act == "enroll":
+        if not args.dry_run:  # a dry run only previews; it stays open to every session
+            trial.refuse_trial_session(root, "enroll", trial.env_session_id())
         return _trial_enroll(root, registry, args)
     if act == "collect":
         got = trial.collect(
@@ -1115,10 +1117,12 @@ def cmd_trial(args) -> int:
         print(f"{len(got['collected'])} result line(s) {tail}")
         return 0
     if act == "scorepack":
+        trial.refuse_trial_session(root, "scorepack", trial.env_session_id())
         text = trial.scorepack(root, registry=registry)
         print(text if text else "nothing is due for scoring (landed + 14 days, unscored)", end="")
         return 0
     if act == "score":
+        trial.refuse_trial_session(root, "score", trial.env_session_id())
         escapes = []
         for item in args.escape or []:
             parts = item.split(":", 2)
