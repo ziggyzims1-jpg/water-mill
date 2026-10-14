@@ -1,0 +1,61 @@
+# managed by water-mill (canon/project/.github/workflows/beads-sync.yml); edit it there, then run `watermill sync`
+# Cloud Claude sessions can only push their own claude/* branch, so bead
+# changes made there arrive as .beads/issues.jsonl commits on that branch.
+# This lands them on main: union-merge by issue id (scripts/beads_merge.py:
+# add new ids, later updated_at wins, never delete, refuse malformed lines).
+# Idempotent: when main already has everything, nothing is committed.
+name: beads-sync
+
+on:
+  push:
+    branches: ['claude/**']
+    paths: ['.beads/issues.jsonl']
+
+permissions:
+  contents: write
+
+# One queue per branch: a newer push to the same branch may replace a
+# still-pending run (the newer run reads the branch's latest file anyway). A
+# single global group would let branch B's run cancel branch A's pending one,
+# dropping A's beads; runs for different branches race on main instead, which
+# the fetch-merge-push retry below absorbs.
+concurrency:
+  group: beads-sync-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: ${{ !github.event.deleted }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Merge the branch's issues.jsonl into main
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3 4 5; do
+            git fetch -q origin "+refs/heads/main:refs/remotes/origin/main" \
+              "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+            git checkout -q -B main origin/main
+            git show "origin/$BRANCH:.beads/issues.jsonl" > "$RUNNER_TEMP/incoming.jsonl"
+            python3 scripts/beads_merge.py .beads/issues.jsonl "$RUNNER_TEMP/incoming.jsonl"
+            if git diff --quiet -- .beads/issues.jsonl; then
+              echo "main already has everything from $BRANCH"
+              exit 0
+            fi
+            git add .beads/issues.jsonl
+            git commit -q -m "chore(beads): sync bead changes from $BRANCH"
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "push raced (attempt $attempt); retrying"
+            sleep $((attempt * 3))
+          done
+          echo "could not push after 5 attempts" >&2
+          exit 1
