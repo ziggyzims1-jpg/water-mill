@@ -84,12 +84,23 @@ BLOCKED = [
     ("git push -uf origin main", "push"),
     ("git push origin main --force", "push"),
     ("git push --force-with-lease", "push"),
-    ("git push --force-with-lease=main:abc origin main", "push"),
+    ("git push --force-with-lease=main origin main", "push"),
+    ("git push --force-with-lease=main: origin main", "push"),
     ("git push --force-if-includes origin main", "push"),
     ("git push origin +main", "push"),
     ("git push origin +HEAD:refs/heads/x", "push"),
     ("git -C x push -f", "push"),
     ("git commit -m ok && git push --force", "push"),
+    ("eval 'git stash'", "git stash"),
+    ("git restore --staged --worktree .", "restore ."),
+    ("git restore -SW .", "restore ."),
+    ("if git stash pop; then echo ok; fi", "git stash"),
+    ("while git stash pop; do :; done", "git stash"),
+    # a here-document body is skipped, but the commands around it are not
+    ("cat > m.txt <<'EOF'\nhello\nEOF\ngit stash", "git stash"),
+    ("git stash <<EOF\nx\nEOF", "git stash"),
+    # a stray `<<` with no terminator line hides nothing
+    ("echo '<<EOF'\ngit stash", "git stash"),
 ]
 
 ALLOWED = [
@@ -99,6 +110,18 @@ ALLOWED = [
     "git push origin HEAD:refs/heads/claude/session",
     "git push --set-upstream origin x",
     "git push --dry-run",
+    "git push origin --delete bead/fwm-3",
+    "git push origin :bead/fwm-3",
+    # cheme-solver brain/runbooks/cloud-mill.md: reset the session branch with a pinned lease
+    "git fetch origin && git push --force-with-lease=$SB:$SHA origin origin/main:refs/heads/$SB",
+    "git push --force-with-lease=main:abc123 origin main",
+    # tailrace step 3: move a fresh landing worktree to the remote tip
+    "git -C \"$WT\" reset --keep origin/bead/fwm-3",
+    # here-document bodies are data: commit messages and handoffs name the banned commands
+    "git commit -F - <<'EOF'\nfix: guard\ngit reset --hard is now blocked\nEOF",
+    "cat >> brain/handoffs/mill/x.md <<EOF\ngit stash is forbidden\nEOF\ngit status",
+    "git commit -m \"$(cat <<'EOF'\nsubject\n\ngit branch -D is blocked\nEOF\n)\"",
+    "cat <<-EOF\n\tgit stash\n\tEOF",
     "git commit -m 'fix the stash bug'",
     "git commit -m \"never run git stash\"",
     "git commit -am 'x'",
@@ -119,6 +142,7 @@ ALLOWED = [
     "git reset --soft HEAD~1",
     "git reset --mixed HEAD~1",
     "git clean -n",
+    "git clean -n -- -f",  # after `--` it is a path, not the force flag
     "git clean --dry-run -d",
     "git branch -d merged",
     "git branch --delete merged",
@@ -160,7 +184,7 @@ def test_the_hook_never_wedges_a_session_on_input_it_cannot_read():
 
 
 def test_an_unbalanced_quote_still_catches_a_stash():
-    assert run_hook("echo 'oops && git stash") is not None or True  # must not crash
+    run_hook("echo 'oops && git stash")  # must not crash (run_hook asserts exit 0)
     assert run_hook("git stash 'oops") is not None
 
 

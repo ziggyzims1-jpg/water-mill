@@ -15,7 +15,9 @@ simple commands at ; & | ( ) and newlines, and each one is read as
 
 Blocked: git stash (any form); reset --hard; clean -f/--force; branch -D;
 checkout/restore of the whole tree (`.`); push --force, -f, --force-with-lease,
---force-if-includes, +refspec. Everything else is allowed.
+--force-if-includes, +refspec. Everything else is allowed, including the pinned
+lease `--force-with-lease=<ref>:<expect>` (it can only overwrite the commit it
+names) and anything inside a here-document body (data, not commands).
 
 Input: the PreToolUse JSON on stdin. Output: a deny decision naming the rule.
 A hook that cannot read its input allows the call (it must never wedge a
@@ -24,6 +26,7 @@ session); the deny rules are the only thing it enforces.
 
 import json
 import os
+import re
 import shlex
 import sys
 
@@ -31,9 +34,11 @@ import sys
 GLOBAL_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace",
                      "--exec-path", "--super-prefix", "--config-env"}
 WRAPPERS = {"env", "command", "sudo", "time", "nohup", "exec", "xargs", "builtin",
-            "nice", "!", "then", "do", "else", "{"}
+            "nice", "!", "if", "elif", "while", "until", "then", "do", "else", "{"}
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 OPERATORS = {";", "&", "|", "&&", "||", "(", ")", ";;", "|&", "&>", ">", ">>", "<"}
+# `<<EOF`, `<<-'EOF'`, `<< "EOF"` (not the `<<<` here-string)
+HEREDOC = re.compile(r"(?<!<)<<(-?)[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
 
 
 def _short(args, letters):
@@ -45,6 +50,37 @@ def _short(args, letters):
 def _opts(args):
     """Arguments before a bare `--` (after it everything is a path)."""
     return args[:args.index("--")] if "--" in args else args
+
+
+def _unpinned_lease(arg):
+    """--force-with-lease without an explicit expected value. The pinned form
+    `--force-with-lease=<ref>:<expect>` (the cloud-mill reset of a session branch)
+    only overwrites the exact commit it names, so it is allowed."""
+    if not arg.startswith("--force-with-lease"):
+        return False
+    _, _, value = arg.partition("=")
+    ref, sep, expect = value.partition(":")
+    return not (ref and sep and expect)
+
+
+def strip_heredocs(command):
+    """Drop here-document bodies: they are data (a commit message, a handoff), not
+    commands, so `git reset --hard` written on a line of one must not be read as a call.
+    A body with no terminator line is kept, so nothing is hidden by a stray `<<`."""
+    lines = command.split("\n")
+    out, i = [], 0
+    while i < len(lines):
+        out.append(lines[i])
+        pending = [(m.group(1) == "-", m.group(3)) for m in HEREDOC.finditer(lines[i])]
+        i += 1
+        for tabs, word in pending:
+            j = i
+            while j < len(lines) and (lines[j].lstrip("\t") if tabs else lines[j]) != word:
+                j += 1
+            if j == len(lines):
+                break  # unterminated: keep the rest
+            i = j + 1
+    return "\n".join(out)
 
 
 def rule_for(sub, args):
@@ -67,7 +103,7 @@ def rule_for(sub, args):
         if not staged_only:
             return "git restore . (discards all working-tree changes)"
     if sub == "push":
-        if (any(a == "--force" or a.startswith(("--force-with-lease", "--force-if-includes"))
+        if (any(a == "--force" or a.startswith("--force-if-includes") or _unpinned_lease(a)
                 for a in opts) or _short(opts, "f")):
             return "git push --force / -f / --force-with-lease"
         if any(a.startswith("+") and len(a) > 1 for a in opts):
@@ -98,6 +134,7 @@ def git_subcommand(words):
 
 def segments(command):
     """Simple commands (token lists) of a shell command line; nested -c scripts included."""
+    command = strip_heredocs(command)
     lex = shlex.shlex(command.replace("`", ";").replace("\n", ";"), posix=True, punctuation_chars=True)
     lex.whitespace_split = True
     lex.commenters = ""

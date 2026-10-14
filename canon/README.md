@@ -27,6 +27,10 @@ The workshop `CLAUDE.md` has no canon text yet; a later bead adds it under
 `common/.claude/hooks/block-dangerous-git.py` plus the `PreToolUse`/`Bash` entry
 in `settings.managed.json` deny `git stash` (every form), `reset --hard`,
 `clean -f`, `branch -D`, `checkout .`, `restore .` and forced pushes; plain
-`push`, `commit`, `worktree`, `checkout <branch>` stay allowed. It is Python
+`push`, `commit`, `worktree`, `checkout <branch>` stay allowed. So do the pinned lease
+`push --force-with-lease=<ref>:<sha>` (the cloud-mill session-branch reset) and
+anything inside a here-document body (commit messages and handoffs name the
+banned commands). Crew instructions must not tell an agent to run a blocked
+form: tailrace resets a landing worktree with `reset --keep`, not `--hard`. It is Python
 (stdlib only) so it behaves the same on macOS bash 3.2 and the Linux cloud
 image. Adapted from mattpocock-skills 1.2.3 (MIT). Tests: `tests/test_git_guardrail.py`.
