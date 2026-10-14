@@ -39,3 +39,13 @@
 - Left for the orchestrator/owner: `watermill sync` to siblings (not run, per instruction); bolter model opus decision (untouched); docs/AI.md (fwm.7).
 - **Findings:** f-20261014-8f6c80, f-20261014-0883f3 and four new ones above.
 
+
+## Tailrace — crew sync PRs (2026-10-14)
+
+All five diffs touched only the four agent files and .claude/watermill-managed.json; `verify` green on each head; sha-guarded squash merges; branch sync/water-mill-d5dfe0e8 deleted in each.
+- zimmy-life-tracker #231: MERGED 24e10504ac652b39654eec0548f9394baf152f83 (local pull --ff-only ok)
+- zim-dashboard-demo-cell-1b #34: MERGED 5be352abfe18cf9b1a8079b6b8e6eb61a829b03a (pulled)
+- cheme-solver #35: MERGED fd119240a2d8a734245f2d0a275048f914947b4f (pulled)
+- Hillel-Programming #65: MERGED 0758214f0a916b6a5c43a355032a327b2888b220 (local only fetched; checkout left on claude/laughing-thompson-1qbanx)
+- watermill-cell-template #12: MERGED ded0fbc748bc76dbecee7455bb22bf7097223d10 (pulled)
+Nothing skipped, no conflicts. No bead closes (no per-PR bead).
