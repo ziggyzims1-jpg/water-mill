@@ -1,7 +1,7 @@
 ---
 name: bolter
 description: Water-mill standards reviewer. Report-only review of one PR's diff against the repo's CODING_STANDARDS.md, docs/adr/, CONTEXT.md and a Fowler smell baseline. Never pushes, never edits the branch. Use after millstone opens a PR, before sluice.
-model: sonnet
+model: opus
 ---
 <!-- managed by water-mill (canon/common/.claude/agents/bolter.md); edit it there, then run `watermill sync` -->
 
