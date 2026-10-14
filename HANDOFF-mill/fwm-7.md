@@ -67,3 +67,14 @@ PR #58, head 4e16c66, bead water-mill-fwm.7. Report-only; nothing pushed.
 **Auto-mill beads:** none. Bolter's one candidate (CLAUDE.md "five") was fixed in place.
 
 **Not fixed / for the lander.** None blocking. `watermill sync workshop` on the laptop is the owner's (workshop CLAUDE.md changed). CLAUDE.md Layout table rows may conflict with another PR touching that table: union. Run records: bolter-water-mill-fwm.7-a518abadd930.jsonl (copied verbatim from its report) and this sluice record, committed with this section.
+
+## Tailrace (2026-10-14)
+
+**LANDED** -- PR #58 squash-merged as dd781ecf67c7a1e2890f76a1c08fdb4201ca0ab9 (verified head 612dbb7, `verify` and `sync` check-runs success).
+
+- Merged origin/main into claude/fwm-7 (merge 612dbb7): no conflicts, CLAUDE.md Layout table merged cleanly. #60 added no new canon agent or skill (it ships beads-sync workflow + scripts/beads_merge.py), so docs/AI.md mention check and tests/test_sync.py pass unchanged.
+- Local `make verify`: 858 passed, 2 failed (tests/test_cloud_setup.py, the known bd 1.3.1 vs pin 1.2.2 env failures). CI green.
+- `bd close water-mill-fwm.7`: "Closed water-mill-fwm.7 ... Merged in PR #58", no export warning. Committed only the fwm.7 line of .beads/issues.jsonl; `bd export` also reordered dependency entries of 4 other beads (166, 9tx, fwm.4, pu9, same sets, order only), which I did not commit.
+- auto-mill: none.
+- Findings: bolter/sluice f-20261014-fae317, f-20261014-e239c5, f-20261014-20deed moved onto main; two millstone lessons recorded for water-mill-fwm.7.
+- Owner must run `watermill sync workshop` on the laptop (workshop CLAUDE.md changed).
