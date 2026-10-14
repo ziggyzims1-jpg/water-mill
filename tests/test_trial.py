@@ -999,3 +999,13 @@ def test_the_owner_terminal_is_never_blocked_from_score_or_scorepack(world, monk
         assert cli.main(["--root", str(root), "trial", "scorepack"]) == 0
         cli.main(["--root", str(root), "trial", "score", "a-1", "--none"])
         assert "bound to a trial bead" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("arm", ["A", "B"])
+def test_both_briefs_name_every_command_the_harness_refuses(world, arm):
+    """The brief's parenthetical tracks the CLI guard (water-mill-2ez)."""
+    root, reg, _ = world
+    enroll(world, "alpha", ["a-1", "a-2"], FakeTracker([task("a-1"), task("a-2")]))
+    bead = next(b for b, r in trial.enrolled(trial.read_ledger(root)).items() if r["arm"] == arm)
+    text = trial.brief(root, bead, registry=reg)
+    assert "`trial pause`, `resume`, `enroll`, `score` and `scorepack` also refuse" in text

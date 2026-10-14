@@ -616,8 +616,9 @@ _OWNER_ONLY = ("Owner-only commands: never run `watermill trial pause`, `trial r
                "enroll`, `trial collect`, `trial score` or `trial scorepack`, and do not edit "
                "knowledge/trial/. Whether a landed blocker or defect should stop the trial is a "
                "human judgement that is the owner's alone; if you think something is wrong, say "
-               "so in your handoff and keep working your bead. (`trial pause`/`resume` also "
-               "refuse a session that ran `trial start`.)")
+               "so in your handoff and keep working your bead. (`trial pause`, `resume`, "
+               "`enroll`, `score` and `scorepack` also refuse a session that ran `trial "
+               "start`.)")
 
 
 def _slug(bead: str, repo: str) -> str:
