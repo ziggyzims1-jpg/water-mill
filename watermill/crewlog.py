@@ -29,6 +29,7 @@ BEADS_FILE = Path(".beads") / "issues.jsonl"
 # count as landed than landed.read() reports (it undercounts; not changed here).
 _LANDED = re.compile(r"^[ \t]*(?:[-*][ \t]+)?\*\*LANDED\b", re.MULTILINE)
 _SLUICE = re.compile(r"^##[ \t]+Sluice\b(?![ \t]+scrutiny)[^\n]*$", re.MULTILINE)
+_BOLTER = re.compile(r"^##[ \t]+Bolter\b[^\n]*$", re.MULTILINE)
 _HEADING = re.compile(r"^##[ \t]+\S", re.MULTILINE)
 _PR = re.compile(r"\bPR[ \t]*#(\d+)")
 # The verdict is one word of a fixed vocabulary somewhere after "Verdict" on the
@@ -55,6 +56,11 @@ def _sluice_text(text: str) -> tuple[int, str]:
         later = [h for h in headings if h > m.start()]
         bodies.append(text[m.start(): later[0] if later else len(text)])
     return len(starts), "\n".join(bodies)
+
+
+def _bolter_rounds(text: str) -> int:
+    """How many `## Bolter` sections (standards reviews) the note holds."""
+    return len(_BOLTER.findall(text))
 
 
 def _pushed_fixes(sluice: str, verdicts: list[str]) -> bool:
@@ -173,6 +179,7 @@ def parse_record(
             "handoff": str(path),
             "pr_number": int(pr.group(1)) if pr else None,
             "landed_at": landed_at,
+            "bolter_rounds": _bolter_rounds(text),
             "sluice_rounds": rounds,
             "sluice_verdict": verdict,
             "sluice_pushed_fixes": pushed,

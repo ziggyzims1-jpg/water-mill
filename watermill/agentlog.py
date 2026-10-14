@@ -2,7 +2,7 @@
 
 `runs/tasks.jsonl` only gets a line when `watermill run` (the headless loop)
 works a task. Months of mill crew work were dispatched from Claude Code
-sessions instead (millstone -> sluice -> tailrace through the Agent tool) and
+sessions instead (millstone -> bolter -> sluice -> tailrace through the Agent tool) and
 left almost nothing there. This file is the longitudinal record that does not
 care who dispatched the work, so crew performance can be set beside every other
 agent's. Sibling beads fill it from transcripts (61r), ship it to Loki (qam)
@@ -49,6 +49,7 @@ Envelope, present on every record whatever the agent kind:
     handoff               str       path of the handoff note it came from
     pr_number             int|null  first "PR #n" in the note          (inferred)
     landed_at             str|null  date of the last "## Tailrace (date)"
+    bolter_rounds         int       count of "## Bolter" sections (standards reviews)
     sluice_rounds         int       count of "## Sluice" sections
     sluice_verdict        str|null  last verdict word (approve, approve_after_fixes,
                                     do_not_merge, reject) after "Verdict" in a
@@ -86,6 +87,12 @@ from . import pricing
 AGENTLOG_FILENAME = "runs/agents.jsonl"
 SCHEMA_VERSION = 1
 RECORDED = "recorded"
+#: The mill crew in pipeline order: millstone builds, bolter reviews standards (report-only),
+#: sluice reviews the spec and is the only reviewer that pushes, tailrace lands. Exactly the
+#: agents in `canon/common/.claude/agents/` (pinned by tests/test_bolter.py); the one list every
+#: reader of roles (sessionlog, agentcompare, recorded) imports; the trial briefs name the crew in
+#: prose, pinned against canon by tests/test_trial.py.
+CREW_ROLES = ("millstone", "bolter", "sluice", "tailrace")
 
 
 def _now() -> str:

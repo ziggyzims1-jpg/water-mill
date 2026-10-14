@@ -1480,7 +1480,7 @@ def build_parser() -> argparse.ArgumentParser:
                         "record: write THIS agent's run facts to knowledge/agent-runs/; "
                         "whoami: print a tag that lets `record` find this agent's transcript")
     p.add_argument("--role", choices=recorded.ROLES, default="solo",
-                   help="record: millstone|sluice|tailrace (crew subagents), solo (a plain "
+                   help="record: millstone|bolter|sluice|tailrace (crew subagents), solo (a plain "
                         "Claude session) or orchestrator (a session that runs the crew)")
     p.add_argument("--bead", help="record: the bead id as bd prints it")
     p.add_argument("--pr", type=int, help="record: pull request number")

@@ -142,12 +142,23 @@ outside.
   one is an open decision.
 
 - **Canon and `watermill sync` (2026-10-14, water-mill-fwm.2).** `canon/` holds the
-  master of the shared files (today only the three crew agents); `sync <project>`
+  master of the shared files (today only the four crew agents); `sync <project>`
   opens a CI-gated PR in that repo, merges only water-mill's marked settings
   entries, and `validate` now checks every synced file instead of the crew only.
   Hillel-Programming lost its exemption and is to be synced in full; the cell
   template is registered. Nobody has run `sync` against a real repo yet: the
   per-repo PRs and `sync workshop` (laptop) are the owner's next steps.
+- **The crew is millstone -> bolter -> sluice -> tailrace (2026-10-14, water-mill-fwm.4).**
+  Bolter (new, in `canon/`) is the report-only Standards review against a repo's
+  CODING_STANDARDS.md, ADRs, CONTEXT.md and a Fowler smell baseline; sluice keeps
+  the Spec review and independent verification, is the only reviewer that pushes,
+  bounces a PR with no red-before-green evidence (docs-only excepted) and files at
+  most two `auto-mill` P3 beads per parent for clearly-defined smells; millstone lists
+  its test seams and pastes the red run in the PR body. The crew files read the
+  handoff directory from the repo (`$HANDOFFS`; here `HANDOFF-mill/`). The
+  role readers (`agentlog.CREW_ROLES`), the trial briefs and the Grafana
+  descriptions know bolter. Not yet synced to sibling repos: that is the owner's
+  `watermill sync` step.
 - **`cheme-solver` registered (2026-10-13), vendored contract.** Already crewed
   (18 mill handoffs, 57 transcript runs) but unregistered until the owner asked;
   contract in `projects/cheme-solver.yaml`, gate `make verify`. CI landed

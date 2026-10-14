@@ -245,11 +245,27 @@ def test_arm_a_laptop_brief_names_the_crew_and_passes_the_tag_down(world):
     assert str(world[0].resolve()) in text and str(world[2] / "alpha") in text
 
 
+def test_both_briefs_name_every_crew_agent_canon_ships(world):
+    """Arm A runs the crew in canon order; arm B forbids each of them by name."""
+    canon = Path(__file__).resolve().parent.parent / "canon" / "common" / ".claude" / "agents"
+    crew = sorted(p.stem for p in canon.glob("*.md"))
+    assert "bolter" in crew
+    a, b = enrolled_pair(world)
+    text_a = trial.brief(world[0], a, registry=world[1])
+    text_b = trial.brief(world[0], b, registry=world[1])
+    for name in crew:
+        assert name in text_a, f"arm A brief does not name {name}"
+        assert name in text_b, f"arm B brief does not name {name}"
+    order = [text_a.index(f"{n} (") for n in ("millstone", "bolter", "sluice", "tailrace")]
+    assert order == sorted(order)
+    assert "Do NOT use the millstone, bolter, sluice or tailrace" in text_b
+
+
 def test_arm_b_laptop_brief_is_solo_with_the_same_knowledge_steps(world):
     _, b = enrolled_pair(world)
     text = trial.brief(world[0], b, registry=world[1])
     for must in ("single general-purpose Claude", "trial start", "recall", "--tag trial:B",
-                 "make verify", "Do NOT use the millstone, sluice or tailrace",
+                 "make verify", "Do NOT use the millstone, bolter, sluice or tailrace",
                  "--role solo", "--arm B", "handoff", "remember",
                  # owner 2026-10-13: arm B lands its own PR, sha-guarded, then closes the bead
                  "gh pr merge", "--match-head-commit", f"bd close {b}", "BLOCKED"):

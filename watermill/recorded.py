@@ -31,7 +31,8 @@ from . import agentlog, landed, sessionlog
 from .registry import Registry, RegistryError
 
 RECORDED_DIR = "knowledge/agent-runs"
-ROLES = ("millstone", "sluice", "tailrace", "solo", "orchestrator")
+CREW_ROLES = agentlog.CREW_ROLES  # see there; ROLES adds the two session roles
+ROLES = (*CREW_ROLES, "solo", "orchestrator")
 #: Roles that are a top-level session, not a crew subagent: one session = one record.
 SESSION_ROLES = ("solo", "orchestrator")
 VERDICTS = ("approve", "approve_after_fixes", "do_not_merge", "reject", "landed",

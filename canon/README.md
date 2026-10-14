@@ -19,8 +19,9 @@ Opting a project out of a path: `sync_exempt:` in `projects.yaml`, a map of
 glob to reason (reported by validate, never failing it). Sync never merges its
 PRs; CI and the landing step do.
 
-The workshop `CLAUDE.md` has no canon text yet; a later bead adds it under
-`workshop/`.
+The workshop `CLAUDE.md` master is `workshop/CLAUDE.md` (the workshop's own
+rules plus the auto-mill orchestrator rule). The workshop folder is only
+reachable from the laptop: the owner runs `watermill sync workshop` there.
 
 ## The git guardrail
 
