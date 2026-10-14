@@ -53,3 +53,9 @@ The limits are the rule, not a suggestion:
 The master copy of this rule is `canon/workshop/CLAUDE.md` in water-mill, and it
 is repeated in water-mill's own `CLAUDE.md`, `sluice.md`, `tailrace.md` and
 `docs/AI.md`.
+
+## Where the AI setup is described
+
+`water-mill/docs/AI.md` describes every AI adaptation across these repos: the
+harnesses and hooks, the crew, the rules and where each lives, the skills, cloud
+constraints, `watermill sync` and the trial harness.
