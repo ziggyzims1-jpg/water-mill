@@ -21,3 +21,12 @@ PRs; CI and the landing step do.
 
 The workshop `CLAUDE.md` has no canon text yet; a later bead adds it under
 `workshop/`.
+
+## The git guardrail
+
+`common/.claude/hooks/block-dangerous-git.py` plus the `PreToolUse`/`Bash` entry
+in `settings.managed.json` deny `git stash` (every form), `reset --hard`,
+`clean -f`, `branch -D`, `checkout .`, `restore .` and forced pushes; plain
+`push`, `commit`, `worktree`, `checkout <branch>` stay allowed. It is Python
+(stdlib only) so it behaves the same on macOS bash 3.2 and the Linux cloud
+image. Adapted from mattpocock-skills 1.2.3 (MIT). Tests: `tests/test_git_guardrail.py`.
