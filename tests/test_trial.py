@@ -921,3 +921,39 @@ def test_a_stale_resume_cannot_clear_a_pause_it_never_saw_whatever_the_merge_ord
     assert trial.pause_state(trial.read_ledger(tmp_path)) is None
     with pytest.raises(trial.TrialError, match="already in the ledger"):
         trial.pause(tmp_path, "same second", now=p2["at"])
+
+
+def test_a_trial_bound_session_cannot_pause_or_resume_but_the_owner_can(world):
+    root, _, _ = world
+    enroll(world, "alpha", ["a-1"], FakeTracker([task("a-1")]))
+    trial.start(root, "a-1", session_id="trial-sess", remote=False)
+    with pytest.raises(trial.TrialError, match="bound to a trial bead"):
+        trial.pause(root, "I think it is harmful", session_id="trial-sess")
+    assert trial.pause_state(trial.read_ledger(root)) is None
+    trial.pause(root, "owner: real harm", session_id="owner-terminal")
+    with pytest.raises(trial.TrialError, match="bound to a trial bead"):
+        trial.resume(root, "agent resumes itself", session_id="trial-sess")
+    assert trial.pause_state(trial.read_ledger(root)) is not None
+    trial.resume(root, "owner: handled")  # no session id at all: a plain terminal
+    assert trial.pause_state(trial.read_ledger(root)) is None
+
+
+def test_cli_pause_reads_the_session_id_from_the_environment(world, monkeypatch, capsys):
+    root, _, _ = world
+    enroll(world, "alpha", ["a-1"], FakeTracker([task("a-1")]))
+    trial.start(root, "a-1", session_id="trial-sess", remote=False)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "trial-sess")
+    assert cli.main(["--root", str(root), "trial", "pause", "--reason", "x"]) != 0
+    assert "bound to a trial bead" in capsys.readouterr().err
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "someone-else")
+    assert cli.main(["--root", str(root), "trial", "pause", "--reason", "x"]) == 0
+
+
+@pytest.mark.parametrize("arm", ["A", "B"])
+def test_both_briefs_forbid_the_owner_only_trial_commands(world, arm):
+    root, reg, _ = world
+    enroll(world, "alpha", ["a-1", "a-2"], FakeTracker([task("a-1"), task("a-2")]))
+    bead = next(b for b, r in trial.enrolled(trial.read_ledger(root)).items() if r["arm"] == arm)
+    text = trial.brief(root, bead, registry=reg)
+    assert "never run `watermill trial pause`, `trial resume`" in text
+    assert "human judgement" in text

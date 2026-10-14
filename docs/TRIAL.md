@@ -184,6 +184,17 @@ correction is applied, so none is a finding on its own.
   already in their 14-day window keep being observed and scored. The offending
   change is reverted on main right away; the bead stays in the ledger as scored
   (the escape counts), not dropped.
+- **Detecting the trigger is a human judgement.** No automation detects a landed
+  blocker or a fence breach, and none should: the owner (or a scorer the owner
+  asks) decides, and only the owner runs `trial pause` / `trial resume`. Both
+  briefs forbid a trial session from running them (or the other ledger-writing
+  subcommands), and the harness refuses them from a session that ran
+  `trial start`: that command records `CLAUDE_CODE_SESSION_ID` in the ledger,
+  and `pause`/`resume` exit non-zero when the caller's session id is one of those
+  (water-mill-mnn). The owner's terminal has no such session, so it is never
+  blocked. The guard does not catch a session that skipped `trial start`; the
+  brief covers that case. The crew prompt (arm A) never names these commands;
+  its brief now carries the same ban.
 - **No p-value is printed before the interim.** Before 30 per arm `status`
   prints counts, rates and Wilson intervals only ("p-value withheld ...");
   below 8 per arm it says "too few to say". This removes the temptation to peek.
