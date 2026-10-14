@@ -29,6 +29,11 @@ Rules that came out of the design and are pinned by tests:
 - Git projects receive a pull request, never a push to their base branch. The
   PR branch is named from a digest of the content, so running sync twice
   proposes once. Nothing here merges.
+- Sync refuses (SyncRefusal, no branch, no PR) when the target's .gitignore would
+  keep a file it writes out of the commit, naming the rule; a half-synced PR once
+  shipped a settings hook without its script (fwm.9). The managed hook command
+  fails open when its script is missing, and `validate` flags any settings hook
+  that names a missing file under $CLAUDE_PROJECT_DIR.
 - A project may opt out of paths with `sync_exempt:` (glob -> reason) in the
   registry; an exemption is reported by validate and does not fail it.
 - The workshop folder is not a git repository and is written directly, on the
@@ -339,6 +344,31 @@ def _git(repo: Path, *args: str, check: bool = True, text: bool = True):
     return done.stdout.decode("utf-8", "replace") if text else done.stdout
 
 
+def gitignored(repo: Path, rels: list[str]) -> list[tuple[str, str]]:
+    """(path, `.gitignore:line:pattern`) for each of `rels` that git would not add.
+
+    A path another rule re-includes (`!pattern`) is not ignored. Asked of the
+    worktree the PR is built in, so it sees the project's own .gitignore.
+    """
+    import subprocess
+
+    if not rels:
+        return []
+    done = subprocess.run(
+        ["git", "-C", str(repo), "check-ignore", "-v", "--stdin"], input="\n".join(rels),
+        capture_output=True, text=True,
+    )
+    if done.returncode not in (0, 1):
+        raise SyncError(f"git check-ignore failed in {repo}: {done.stderr.strip()}")
+    out = []
+    for line in done.stdout.splitlines():
+        rule, _, rel = line.partition("\t")
+        if rule.split(":", 2)[-1].startswith("!"):
+            continue
+        out.append((rel, rule))
+    return out
+
+
 def repo_slug(url: str) -> str:
     """`owner/name` from a remote URL (https, ssh, or the cloud proxy's path form)."""
     cleaned = url.strip().removesuffix("/").removesuffix(".git")
@@ -438,10 +468,19 @@ def sync_project(
 
     scratch = Path(tempfile.mkdtemp(prefix="wm-sync-"))
     wt = scratch / "wt"
+    refused = False
     try:
         # -B: a local branch left by a run whose push failed is reset, not an error.
         _git(path, "worktree", "add", "-B", branch, str(wt), ref)
         apply_plan(wt, plan)
+        ignored = gitignored(wt, [c.rel for c in plan.changes if c.status != "removed"])
+        if ignored:
+            refused = True
+            raise SyncRefusal(
+                f"{name}: .gitignore would keep sync's own files out of the PR, leaving the "
+                "project half-synced (a settings hook can end up pointing at a script that "
+                "was never committed). Re-include them in the project's .gitignore, then "
+                "sync again:\n" + "\n".join(f"    {rel}  <- {rule}" for rel, rule in ignored))
         _git(wt, "add", "-A")
         _git(wt, "commit", "-q", "-m",
              f"chore(sync): water-mill canon ({len(plan.changes)} file(s))\n\n"
@@ -452,6 +491,8 @@ def sync_project(
         out.lines.append(f"    opened {out.url}")
     finally:
         _git(path, "worktree", "remove", "--force", str(wt), check=False)
+        if refused:
+            _git(path, "branch", "-D", branch, check=False)
         shutil.rmtree(scratch, ignore_errors=True)
     return out
 
@@ -495,6 +536,33 @@ class Drift:
     @property
     def clean(self) -> bool:
         return not self.differing
+
+
+HOOK_FILE = re.compile(r"\$\{?CLAUDE_PROJECT_DIR\}?/([^\s\"';&|<>()$]+)")
+
+
+def missing_hook_files(target: Path) -> list[str]:
+    """Files a hook command in the target's settings.json names under
+    $CLAUDE_PROJECT_DIR that are not on disk (a hook on a missing script either
+    blocks every call, exit 2, or silently guards nothing)."""
+    raw = fs_reader(target)(SETTINGS_REL)
+    try:
+        data = json.loads(raw) if raw else {}
+    except ValueError:
+        return []
+    hooks = data.get("hooks") if isinstance(data, dict) else None
+    if not isinstance(hooks, dict):
+        return []
+    found: list[str] = []
+    for groups in hooks.values():
+        for group in groups if isinstance(groups, list) else []:
+            entries = group.get("hooks") if isinstance(group, dict) else None
+            for entry in entries if isinstance(entries, list) else []:
+                command = entry.get("command") if isinstance(entry, dict) else None
+                for rel in HOOK_FILE.findall(command if isinstance(command, str) else ""):
+                    if not (Path(target) / rel).exists() and rel not in found:
+                        found.append(rel)
+    return found
 
 
 def check(root: Path, target: Path, label: str, kind: str = "project",
