@@ -192,8 +192,12 @@ correction is applied, so none is a finding on its own.
   `trial start`: that command records `CLAUDE_CODE_SESSION_ID` in the ledger,
   and `pause`/`resume` exit non-zero when the caller's session id is one of those
   (water-mill-mnn). The owner's terminal has no such session, so it is never
-  blocked. The guard does not catch a session that skipped `trial start`; the
-  brief covers that case. The crew prompt (arm A) never names these commands;
+  blocked. Crew subagents inherit the orchestrator's `CLAUDE_CODE_SESSION_ID`
+  (checked 2026-10-14: a sluice subagent's value equals its parent session's
+  transcript id), so in arm A the guard binds millstone, sluice and tailrace
+  too. The guard does not catch a session that skipped `trial start` or that
+  unsets the variable; it stops mistakes, not a determined session, and the
+  brief covers the rest. The crew prompt (arm A) never names these commands;
   its brief now carries the same ban.
 - **No p-value is printed before the interim.** Before 30 per arm `status`
   prints counts, rates and Wilson intervals only ("p-value withheld ...");
