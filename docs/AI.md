@@ -374,7 +374,15 @@ agent's "Cloud mode" section is the operative text (`canon/common/.claude/agents
   (`tailrace.md`, step 4; it is the laptop rule too, and the cloud mode adds the
   first-agent `bd import`).
 - **Handoffs and agent-run records are committed on `$SB`**; the container is
-  thrown away. After the merges the orchestrator opens one docs-only PR with them
+  thrown away. During review they are staged in `$STAGE`
+  (`$REPO/../.mill-stage/<repo>/<slug>/`, outside every worktree) and only
+  tailrace commits them, after the merge (owner, 2026-10-15: Actions minutes).
+  Every push to `$SB` while its PR is open runs the whole `verify`, so the PR
+  only ever receives code: millstone's one push and sluice's one push of fixes
+  when it has any. `verify` runs on pull requests only (a newer push cancels the
+  run it replaces) and not again on main after a merge; tailrace's step 0b first
+  makes sure the head already holds everything main has but bead updates.
+  After the merges the orchestrator opens one docs-only PR with them
   and resets `$SB` to main with `--force-with-lease` only after that PR merged
   (the pinned lease the guardrail allows). No bead opens a bookkeeping PR.
 - **`$WM`** (the water-mill checkout) exists in a cell's session only if the
