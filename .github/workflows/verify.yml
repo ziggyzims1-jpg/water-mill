@@ -2,10 +2,17 @@
 # fail here for a reason spelled out in this file.
 name: verify
 
+# Pull requests only, and a newer push to the same PR cancels the run it
+# replaces (owner, 2026-10-15: Actions minutes). Main is not verified again
+# after a merge: the lander first makes sure the PR head already holds
+# everything main has but bead updates, so the PR's run is of the code main
+# will hold (tailrace, step 0b).
 on:
-  push:
-    branches: [main]
   pull_request:
+
+concurrency:
+  group: verify-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   verify:
