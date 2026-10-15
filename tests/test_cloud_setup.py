@@ -125,8 +125,14 @@ def _build_world(tmp_path, repos=REPOS):
     make.chmod(0o755)
     home = tmp_path / "home"
     home.mkdir()
+    # A git identity of its own: `bd init` commits, and with HOME emptied git
+    # falls back to guessing one from the host name, which works on a CI
+    # runner and fails on a host whose name has no domain (a cloud container),
+    # leaving bd init's files staged.
     env = {**os.environ, "HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"),
-           "PATH": f"{fakebin}{os.pathsep}{os.environ['PATH']}"}
+           "PATH": f"{fakebin}{os.pathsep}{os.environ['PATH']}",
+           "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
     for k in ("CLAUDE_CODE_REMOTE", "CLAUDE_ENV_FILE", "BD_DOLT_AUTO_PUSH", "BEADS_DIR"):
         env.pop(k, None)
     return {"parent": parent, "env": env, "tmp": tmp_path, "repos": list(repos)}
