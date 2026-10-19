@@ -151,6 +151,7 @@ fence:
     - services/libby_client.py        # Libby / OverDrive (undocumented API)
     - services/library_service.py     # Libby reconciliation on top of libby_client
     - services/jewish_service.py      # Hebcal + Chabad RSS
+    - services/tanakh_929_service.py  # Sefaria /api/calendars (929 item, shape unverified)
     - services/notify_service.py      # ntfy -- also carries the backup alerts
     - services/vault_service.py       # git push to the Obsidian vault repo
     - services/workout_service.py     # local LLM /api/generate for plan generation
