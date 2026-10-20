@@ -2,9 +2,10 @@
 
 **As of 2026-08-28.** The single place that says where the factory actually is.
 
-`docs/PLAN.md` says what is being built and why. This file says what exists.
-When they disagree, this file is right and the plan is stale — **fix the plan in
-the same change that moves the line here**, or the two drift again and the plan
+The business plan (kept privately, outside this repo) says what is being built
+and why. This file says what exists. When they disagree, this file is right and
+the plan is stale — **tell the owner in the same change that moves the line
+here**, or the two drift again and the plan
 becomes a document nobody trusts.
 
 ---
@@ -30,7 +31,7 @@ It is the judgement on the two tasks that have already run.
 
 ## Roadmap position
 
-Against `docs/PLAN.md` §13. **Actual position: Phase 1 complete, Phase 2 not
+Against the plan's roadmap. **Actual position: Phase 1 complete, Phase 2 not
 started.** Phases 0 and 1 were delivered ahead of schedule inside the life
 tracker; two Phase-3 items (the fence engine and its declarative registry)
 arrived early with Water Mill; several Phase-0 items were skipped entirely.
@@ -38,11 +39,11 @@ arrived early with Water Mill; several Phase-0 items were skipped entirely.
 | Phase | Plan | Actual |
 |---|---|---|
 | **0. Foundations** | Multi-tenant data model; append-only entries; backup + restore drill; property tests on invariants; gate runner; budget governor; model-provider seam; per-tenant credential routing | **Partial.** Gate runner, restore drill, invariants and corpus: **done**. Budget governor: **partial** — Water Mill's `--max-spend` is reactive, checked between tasks, and overshoots by up to one task. Multi-tenant data model, model-provider seam, per-tenant credential routing: **not started** |
-| **1. Memory** | Beads; `brain/`; loop runner; bead-template linter; verification-tier taxonomy; structured-logging allowlist + scrubber; Rung-0 instrument draft | **Mostly done.** Beads, `brain/`, loop runner (Water Mill), bead template and 47 Tier-1 tasks: **done**. Gate met (40+ Tier-1 beads). **Verification-tier taxonomy: done** — the eight root-cause buckets in `watermill/tasklog.py`, counted across projects, annotated by hand. Bead-template *linter*, logging allowlist and scrubber: **not started**. Rung-0 instrument exists as PLAN.md Appendix C |
+| **1. Memory** | Beads; `brain/`; loop runner; bead-template linter; verification-tier taxonomy; structured-logging allowlist + scrubber; Rung-0 instrument draft | **Mostly done.** Beads, `brain/`, loop runner (Water Mill), bead template and 47 Tier-1 tasks: **done**. Gate met (40+ Tier-1 beads). **Verification-tier taxonomy: done** — the eight root-cause buckets in `watermill/tasklog.py`, counted across projects, annotated by hand. Bead-template *linter*, logging allowlist and scrubber: **not started**. Rung-0 instrument exists as the plan's Appendix C |
 | **2. First loop** | Tier-1 loop overnight; merge-on-green; Falsifier; Boundary Falsifier; handoff skill; escalation format; ranked docket; test beds A/B/C | **Started.** Two supervised tasks run against a real agent, both kept, neither annotated. **Merge-on-green: built** — `watermill land` opens the pull request, waits for CI and merges, and refuses to merge on a failed verify (`watermill/land.py`, `review.*` in the contract). Zero unattended nights. Zero of three test beds. Falsifier and Boundary Falsifier do not exist. Handoff practice exists (`HANDOFF.md`); the escalation format and ranked docket do not |
 | **3. Governance** | Fence engine + registry; audit export; content-addressed audit index; MSA draft; counsel; 10 prospect conversations | **Fence engine: done early** (`watermill/contract.py`, enforced against `git diff`, not requested in a prompt). Audit export, audit index, MSA, counsel, prospects: **not started** |
 | **4. Launch + boundary proof** | Tracker live with real users; control/data split; Watchtower, Medic, Herald, Quartermaster; three free Rung-0 audits; SOC 2 window opens | **Not started.** Zero of seven standing maintenance roles exist |
-| **5. Cell one** | First paid build | **Not started. No date set** — see PLAN.md §13.2, which requires one and does not contain one |
+| **5. Cell one** | First paid build | **Not started. No date set** — the plan requires one and does not contain one |
 | **6. Prove the model** | Cells 2 and 3; positive contribution margin | **Not started** |
 
 ## What is green
@@ -125,14 +126,14 @@ outside.
   ledger records cost and verdict per run, which is the seed of the cost oracle
   and nothing more. Human-minutes per cell, escalations per day and contribution
   margin have no counter anywhere.
-- **The three pricing numbers do not exist.** PLAN.md §8.3 requires 90 days of
+- **The three pricing numbers do not exist.** The plan requires 90 days of
   measured maintenance before a price is set. The clock starts at the first
   successful night, not today.
-- **Zero of the four Sovereign seams exist** (PLAN.md §6.8): per-tenant
+- **Zero of the four Sovereign seams exist** (the plan): per-tenant
   credential routing, telemetry allowlist, content-addressed audit index,
   secrets abstraction. The plan calls these near-zero cost *if done now*, which
   means the cost is rising every week they are skipped.
-- **The target sector is unchosen** (PLAN.md §17.1), and it blocks the Phase 4
+- **The target sector is unchosen** (the plan), and it blocks the Phase 4
   Rung-0 audits.
 - **The backup does not leave the machine.** Preflight can enforce "a restore
   was verified"; it cannot enforce "the export left the building". A mistake is

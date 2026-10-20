@@ -78,7 +78,7 @@ passes locally cannot fail in CI for a reason spelled out in a YAML file.
 | `docs/OBSERVABILITY.md` | Shipping to Loki, and the LogQL worth pinning |
 | `docs/KNOWLEDGE.md` | The context graph: why it is queried and never loaded, and the monthly sweep |
 | `docs/AI.md` | Every AI adaptation in the mill, for the owner and a collaborator: harnesses, the crew, rules and where they live, skills, cloud constraints, the sync model, the trial harness, adding a project. `watermill validate` warns if a synced agent or skill is not named in it |
-| `docs/` | Contract spec, safety model, onboarding, calibration. **`STATUS.md` is where things actually are; `PLAN.md` is what is being built and why** |
+| `docs/` | Contract spec, safety model, onboarding, calibration. **`STATUS.md` is where things actually are**; the business plan that says what is being built and why is kept privately, outside this repo |
 | `runs/` | Per-run logs. Gitignored, **never pruned automatically** |
 | `knowledge/` | `findings.jsonl` -- **committed**, unlike `runs/`. See `docs/KNOWLEDGE.md` |
 
@@ -234,9 +234,9 @@ location from this file.
 
 ## Where things are
 
-[`docs/STATUS.md`](docs/STATUS.md) is the position; [`docs/PLAN.md`](docs/PLAN.md)
-is the plan. **A change that moves the position updates STATUS.md in the same
-commit**, and if it contradicts the plan it updates the plan too. Left to
+[`docs/STATUS.md`](docs/STATUS.md) is the position; the plan is kept privately,
+outside this repo. **A change that moves the position updates STATUS.md in the
+same commit**, and if it contradicts the plan, say so to the owner. Left to
 memory, the plan drifts into fiction and gets quietly stopped being read.
 
 The number that governs everything else right now is **nights run: 0**.
