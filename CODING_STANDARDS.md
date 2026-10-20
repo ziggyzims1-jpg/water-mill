@@ -32,7 +32,7 @@ Bolter reviews a diff against this file, `docs/adr/` and `CONTEXT.md`.
 - **Third-party work stays off the run loop** (`ship`, `land`, `publish` are their own commands). A check that gates a decision runs before it.
 - **A closed task says what closed it** (a comment on success as well as on discard).
 - **A lesson is promoted into Water Mill when it has appeared twice, in two repositories.**
-- **A change that moves the position updates `docs/STATUS.md` in the same commit,** and `docs/PLAN.md` if it contradicts it.
+- **A change that moves the position updates `docs/STATUS.md` in the same commit,** and tells the owner if it contradicts the (private) business plan.
 - **The trial protocol (`docs/TRIAL.md`) changes only by dated amendment,** made before the data it affects is looked at.
 
 ## Written conventions (`canon/README.md` and the crew files)

@@ -12,8 +12,7 @@ happened, in a report and in an append-only ledger.
 It knows nothing about any particular project. Everything project-specific
 arrives through a contract.
 
-**Where this actually stands: [docs/STATUS.md](docs/STATUS.md).** What it is
-for and where the money comes from: [docs/PLAN.md](docs/PLAN.md). **Every place
+**Where this actually stands: [docs/STATUS.md](docs/STATUS.md).** **Every place
 an AI agent is used or governed here (harnesses, the crew, rules, skills, the
 trial harness, cloud constraints): [docs/AI.md](docs/AI.md).**
 

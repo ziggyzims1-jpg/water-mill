@@ -29,8 +29,8 @@ snapshot. Then `CLAUDE.md`, then `docs/SAFETY.md`.
 >    `LOOP.md`, `CLAUDE.md` and `scripts/loop.sh` now all say Water Mill
 >    supersedes the bash loop. Deleting `loop.sh` is still yours.
 >
-> Also added: `docs/PLAN.md` (the business plan, now under version control and
-> reconciled against reality as v2.1) and `docs/STATUS.md` (the position).
+> Also added: `docs/STATUS.md` (the position). The business plan it was
+> reconciled against is kept privately, outside this repo.
 
 ---
 
