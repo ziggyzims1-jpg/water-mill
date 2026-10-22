@@ -264,14 +264,14 @@ not, the template edits are not addressing the real causes.
 
 ## Open decisions — yours, not the next session's
 
-1. **Offsite backup.** Still the open item from #91. Preflight enforces "a
+1. **How should Zimmy's backup leave this machine?** Still the open item from #91. Preflight enforces "a
    restore was verified"; it cannot enforce "the export left the machine". A
    mistake is recoverable; a dead SD card is not. My token cannot create the
    backup repo and it is outside this session's repo scope.
-2. **`brain/product.md`** — eight unanswered questions. Question 4 settles the
+2. **Will you answer the eight open questions in Zimmy's `brain/product.md`?** eight unanswered questions. Question 4 settles the
    live contradiction between the Habits tab drawing streak numbers and the
    miss-check being built never to show them.
-3. **A provider-side spend budget.** Water Mill's spend cap is *reactive*: it is
+3. **Should we set a spend budget at the model provider as a second backstop?** Water Mill's spend cap is *reactive*: it is
    checked between tasks, so it overshoots by up to one task (measured at $1.20
    against a $1.00 ceiling in #91). A budget at the provider is the only thing
    that stops an overrun outright, and costs nothing as a second backstop.
