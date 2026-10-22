@@ -276,7 +276,12 @@ not, the template edits are not addressing the real causes.
    against a $1.00 ceiling in #91). A budget at the provider is the only thing
    that stops an overrun outright, and costs nothing as a second backstop.
 
-**Decided 2026-10-22 (owner: "Water-mill should be the ultimate source of truth for everything"):**
+---
+
+## Decided 2026-10-22
+
+Owner: "Water-mill should be the ultimate source of truth for everything."
+
 - Two loops: retire Zimmy's `scripts/loop.sh`; LOOP.md becomes a pointer at Water Mill. Bead `Zimmy Life Tracker-v7h3`.
 - Zimmy's contract stays vendored here in `projects/zimmy-life-tracker.yaml`, not moved into Zimmy (same principle; say if you meant otherwise).
 
