@@ -264,29 +264,21 @@ not, the template edits are not addressing the real causes.
 
 ## Open decisions — yours, not the next session's
 
-1. **Two loops now exist.** PR #91 merged `scripts/loop.sh` into Zimmy, and
-   Water Mill's engine replaces it. Leaving both invites someone running the
-   wrong one, and `LOOP.md` still documents the bash one as *the* loop. Options:
-   delete `scripts/loop.sh` and repoint `LOOP.md` at Water Mill; or keep it as a
-   fallback and say so loudly at the top of both files. **Recommendation:**
-   delete it — a second path to production that nobody tests is how the fence
-   gets bypassed. Not done this session because it is a change to Zimmy that you
-   did not ask for.
-2. **Offsite backup.** Still the open item from #91. Preflight enforces "a
+1. **Offsite backup.** Still the open item from #91. Preflight enforces "a
    restore was verified"; it cannot enforce "the export left the machine". A
    mistake is recoverable; a dead SD card is not. My token cannot create the
    backup repo and it is outside this session's repo scope.
-3. **`brain/product.md`** — eight unanswered questions. Question 4 settles the
+2. **`brain/product.md`** — eight unanswered questions. Question 4 settles the
    live contradiction between the Habits tab drawing streak numbers and the
    miss-check being built never to show them.
-4. **A provider-side spend budget.** Water Mill's spend cap is *reactive*: it is
+3. **A provider-side spend budget.** Water Mill's spend cap is *reactive*: it is
    checked between tasks, so it overshoots by up to one task (measured at $1.20
    against a $1.00 ceiling in #91). A budget at the provider is the only thing
    that stops an overrun outright, and costs nothing as a second backstop.
-5. **Should Zimmy carry its own `watermill.yaml`?** Currently vendored in
-   `projects/`. Move it into Zimmy once calibration proves the fence and gate
-   are right — then a change to Zimmy's gate arrives in the same commit as the
-   change to its Makefile.
+
+**Decided 2026-10-22 (owner: "Water-mill should be the ultimate source of truth for everything"):**
+- Two loops: retire Zimmy's `scripts/loop.sh`; LOOP.md becomes a pointer at Water Mill. Bead `Zimmy Life Tracker-v7h3`.
+- Zimmy's contract stays vendored here in `projects/zimmy-life-tracker.yaml`, not moved into Zimmy (same principle; say if you meant otherwise).
 
 ---
 
