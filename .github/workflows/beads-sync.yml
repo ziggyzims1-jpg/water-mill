@@ -3,7 +3,8 @@
 # changes made there arrive as .beads/issues.jsonl commits on that branch.
 # This lands them on main: union-merge by issue id (scripts/beads_merge.py:
 # add new ids, later updated_at wins, never delete, refuse malformed lines).
-# Idempotent: when main already has everything, nothing is committed.
+# Idempotent: when main already has everything, nothing is committed. A main
+# with no issues.jsonl yet (bd init ran on the branch) gets the branch's file.
 name: beads-sync
 
 on:
@@ -45,11 +46,13 @@ jobs:
             git checkout -q -B main origin/main
             git show "origin/$BRANCH:.beads/issues.jsonl" > "$RUNNER_TEMP/incoming.jsonl"
             python3 scripts/beads_merge.py .beads/issues.jsonl "$RUNNER_TEMP/incoming.jsonl"
-            if git diff --quiet -- .beads/issues.jsonl; then
+            # Stage first: on the first sync main has no issues.jsonl, and a
+            # plain `git diff` does not see a new, untracked file.
+            git add .beads/issues.jsonl
+            if git diff --cached --quiet -- .beads/issues.jsonl; then
               echo "main already has everything from $BRANCH"
               exit 0
             fi
-            git add .beads/issues.jsonl
             git commit -q -m "chore(beads): sync bead changes from $BRANCH"
             if git push origin HEAD:main; then
               exit 0

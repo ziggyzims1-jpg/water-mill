@@ -6,6 +6,7 @@ claude/* branch; the workflow plus scripts/beads_merge.py land them on main.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -72,6 +73,86 @@ def test_the_synced_script_refuses_a_malformed_line_and_leaves_main_alone(tmp_pa
                           capture_output=True, text=True)
     assert done.returncode == 2
     assert base.read_text() == bead("x-1", "2026-10-01T00:00:00Z") + "\n"
+
+
+def _script(tmp_path):
+    script = tmp_path / "beads_merge.py"
+    script.write_bytes(sync.canon_files(ROOT, "project")[SCRIPT])
+    return script
+
+
+def test_a_missing_base_is_empty_so_the_first_sync_creates_mains_file(tmp_path):
+    # bd init ran on the claude/* branch: main has no .beads/ at all yet.
+    script = _script(tmp_path)
+    incoming = tmp_path / "branch.jsonl"
+    incoming.write_text(bead("x-1", "2026-10-27T00:00:00Z") + "\n"
+                        + bead("x-2", "2026-10-27T00:00:01Z") + "\n")
+    base = tmp_path / "main" / ".beads" / "issues.jsonl"
+    done = subprocess.run([sys.executable, str(script), str(base), str(incoming)],
+                          capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    assert base.read_bytes() == incoming.read_bytes()
+    assert "x-1 x-2" in done.stderr
+
+
+def test_a_missing_base_still_refuses_a_malformed_line_and_creates_nothing(tmp_path):
+    script = _script(tmp_path)
+    bad = tmp_path / "bad.jsonl"
+    bad.write_text(bead("x-1", "2026-10-27T00:00:00Z") + "\n{not json\n")
+    base = tmp_path / "issues.jsonl"
+    done = subprocess.run([sys.executable, str(script), str(base), str(bad)],
+                          capture_output=True, text=True)
+    assert done.returncode == 2
+    assert not base.exists()
+
+
+def _git(cwd, *args):
+    return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True,
+                          text=True).stdout
+
+
+def test_the_synced_workflow_commits_a_new_issues_jsonl_onto_a_main_without_one(tmp_path):
+    """Run the workflow's own script against a local origin (claudiverse, 2026-10-27)."""
+    files = sync.canon_files(ROOT, "project")
+    run = yaml.safe_load(files[WORKFLOW].decode())["jobs"]["sync"]["steps"][1]["run"]
+    origin = tmp_path / "origin.git"
+    _git(tmp_path, "init", "-q", "--bare", "-b", "main", str(origin))
+    seed = tmp_path / "seed"
+    _git(tmp_path, "clone", "-q", str(origin), str(seed))
+    _git(seed, "config", "user.name", "t")
+    _git(seed, "config", "user.email", "t@example.invalid")
+    (seed / "scripts").mkdir()
+    (seed / SCRIPT).write_bytes(files[SCRIPT])
+    _git(seed, "add", "-A")
+    _git(seed, "commit", "-q", "-m", "main without .beads")
+    _git(seed, "push", "-q", "origin", "HEAD:main")
+    _git(seed, "checkout", "-q", "-b", "claude/session")
+    (seed / ".beads").mkdir()
+    branch_file = bead("x-1", "2026-10-27T00:00:00Z") + "\n"
+    (seed / ".beads" / "issues.jsonl").write_text(branch_file)
+    _git(seed, "add", "-A")
+    _git(seed, "commit", "-q", "-m", "bd init")
+    _git(seed, "push", "-q", "origin", "claude/session")
+
+    runner = tmp_path / "runner"
+    _git(tmp_path, "clone", "-q", str(origin), str(runner))
+    temp = tmp_path / "runner-temp"
+    temp.mkdir()
+    env = {"PATH": os.environ["PATH"], "HOME": str(tmp_path), "BRANCH": "claude/session",
+           "RUNNER_TEMP": str(temp), "GIT_CONFIG_NOSYSTEM": "1"}
+
+    def workflow():
+        done = subprocess.run(["bash", "-e", "-c", run], cwd=runner, env=env,
+                              capture_output=True, text=True)
+        assert done.returncode == 0, done.stdout + done.stderr
+        return done
+
+    workflow()
+    assert _git(origin, "show", "main:.beads/issues.jsonl") == branch_file
+    head = _git(origin, "rev-parse", "main")
+    again = workflow()  # idempotent: nothing new, nothing committed
+    assert "main already has everything" in again.stdout
+    assert _git(origin, "rev-parse", "main") == head
 
 
 def test_a_project_can_opt_out_of_the_pair_with_sync_exempt():

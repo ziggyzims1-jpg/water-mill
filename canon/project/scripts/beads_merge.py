@@ -8,7 +8,9 @@ that branch and this merges them into main.
 Rules: ids only on the incoming side are added; ids on both sides keep the
 record with the later `updated_at` (a tie keeps the base record); nothing is
 ever deleted; a line that is not a JSON object with a string `id` refuses the
-whole merge. Idempotent: merging the same input twice changes nothing.
+whole merge. Idempotent: merging the same input twice changes nothing. A
+missing BASE is empty, not an error: on the first sync after `bd init` ran on a
+claude/* branch, main has no issues.jsonl yet, and the merge creates it.
 
     beads_merge.py BASE.jsonl INCOMING.jsonl [-o OUT.jsonl]
 
@@ -17,6 +19,7 @@ changed (the caller diffs), exit 2 on a malformed line.
 """
 import argparse
 import json
+import os
 import sys
 
 
@@ -70,8 +73,11 @@ def main(argv=None):
     ap.add_argument("incoming")
     ap.add_argument("-o", "--out", help="write here (default: overwrite BASE)")
     args = ap.parse_args(argv)
-    with open(args.base, encoding="utf-8") as f:
-        base_text = f.read()
+    try:
+        with open(args.base, encoding="utf-8") as f:
+            base_text = f.read()
+    except FileNotFoundError:
+        base_text = ""
     with open(args.incoming, encoding="utf-8") as f:
         incoming_text = f.read()
     try:
@@ -79,7 +85,9 @@ def main(argv=None):
     except MalformedLine as e:
         print(f"beads_merge: refused: {e}", file=sys.stderr)
         return 2
-    with open(args.out or args.base, "w", encoding="utf-8") as f:
+    out = args.out or args.base
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    with open(out, "w", encoding="utf-8") as f:
         f.write(text)
     print("beads_merge: changed ids: " + (" ".join(changed) or "(none)"), file=sys.stderr)
     return 0
