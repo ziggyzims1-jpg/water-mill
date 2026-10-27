@@ -22,3 +22,5 @@ projects:
     path: ../Hillel-Programming
   - name: watermill-cell-template
     path: ../watermill-cell-template
+  - name: claudiverse
+    path: ../claudiverse

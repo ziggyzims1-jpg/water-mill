@@ -181,6 +181,14 @@ outside.
   `WARNING` (exit code unchanged) when a canon crew agent or skill is not named in
   it (`sync.unmentioned_in_ai_doc`). The workshop `CLAUDE.md` gained a pointer, so
   the owner runs `watermill sync workshop` on the laptop to deliver it.
+- **`claudiverse` registered (2026-10-27), in-repo contract.** A cell stamped
+  from `watermill-cell-template` (a Claude-inhabited 2D universe beside the kept
+  Flask/React scaffold, ADR-0009 there), already crewed by cloud sessions.
+  Registered on the owner's ask (claudiverse-gqu.9) so findings can reach the
+  graph. `validate` needs its contract renamed from the template's name
+  (claudiverse PR #6) and still reports canon drift until `watermill sync
+  claudiverse` runs; `doctor --gate` against a deliberately broken test, the
+  rest of gqu.9, is still to do.
 - **`cheme-solver` registered (2026-10-13), vendored contract.** Already crewed
   (18 mill handoffs, 57 transcript runs) but unregistered until the owner asked;
   contract in `projects/cheme-solver.yaml`, gate `make verify`. CI landed
