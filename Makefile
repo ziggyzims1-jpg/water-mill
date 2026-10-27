@@ -11,9 +11,14 @@
 #   Without `pipefail`, `cmd | tail` reports tail's status. A broken install
 #   measured while building the first version of this gate was recorded as a
 #   success for exactly that reason.
+#
+#   `--norc`: bash reads /etc/bash.bashrc even for a non-interactive shell
+#   when stdin is a socket and SHLVL is unset (how an agent's tool shell can
+#   look), and a bashrc that expands an unset $PS1 then fails every recipe
+#   under -u. tests/test_makefile_shell.py.
 
 SHELL := /bin/bash
-.SHELLFLAGS := -eu -o pipefail -c
+.SHELLFLAGS := --norc -eu -o pipefail -c
 .DEFAULT_GOAL := help
 
 PYTHON ?= python3
