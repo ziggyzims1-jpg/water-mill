@@ -36,9 +36,29 @@ if [[ "${CLAUDE_CODE_REMOTE:-}" != "true" && "${1:-}" != "--force" ]]; then
   exit 0
 fi
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PARENT="$(dirname "$HERE")"
 log() { echo "cloud-setup: $*" >&2; }
+
+# Where water-mill and its siblings are. Normally this script runs from
+# <checkout>/scripts/, so the checkout is one level up and the siblings are
+# beside it. An environment's setup script may instead run a copy from anywhere
+# (pasted into the setup box, or fetched to /tmp): there is then no checkout to
+# derive from, and treating the copy's directory as water-mill made the first
+# such session run `make -C / install` and die before Claude Code started
+# (2026-10-27). So a copy that is not at <dir>/scripts/cloud-setup.sh scans
+# CLOUD_SETUP_ROOT (default /home/user, where cloud sessions clone their repos).
+SELF="${BASH_SOURCE[0]:-}"
+HERE=""
+if [[ -n "$SELF" && -f "$SELF" && "$(basename "$(dirname "$SELF")")" == scripts ]]; then
+  HERE="$(cd "$(dirname "$SELF")/.." && pwd)"
+fi
+if [[ -n "$HERE" && -f "$HERE/scripts/cloud-setup.sh" ]]; then
+  PARENT="$(dirname "$HERE")"
+else
+  PARENT="${CLOUD_SETUP_ROOT:-/home/user}"
+  HERE=""
+  [[ -f "$PARENT/water-mill/scripts/cloud-setup.sh" ]] && HERE="$PARENT/water-mill"
+  log "not run from a water-mill checkout; scanning $PARENT for repos"
+fi
 
 # Pinned to the laptop's bd so the database schema and issues.jsonl format
 # match; bd >= 1.2 also leaves Dolt auto-push off unless dolt.auto-push=true.
@@ -170,9 +190,14 @@ for repo in "$PARENT"/*/; do
   (( rc == 0 )) || log "$(basename "$repo"): setup failed; run it by hand in $repo"
 done
 
-if [[ ! -x "$HERE/.venv/bin/python" ]]; then
+# A failure here is reported, not fatal: the environment runs this before Claude
+# Code starts, and a non-zero exit kills the whole session over a venv that
+# `make verify`'s guard will name anyway, exactly as a failed bd install does.
+if [[ -z "$HERE" ]]; then
+  log "no water-mill checkout under $PARENT; skipping its make install"
+elif [[ ! -x "$HERE/.venv/bin/python" ]]; then
   log "water-mill: make install"
-  make -C "$HERE" install >/dev/null
+  make -C "$HERE" install >/dev/null || log "water-mill: make install failed; run it by hand in $HERE"
 fi
 
 log "done (after bead writes: bd export -o .beads/issues.jsonl, commit, push the session branch)"

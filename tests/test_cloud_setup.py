@@ -326,3 +326,54 @@ def test_it_does_nothing_outside_a_cloud_session_without_force(world):
     assert _snapshot(world) == before
     assert not any((r / ".beads" / "dolt").exists() or (r / ".beads" / "embeddeddolt").exists()
                    for r in _repos(world))
+
+
+# --- A copy run from outside a checkout (an environment's setup box, or a file
+# fetched to /tmp). On 2026-10-27 such a copy took its own directory for
+# water-mill, found no siblings, ran `make -C / install` and exited 2, which
+# killed every new session before Claude Code started.
+
+def _standalone(world, name="setup.sh"):
+    """The script copied somewhere that is not <checkout>/scripts/."""
+    elsewhere = world["tmp"] / "elsewhere"
+    elsewhere.mkdir(exist_ok=True)
+    copy = elsewhere / name
+    shutil.copy(world["parent"] / "water-mill" / "scripts" / "cloud-setup.sh", copy)
+    return copy
+
+
+def test_a_standalone_copy_scans_the_root_and_never_runs_make_outside_water_mill(bare_world):
+    calls = bare_world["tmp"] / "make.calls"
+    copy = _standalone(bare_world)
+    shutil.rmtree(bare_world["parent"] / "water-mill")
+    proc = _run(bare_world, script=copy,
+                extra_env={"CLOUD_SETUP_ROOT": str(bare_world["parent"])})
+    assert proc.returncode == 0, proc.stderr
+    assert not calls.exists(), f"make ran with no water-mill checkout: {calls.read_text()}"
+    assert "no water-mill checkout" in proc.stderr
+
+
+def test_a_standalone_copy_installs_the_water_mill_it_finds_under_the_root(bare_world):
+    calls = bare_world["tmp"] / "make.calls"
+    (bare_world["parent"] / "water-mill" / ".venv" / "bin" / "python").unlink()
+    proc = _run(bare_world, script=_standalone(bare_world),
+                extra_env={"CLOUD_SETUP_ROOT": str(bare_world["parent"])})
+    assert proc.returncode == 0, proc.stderr
+    assert calls.read_text().strip() == f"-C {bare_world['parent'] / 'water-mill'} install"
+
+
+def test_a_standalone_copy_builds_the_beads_of_the_repos_under_the_root(tmp_path):
+    w = _build_world(tmp_path, repos=[("cheme-solver", "cheme", FLAT)])
+    before = _snapshot(w)
+    proc = _run(w, script=_standalone(w), extra_env={"CLOUD_SETUP_ROOT": str(w["parent"])})
+    assert proc.returncode == 0, proc.stderr
+    _assert_contract(w, before)
+
+
+def test_a_failing_make_install_is_reported_and_does_not_fail_the_setup(bare_world):
+    (bare_world["parent"] / "water-mill" / ".venv" / "bin" / "python").unlink()
+    make = bare_world["tmp"] / "fakebin" / "make"
+    make.write_text("#!/bin/sh\necho 'make: *** No rule to make target install.' >&2\nexit 2\n")
+    proc = _run(bare_world)
+    assert proc.returncode == 0, proc.stderr
+    assert "make install failed" in proc.stderr
