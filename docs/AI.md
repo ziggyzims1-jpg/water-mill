@@ -67,7 +67,16 @@ Three kinds of entry, and only one is managed by canon:
   must set it itself), builds the beads database of water-mill and of every
   sibling checkout that has a `.beads/` from its tracked `issues.jsonl` alone
   (no Dolt remote, no tracked file or commit changed), re-imports the jsonl on
-  every run, and runs `make install`. Tests: `tests/test_cloud_setup.py`.
+  every run, and runs `make install`. A failed `make install` is logged, never
+  fatal. Tests: `tests/test_cloud_setup.py`.
+- **As an environment setup script.** A copy pasted into the environment's
+  setup box, or fetched to `/tmp`, is not at `<checkout>/scripts/`, so it scans
+  `CLOUD_SETUP_ROOT` (default `/home/user`, where cloud sessions clone their
+  repos) and runs `make install` only for a `water-mill/` it finds there. Before
+  2026-10-27 such a copy ran `make -C / install`, exited 2, and the environment
+  refused to start every new session. The script is public, so the setup box
+  can fetch it rather than carry a copy that drifts:
+  `curl -fsSL https://raw.githubusercontent.com/ziggyzims1-jpg/water-mill/main/scripts/cloud-setup.sh | bash`.
 - **A routine does not get the hook.** The SessionStart hook only fires when the
   session's cwd is inside a repo that carries it; a routine's orchestrator starts
   in `/home/user`, which is not a repo. It must run
