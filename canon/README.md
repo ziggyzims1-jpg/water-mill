@@ -13,7 +13,8 @@ water-mill" header, and `watermill validate` fails on drift).
 
 `project/.github/workflows/beads-sync.yml` + `project/scripts/beads_merge.py` land
 the `.beads/issues.jsonl` commits a cloud session pushes on its `claude/*` branch
-onto main (union by issue id, newer `updated_at` wins, never deletes). cheme-solver's
+onto main (union by issue id, newer `updated_at` wins, never deletes; a main with no
+`issues.jsonl` yet, the first sync after `bd init` on the branch, gets the branch's file). cheme-solver's
 copy is the master: Hillel's differed only in an unpinned `actions/checkout@v4`.
 Water-mill gets it too: its own cloud sessions push `claude/*` branches the same way.
 
