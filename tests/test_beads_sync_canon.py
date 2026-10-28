@@ -169,3 +169,14 @@ def test_a_gitignore_that_drops_the_pair_is_refused_naming_the_rule(tmp_path):
     hits = sync.gitignored(tmp_path, [WORKFLOW, SCRIPT])
     assert [rel for rel, _ in hits] == [SCRIPT]
     assert "scripts/" in hits[0][1]
+
+
+def test_the_push_uses_the_bypass_token_when_set_and_the_builtin_one_otherwise():
+    # A ruleset requiring PRs on main rejects the built-in token, and
+    # github-actions cannot be a bypass actor; an admin's fine-grained token
+    # stored as BEADS_SYNC_TOKEN can. Projects without the secret must keep
+    # working exactly as before (claudiverse, 2026-10-28).
+    doc = yaml.safe_load(sync.canon_files(ROOT, "project")[WORKFLOW].decode())
+    checkout = doc["jobs"]["sync"]["steps"][0]
+    assert checkout["uses"].startswith("actions/checkout@")
+    assert checkout["with"]["token"] == "${{ secrets.BEADS_SYNC_TOKEN || github.token }}"

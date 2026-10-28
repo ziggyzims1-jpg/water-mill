@@ -32,6 +32,13 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          # A ruleset that requires pull requests on main rejects the
+          # built-in token's push, and github-actions cannot be put on a
+          # ruleset's bypass list. Where that is set up, an admin stores a
+          # fine-grained token (this repo only, Contents: read and write) as
+          # BEADS_SYNC_TOKEN and the push runs as that admin, who can bypass.
+          # Without the secret this is the built-in token, as before.
+          token: ${{ secrets.BEADS_SYNC_TOKEN || github.token }}
       - name: Merge the branch's issues.jsonl into main
         env:
           BRANCH: ${{ github.ref_name }}
