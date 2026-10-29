@@ -647,18 +647,24 @@ def _clean_refs(refs: dict | None) -> dict:
 
 
 def _new_id(observed_at: str) -> str:
-    """`f-20260828-a1b2c3`: the date it happened, then six hex.
+    """`f-20260828-a1b2c3d4`: the date it happened, then eight hex.
 
     The date is in the identifier on purpose. A finding id turns up in commit
     messages, in a contract's notes and in another finding's supersede edge,
     and in every one of those places the first useful question is how old it
     is.
 
-    Six hex rather than four: two agents proposing in the same second is the
+    Eight hex rather than six: two agents proposing in the same second is the
     ordinary case here, and an id collision would attach one finding's
-    supersede edge to another's -- a wrong answer rather than an error.
+    supersede edge to another's -- a wrong answer rather than an error. Six hex
+    (24 bits) collided once in CI over 200 same-day writes (water-mill-bha);
+    eight (32 bits) makes that about 256 times rarer, and a lock-free
+    check-then-write could not close the race anyway, while a lock would
+    contradict the no-lock append design. Ids already on disk keep their six
+    hex and stay valid: nothing parses the suffix length except crewlog's
+    citation regex, which accepts six or more.
     """
-    return f"f-{observed_at.replace('-', '')}-{uuid.uuid4().hex[:6]}"
+    return f"f-{observed_at.replace('-', '')}-{uuid.uuid4().hex[:8]}"
 
 
 def _parse_date(value: str) -> date | None:

@@ -43,7 +43,7 @@ _VERDICT = re.compile(
 # pushed", "pushed no fix" and "not pushed" are the common way to say the opposite.
 _PUSHED = re.compile(r"\bpushed\b(?![ \t]+no\b)", re.IGNORECASE)
 _NEGATION = re.compile(r"\b(?:no|not|nothing|never|without)\b[^.;:\n]*$", re.IGNORECASE)
-_FINDING_ID = re.compile(r"\bf-\d{8}-[0-9a-f]{6}\b")
+_FINDING_ID = re.compile(r"\bf-\d{8}-[0-9a-f]{6,}\b")
 _COST = re.compile(r"\bcost\b[^\n$]{0,30}\$(\d+(?:\.\d+)?)", re.IGNORECASE)
 
 
