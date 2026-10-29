@@ -58,7 +58,7 @@ Envelope, present on every record whatever the agent kind:
                                     true for any approve_after_fixes verdict, false
                                     for approve, otherwise an un-negated "pushed"
                                     in a Sluice section                   (inferred)
-    findings_count        int       distinct finding ids (f-YYYYMMDD-xxxxxx) cited (inferred)
+    findings_count        int       distinct finding ids (f-YYYYMMDD-<6 or 8 hex>) cited (inferred)
     findings_waived       bool      the note carries "**Findings:** none -- why"
     bead_created_at       str|null  from the repo's .beads/issues.jsonl, never the bd DB
 
