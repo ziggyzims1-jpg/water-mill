@@ -106,7 +106,7 @@ What the factory has learned ([docs/KNOWLEDGE.md](docs/KNOWLEDGE.md)):
 
 ```bash
 ./bin/watermill recall "gate fails on a clean checkout"   # ask the context graph
-./bin/watermill recall --detail f-20260828-a1b2c3d4           # open one answer in full
+./bin/watermill recall --detail f-20260828-a1b2c3d4       # open one answer in full
 ./bin/watermill remember <cell> lesson "..." --on 2026-08-01 --path db.py
 ./bin/watermill remember <cell> lesson "..." --supersedes f-...  # when it stops being true
 ./bin/watermill confirm f-...                             # it still holds; reset its clock

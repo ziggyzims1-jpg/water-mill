@@ -5,7 +5,7 @@ working.
 
 ```bash
 watermill recall "gate fails on a clean checkout"   # ask it
-watermill recall --detail f-20260828-a1b2c3d4           # open one answer
+watermill recall --detail f-20260828-a1b2c3d4       # open one answer
 watermill remember zimmy-life-tracker lesson "..."  # record a finding
 watermill review                                    # the monthly sweep
 ```
