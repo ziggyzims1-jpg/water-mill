@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import re
+import types
 from datetime import date
 from pathlib import Path
 
 import pytest
 
-from watermill import knowledge
+from watermill import crewlog, knowledge
 
 TODAY = date(2026, 8, 28)
 
@@ -226,8 +227,6 @@ def test_ids_do_not_collide_when_the_first_24_bits_of_the_random_part_do(
     24-bit collision that happened -- must still get distinct ids. The draw is
     forced, not left to luck: the old scheme kept only those six digits.
     """
-    import types
-
     draws = iter(["abcdef" + "0123", "abcdef" + "4567"])
     monkeypatch.setattr(
         knowledge.uuid, "uuid4", lambda: types.SimpleNamespace(hex=next(draws) + "0" * 24)
@@ -236,6 +235,19 @@ def test_ids_do_not_collide_when_the_first_24_bits_of_the_random_part_do(
     second = _record(tmp_path)["id"]
     assert first != second
     assert re.fullmatch(r"f-\d{8}-[0-9a-f]{8}", first)
+
+
+def test_a_freshly_minted_id_is_one_a_handoff_citation_counts(tmp_path: Path):
+    """crewlog counts the findings a handoff cites by matching ids in prose.
+
+    An id longer than its regex allows is silently not counted, so the two
+    must move together whenever the id shape changes.
+    """
+    minted = _record(tmp_path)["id"]
+    assert crewlog._FINDING_ID.findall(f"Recorded {minted}, see also f-20260101-a1b2c3.") == [
+        minted,
+        "f-20260101-a1b2c3",
+    ]
 
 
 def test_a_six_hex_id_already_on_disk_still_reads(tmp_path: Path):
