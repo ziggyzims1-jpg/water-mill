@@ -58,7 +58,6 @@ queue:
 fence:
   paths:
     # The gate and CI -- an agent that can edit these can make itself pass.
-    # (.github/workflows/ does not exist yet; fenced so it starts fenced.)
     - Makefile
     - .github/workflows/
     # The work graph and doctrine.
