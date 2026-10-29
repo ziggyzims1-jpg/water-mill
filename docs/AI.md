@@ -107,6 +107,22 @@ Three kinds of entry, and only one is managed by canon:
   nothing the repo wrote itself is ever touched (`canon/README.md`;
   `watermill/sync.py`).
 
+### The mill-board mod
+
+`mods/mill-board/` is a Claude Code mod for the session that orchestrates the
+crew: a **Mill board** pane (child sessions, this session's subagents, beads in
+progress, follow-up beads filed since the session started), a **Questions for
+you** pane with **Mark answered**, and a line above the prompt with the usage
+windows, context fill, cost and open-question count. The mod reads the beads
+itself from each sibling checkout's `origin/main`; child sessions and questions
+reach it only through the tool it adds, `mcp__mill-board__update`, which the
+orchestrator calls. It is installed with `/plugin install mill-board
+--marketplace ziggyzims1-jpg/water-mill` (the repo root's
+`.claude-plugin/marketplace.json`). It draws in a terminal and in the desktop
+app's local Code tab, and **not in a cloud session**, where `$.ui.open` answers
+`no-surface` (owner, 2026-10-29: built in a cloud master session and found
+invisible there). It is not synced to projects and is not part of a run.
+
 ## 2. The crew
 
 Four single-purpose agents take one bead to a landed change, **in this order**:

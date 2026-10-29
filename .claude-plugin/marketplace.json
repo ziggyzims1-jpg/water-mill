@@ -1,0 +1,14 @@
+{
+  "name": "water-mill",
+  "owner": {
+    "name": "Andrew Zimmerman"
+  },
+  "description": "Claude Code mods for running the Water Mill crew",
+  "plugins": [
+    {
+      "name": "mill-board",
+      "source": "./mods/mill-board",
+      "description": "Master-session board: active and follow-up beads, child sessions and subagents, open questions for the owner, and usage above the prompt"
+    }
+  ]
+}
