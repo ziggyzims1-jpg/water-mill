@@ -58,7 +58,6 @@ queue:
 fence:
   paths:
     # The gate and CI -- an agent that can edit these can make itself pass.
-    # (.github/workflows/ does not exist yet; fenced so it starts fenced.)
     - Makefile
     - .github/workflows/
     # The work graph and doctrine.
@@ -70,6 +69,14 @@ fence:
     - .claude/
     - .codex/
     - .agents/
+    # Scripts run BY a fenced file. The fenced .claude/settings.json
+    # SessionStart hook runs scripts/cloud-setup.sh at every session start
+    # (cheme PR #28), and the fenced .github/workflows/beads-sync.yml runs
+    # scripts/beads_merge.py on main. scripts/ itself stays open, so fence these
+    # two by name: an agent that could edit them would change what runs at every
+    # session start / on main without touching a fenced file (water-mill-5s8).
+    - scripts/cloud-setup.sh
+    - scripts/beads_merge.py
     # PRODUCTION DEPLOY: systemd unit, Caddyfile and cloudflared examples,
     # and the env.example that names the real runtime variables. The unit
     # and Caddy/cloudflared files describe the live host; a change here is a
