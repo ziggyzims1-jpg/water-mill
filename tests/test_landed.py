@@ -71,3 +71,18 @@ def test_read_resolves_titles_through_each_checkouts_beads(tmp_path: Path):
     found, missing = landed.read(root)
     assert missing == []
     assert [item.bead for item in found] == ["zimmy-life-tracker-9i7.1"]
+
+
+def test_tailrace_dates_lists_each_heading_date_in_file_order():
+    text = (
+        "# Handoff -- x\n\n## Tailrace (2026-10-01)\nmerged\n\n"
+        "## Tailrace (2026-10-03, follow-up)\nmore\n\n## Tailrace soon\n"
+    )
+    assert landed.tailrace_dates(text) == ["2026-10-01", "2026-10-03"]
+    assert landed.tailrace_dates("# Handoff -- x\nno heading\n") == []
+
+
+def test_findings_waived_needs_a_reason_on_the_same_line():
+    assert landed.findings_waived("- **Findings:** none -- nothing surprising\n")
+    assert not landed.findings_waived("**Findings:** none\n- a bullet\n")
+    assert not landed.findings_waived("no waiver here\n")

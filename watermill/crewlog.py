@@ -93,7 +93,7 @@ def parse_record(
         return None
     bead = landed.bead_of(text, path, project, beads)
     is_landed = landed.is_landed(text)
-    dates = landed._TAILRACE.findall(text)
+    dates = landed.tailrace_dates(text)
     landed_at = dates[-1] if dates and is_landed else None
 
     inferred: list[str] = []
@@ -148,7 +148,7 @@ def parse_record(
             "sluice_verdict": verdict,
             "sluice_pushed_fixes": pushed,
             "findings_count": len(ids),
-            "findings_waived": bool(landed._NONE.search(text)),
+            "findings_waived": landed.findings_waived(text),
             "bead_created_at": bead_row.get("created_at"),
         },
     )
