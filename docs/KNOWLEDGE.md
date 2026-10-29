@@ -5,7 +5,7 @@ working.
 
 ```bash
 watermill recall "gate fails on a clean checkout"   # ask it
-watermill recall --detail f-20260828-a1b2           # open one answer
+watermill recall --detail f-20260828-a1b2c3d4           # open one answer
 watermill remember zimmy-life-tracker lesson "..."  # record a finding
 watermill review                                    # the monthly sweep
 ```
@@ -83,11 +83,13 @@ would throw away the only thing anybody knows on a subject.
 
 ## Superseding, when the world changes
 
-A finding that stops being true is not edited and not deleted. It is replaced:
+A finding that stops being true is not edited and not deleted. It is replaced
+(ids are `f-YYYYMMDD-` plus eight hex; findings written before water-mill-bha
+carry six hex and stay valid):
 
 ```bash
 watermill remember zimmy-life-tracker lesson "HiGHS is the solver; the academic licence lapsed." \
-    --supersedes f-20260301-9c1a --why "licence expired 2026-08"
+    --supersedes f-20260301-9c1a7e42 --why "licence expired 2026-08"
 ```
 
 The old line stays in the file, gains a `superseded_by` edge, and stops being
@@ -123,7 +125,7 @@ fixed by an **annotation line** -- a new `kind_of_line: "annotation"` carrying
 `id` and any of `root_cause`, `tags`, `destination`, `by`. Nothing is edited:
 
 ```bash
-watermill annotate-finding f-20260828-a1b2c3 --cause missing-context --tag fence --tag beads
+watermill annotate-finding f-20260828-a1b2c3d4 --cause missing-context --tag fence --tag beads
 watermill annotate-finding f-1 f-2 f-3 --cause none --tag housekeeping   # one set of flags
 watermill annotate-finding --batch fixes.jsonl --json                     # or '-' for stdin
 ```
