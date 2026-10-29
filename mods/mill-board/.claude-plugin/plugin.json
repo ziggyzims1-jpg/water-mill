@@ -1,0 +1,10 @@
+{
+  "name": "mill-board",
+  "version": "0.1.0",
+  "description": "Master-session board: active and follow-up beads, child sessions and subagents, open questions for the owner, and usage above the prompt",
+  "types": "./types/index.d.ts",
+  "license": "MIT",
+  "author": {
+    "name": "Andrew Zimmerman"
+  }
+}
