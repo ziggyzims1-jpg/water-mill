@@ -67,6 +67,16 @@ def is_landed(text: str) -> bool:
     return bool(_LANDED.search(text))
 
 
+def tailrace_dates(text: str) -> list[str]:
+    """Every `## Tailrace (YYYY-MM-DD` heading date in a handoff, in file order."""
+    return _TAILRACE.findall(text)
+
+
+def findings_waived(text: str) -> bool:
+    """Whether a handoff carries a `**Findings:** none -- why` line."""
+    return bool(_NONE.search(text))
+
+
 def known_bead(bead: str, beads: dict[str, dict]) -> str:
     """The bead id inside a title like `Millstone, Zimmy Life Tracker-9i7.1`.
 
@@ -121,7 +131,7 @@ def parse(path: Path, project: str, beads: dict[str, dict] | None = None) -> Lan
         return None
     if not is_landed(text):
         return None
-    dates = _TAILRACE.findall(text)
+    dates = tailrace_dates(text)
     try:
         landed_on = date.fromisoformat(dates[-1]) if dates else None
     except ValueError:
@@ -131,7 +141,7 @@ def parse(path: Path, project: str, beads: dict[str, dict] | None = None) -> Lan
         project=project,
         landed_on=landed_on,
         path=path,
-        waived=bool(_NONE.search(text)),
+        waived=findings_waived(text),
     )
 
 
