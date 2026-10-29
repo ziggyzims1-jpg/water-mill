@@ -13,7 +13,6 @@ out of free text is named in `fields_inferred`.
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
@@ -22,12 +21,7 @@ from .registry import Registry, RegistryError
 
 FACTORY_PROJECT = "water-mill"
 FACTORY_HANDOFFS = Path("HANDOFF-mill")
-BEADS_FILE = Path(".beads") / "issues.jsonl"
 
-# landed.py's marker only matches a bare `**LANDED**` line; Tailrace also wrote
-# `**LANDED.** PR ...` and bulleted forms. A looser marker here means more beads
-# count as landed than landed.read() reports (it undercounts; not changed here).
-_LANDED = re.compile(r"^[ \t]*(?:[-*][ \t]+)?\*\*LANDED\b", re.MULTILINE)
 _SLUICE = re.compile(r"^##[ \t]+Sluice\b(?![ \t]+scrutiny)[^\n]*$", re.MULTILINE)
 _BOLTER = re.compile(r"^##[ \t]+Bolter\b[^\n]*$", re.MULTILINE)
 _HEADING = re.compile(r"^##[ \t]+\S", re.MULTILINE)
@@ -81,34 +75,6 @@ def _pushed_fixes(sluice: str, verdicts: list[str]) -> bool:
     return False
 
 
-def _known_bead(bead: str, beads: dict[str, dict]) -> str:
-    """The bead id inside a title like `Millstone, Zimmy Life Tracker-9i7.1`.
-
-    Normalising that title gives `millstone-zimmy-life-tracker-9i7.1`, which
-    matches no bead; when the repo's JSONL holds an id the title ends with,
-    that id is the subject.
-    """
-    if bead in beads:
-        return bead
-    tails = [k for k in beads if bead.endswith("-" + k)]
-    return max(tails, key=len) if tails else bead
-
-
-def _beads(checkout: Path) -> dict[str, dict]:
-    path = checkout / BEADS_FILE
-    out: dict[str, dict] = {}
-    if not path.is_file():
-        return out
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        try:
-            row = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(row, dict) and row.get("id"):
-            out[landed.normalise(str(row["id"]))] = row
-    return out
-
-
 def _task_lines(root: Path) -> dict[tuple[str, str], dict]:
     out: dict[tuple[str, str], dict] = {}
     for rec in tasklog.read(root):
@@ -127,8 +93,8 @@ def parse_record(
         return None
     title = landed._TITLE.search(text)
     bead = landed.normalise(title.group(1)) if title else landed.normalise(f"{project}-{path.stem}")
-    bead = _known_bead(bead, beads)
-    is_landed = bool(_LANDED.search(text))
+    bead = landed.known_bead(bead, beads)
+    is_landed = landed.is_landed(text)
     dates = landed._TAILRACE.findall(text)
     landed_at = dates[-1] if dates and is_landed else None
 
@@ -208,7 +174,7 @@ def collect(root: Path) -> tuple[dict[str, list[dict]], list[str]]:
             if name != FACTORY_PROJECT:
                 missing.append(name)
             continue
-        beads = _beads(checkout)
+        beads = landed.load_beads(checkout)
         found = [
             r for p in sorted(directory.glob("*.md"))
             if (r := parse_record(p, name, beads, tasks)) is not None

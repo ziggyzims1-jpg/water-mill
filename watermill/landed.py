@@ -13,6 +13,7 @@ missing sibling would be switched off by the first laptop without it.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from datetime import date
@@ -21,8 +22,13 @@ from pathlib import Path
 from .registry import Registry, RegistryError
 
 HANDOFF_DIR = Path("brain") / "handoffs" / "mill"
+BEADS_FILE = Path(".beads") / "issues.jsonl"
 
-_LANDED = re.compile(r"^\s*\*\*LANDED\*\*", re.MULTILINE)
+# The one LANDED rule, shared with crewlog.py. A marker opens a line (optionally
+# as a bullet) and is bold: `**LANDED**`, `**LANDED.** PR #1 merged`. Prose that
+# merely mentions the word ("not LANDED", "will be **LANDED** once") is not one.
+# `[ \t]` and not `\s`, which would let the marker start on a later line.
+_LANDED = re.compile(r"^[ \t]*(?:[-*][ \t]+)?\*\*LANDED\b", re.MULTILINE)
 _TITLE = re.compile(r"^#\s+Handoff\s*[—–-]+\s*(.+?)\s*$", re.MULTILINE)
 _TAILRACE = re.compile(r"^##\s+Tailrace\s*\((\d{4}-\d{2}-\d{2})", re.MULTILINE)
 _NONE = re.compile(
@@ -55,7 +61,41 @@ def normalise(bead_id: str) -> str:
     return re.sub(r"[^a-z0-9.]+", "-", (bead_id or "").lower()).strip("-")
 
 
-def parse(path: Path, project: str) -> Landed | None:
+def is_landed(text: str) -> bool:
+    """Whether a handoff note carries the lander's LANDED marker."""
+    return bool(_LANDED.search(text))
+
+
+def known_bead(bead: str, beads: dict[str, dict]) -> str:
+    """The bead id inside a title like `Millstone, Zimmy Life Tracker-9i7.1`.
+
+    Normalising that title gives `millstone-zimmy-life-tracker-9i7.1`, which
+    matches no bead; when the repo's JSONL holds an id the title ends with,
+    that id is the subject.
+    """
+    if bead in beads:
+        return bead
+    tails = [k for k in beads if bead.endswith("-" + k)]
+    return max(tails, key=len) if tails else bead
+
+
+def load_beads(checkout: Path) -> dict[str, dict]:
+    """The checkout's `.beads/issues.jsonl` rows keyed by normalised id."""
+    path = checkout / BEADS_FILE
+    out: dict[str, dict] = {}
+    if not path.is_file():
+        return out
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("id"):
+            out[normalise(str(row["id"]))] = row
+    return out
+
+
+def parse(path: Path, project: str, beads: dict[str, dict] | None = None) -> Landed | None:
     """One handoff file, or None when it was never landed.
 
     The landing date is the last `## Tailrace (date)` heading: a later section
@@ -68,7 +108,7 @@ def parse(path: Path, project: str) -> Landed | None:
         text = path.read_text(encoding="utf-8")
     except OSError:
         return None
-    if not _LANDED.search(text):
+    if not is_landed(text):
         return None
     dates = _TAILRACE.findall(text)
     try:
@@ -77,6 +117,7 @@ def parse(path: Path, project: str) -> Landed | None:
         landed_on = None
     title = _TITLE.search(text)
     bead = normalise(title.group(1)) if title else normalise(f"{project}-{path.stem}")
+    bead = known_bead(bead, beads or {})
     return Landed(
         bead=bead,
         project=project,
@@ -99,8 +140,9 @@ def read(root: Path) -> tuple[list[Landed], list[str]]:
         if not directory.is_dir():
             missing.append(project.name)
             continue
+        beads = load_beads(project.path)
         for path in sorted(directory.glob("*.md")):
-            found = parse(path, project.name)
+            found = parse(path, project.name, beads)
             if found is not None:
                 landed.append(found)
     return landed, missing
