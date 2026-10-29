@@ -91,9 +91,7 @@ def parse_record(
         text = path.read_text(encoding="utf-8")
     except OSError:
         return None
-    title = landed._TITLE.search(text)
-    bead = landed.normalise(title.group(1)) if title else landed.normalise(f"{project}-{path.stem}")
-    bead = landed.known_bead(bead, beads)
+    bead = landed.bead_of(text, path, project, beads)
     is_landed = landed.is_landed(text)
     dates = landed._TAILRACE.findall(text)
     landed_at = dates[-1] if dates and is_landed else None

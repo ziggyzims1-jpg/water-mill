@@ -49,4 +49,25 @@ def test_a_role_prefixed_title_resolves_through_the_repos_beads(tmp_path: Path):
     found = landed.parse(path, "zimmy-life-tracker", landed.load_beads(repo))
     assert found is not None and found.bead == "zimmy-life-tracker-9i7.1"
     # without the repo's beads the title cannot be resolved (the old behaviour)
-    assert landed.parse(path, "zimmy-life-tracker").bead == "millstone-zimmy-life-tracker-9i7.1"
+    bare = landed.parse(path, "zimmy-life-tracker")
+    assert bare is not None and bare.bead == "millstone-zimmy-life-tracker-9i7.1"
+
+
+def test_read_resolves_titles_through_each_checkouts_beads(tmp_path: Path):
+    """`review --lag` goes through read(), so it must hand parse() the checkout's beads."""
+    root = tmp_path / "factory"
+    root.mkdir()
+    (root / "projects.yaml").write_text(
+        "version: 1\nprojects:\n  - name: zimmy-life-tracker\n    path: ../zimmy-life-tracker\n"
+    )
+    checkout = tmp_path / "zimmy-life-tracker"
+    (checkout / ".beads").mkdir(parents=True)
+    (checkout / ".beads" / "issues.jsonl").write_text(
+        json.dumps({"id": "Zimmy Life Tracker-9i7.1"}) + "\n", encoding="utf-8"
+    )
+    notes = checkout / "brain" / "handoffs" / "mill"
+    notes.mkdir(parents=True)
+    _note(notes, "**LANDED.** PR #1", title="Millstone, Zimmy Life Tracker-9i7.1")
+    found, missing = landed.read(root)
+    assert missing == []
+    assert [item.bead for item in found] == ["zimmy-life-tracker-9i7.1"]

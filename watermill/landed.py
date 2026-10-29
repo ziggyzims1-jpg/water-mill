@@ -6,7 +6,8 @@ files in two repositories -- the handoff that says **LANDED** and the finding
 that cites the bead -- and nothing joins them unless this module does.
 
 It is a **reader**: it opens each registered checkout's
-`brain/handoffs/mill/*.md` and writes nothing. A checkout that is not on this
+`brain/handoffs/mill/*.md` (and its `.beads/issues.jsonl`, to resolve a
+role-prefixed title to the bead id) and writes nothing. A checkout that is not on this
 machine is reported, never raised on, because a lag list that crashes on one
 missing sibling would be switched off by the first laptop without it.
 """
@@ -95,6 +96,16 @@ def load_beads(checkout: Path) -> dict[str, dict]:
     return out
 
 
+def bead_of(text: str, path: Path, project: str, beads: dict[str, dict]) -> str:
+    """The bead a handoff note is about: its title, else `{project}-{stem}`.
+
+    The one derivation, shared with crewlog.py, resolved through `known_bead`.
+    """
+    title = _TITLE.search(text)
+    bead = normalise(title.group(1)) if title else normalise(f"{project}-{path.stem}")
+    return known_bead(bead, beads)
+
+
 def parse(path: Path, project: str, beads: dict[str, dict] | None = None) -> Landed | None:
     """One handoff file, or None when it was never landed.
 
@@ -115,11 +126,8 @@ def parse(path: Path, project: str, beads: dict[str, dict] | None = None) -> Lan
         landed_on = date.fromisoformat(dates[-1]) if dates else None
     except ValueError:
         landed_on = None
-    title = _TITLE.search(text)
-    bead = normalise(title.group(1)) if title else normalise(f"{project}-{path.stem}")
-    bead = known_bead(bead, beads or {})
     return Landed(
-        bead=bead,
+        bead=bead_of(text, path, project, beads or {}),
         project=project,
         landed_on=landed_on,
         path=path,
