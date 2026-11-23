@@ -196,7 +196,9 @@ def test_the_same_question_on_the_same_data_gives_the_same_answer(tmp_path: Path
 def test_a_human_finding_outranks_a_mechanical_outcome_at_equal_relevance(tmp_path: Path):
     _task(tmp_path, "t-1", title="fix the gate", reason="gate failed after the change")
     _finding(tmp_path, "The gate failed because make verify differs from CI.")
-    hits = recall.search(recall.build(tmp_path), "gate failed").hits
+    # TODAY, not the clock: a stale finding is weighed down, so without the date
+    # pinned this went red the day the helper's observed_at aged past review.
+    hits = recall.search(recall.build(tmp_path, TODAY), "gate failed").hits
     assert hits[0].node.kind == recall.FINDING
 
 
