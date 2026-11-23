@@ -62,7 +62,10 @@ fi
 
 # Pinned to the laptop's bd so the database schema and issues.jsonl format
 # match; bd >= 1.2 also leaves Dolt auto-push off unless dolt.auto-push=true.
-BD_VERSION=1.2.2
+# 1.3 exports an issue's dependencies in another order than 1.2 and rekeys
+# comment ids, so a pin behind the laptop makes each side rewrite the lines
+# the other exported: move it in the same change that moves the laptop's bd.
+BD_VERSION=1.3.4
 
 # Container-only, and never written to a tracked config.yaml: the env var
 # overrides that file. CLAUDE_ENV_FILE carries it into the session's later
