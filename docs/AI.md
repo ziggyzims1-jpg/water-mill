@@ -62,7 +62,7 @@ Three kinds of entry, and only one is managed by canon:
 - **`cloud-setup.sh`** is a no-op unless `CLAUDE_CODE_REMOTE=true` (or `--force`,
   for tests only: never on a laptop, because it imports every sibling checkout's
   `issues.jsonl` into that repo's live database). In a cloud container it installs
-  `bd` pinned to 1.2.2, puts `BD_DOLT_AUTO_PUSH=false` into `CLAUDE_ENV_FILE`
+  `bd` pinned to 1.3.4, puts `BD_DOLT_AUTO_PUSH=false` into `CLAUDE_ENV_FILE`
   (and warns if that variable is empty, because then every later `bd` command
   must set it itself), builds the beads database of water-mill and of every
   sibling checkout that has a `.beads/` from its tracked `issues.jsonl` alone

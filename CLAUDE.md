@@ -19,7 +19,7 @@ make doctor      # preflight every registered project
 ```
 
 In a Claude Code cloud session, run `scripts/cloud-setup.sh` first (it is a
-no-op outside one unless given `--force`): it installs `bd` (pinned 1.2.2; a
+no-op outside one unless given `--force`): it installs `bd` (pinned 1.3.4; a
 `bd` already on PATH is used as is), forces `BD_DOLT_AUTO_PUSH=false` into
 `CLAUDE_ENV_FILE`, builds the beads database of water-mill and every sibling
 checkout with a `.beads/` from its tracked `issues.jsonl` alone (no Dolt remote,
